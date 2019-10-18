@@ -1,0 +1,22 @@
+#!/bin/bash
+
+if [[ $EUID -ne 0 ]]; then
+	printf 'Must run as root!\n'
+	exit 1
+fi
+
+export PATH=/opt/puppetlabs/bin:$PATH
+
+MUPPETS=(
+	waldorf
+	statler
+	fozzie
+)
+
+mkdir -p reports
+
+for muppet in "${MUPPETS[@]}"; do
+	FACTER_nodename="${muppet}" FACTER_cwd="${PWD}" puppet apply --confdir "${PWD}" --vardir "${PWD}/var" manifests/muppets.pp
+	cp var/state/last_run_report.yaml reports/"${muppet}".yaml
+	sed -i 's/^host: .*/host: '"${muppet}"'/' reports/"${muppet}".yaml
+done

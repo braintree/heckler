@@ -1,0 +1,50 @@
+#!/bin/bash
+
+set -e nounset
+set -e errexit
+set -e pipefail
+shopt -s lastpipe
+
+if [[ $EUID -ne 0 ]]; then
+	printf 'Must run as root!\n'
+	exit 1
+fi
+
+export PATH=/opt/puppetlabs/bin:$PATH
+
+pushd "${PWD}"/repo >/dev/null
+git checkout master
+git log --pretty=tformat:"%h" | tac | mapfile -t COMMITS
+popd >/dev/null
+
+declare -p COMMITS
+
+MUPPETS=(
+	waldorf
+	statler
+	fozzie
+)
+
+if [[ -e reports ]]; then
+	rm -rf reports
+fi
+
+mkdir -p reports
+
+for muppet in "${MUPPETS[@]}"; do
+	commit_num=1
+	for commit in "${COMMITS[@]}"; do
+		pushd "${PWD}"/repo >/dev/null
+		git checkout "${commit}" >/dev/null
+		popd >/dev/null
+		output=reports/commit"${commit_num}"_"${muppet}".txt
+		FACTER_nodename="${muppet}" FACTER_cwd="${PWD}" \
+			puppet apply --confdir "${PWD}" --vardir "${PWD}/var" repo/muppets.pp >"${output}" 2>&1
+		report=reports/commit"${commit_num}"_"${muppet}".yaml
+		cp var/state/last_run_report.yaml "${report}"
+		sed -i 's/^host: .*/host: '"${muppet}"'/' "${report}"
+		commit_num=$((commit_num + 1))
+	done
+done
+
+chmod 644 reports/*
