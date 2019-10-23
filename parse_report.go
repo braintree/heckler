@@ -1,354 +1,330 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
+	"regexp"
+	"strings"
+
+	"github.com/google/go-cmp/cmp"
 
 	"gopkg.in/yaml.v3"
 )
 
 type PuppetReport struct {
-	Host                 string `yaml:"host"`
-	Time                 string `yaml:"time"`
-	ConfigurationVersion int    `yaml:"configuration_version"`
-	TransactionUUID      string `yaml:"transaction_uuid"`
-	ReportFormat         int    `yaml:"report_format"`
-	PuppetVersion        string `yaml:"puppet_version"`
-	Status               string `yaml:"status"`
-	TransactionCompleted bool   `yaml:"transaction_completed"`
-	Noop                 bool   `yaml:"noop"`
-	NoopPending          bool   `yaml:"noop_pending"`
-	Environment          string `yaml:"environment"`
-	Logs                 []struct {
-		Level   string   `yaml:"level"`
-		Message string   `yaml:"message"`
-		Source  string   `yaml:"source"`
-		Tags    []string `yaml:"tags"`
-		Time    string   `yaml:"time"`
-		File    string   `yaml:"file"`
-		Line    int      `yaml:"line"`
-	} `yaml:"logs"`
-	ResourceStatuses struct {
-		FileHomeHathawaySrcHecklerNodes struct {
-			Title            string        `yaml:"title"`
-			File             string        `yaml:"file"`
-			Line             int           `yaml:"line"`
-			Resource         string        `yaml:"resource"`
-			ResourceType     string        `yaml:"resource_type"`
-			ProviderUsed     string        `yaml:"provider_used"`
-			ContainmentPath  []string      `yaml:"containment_path"`
-			EvaluationTime   float64       `yaml:"evaluation_time"`
-			Tags             []string      `yaml:"tags"`
-			Time             string        `yaml:"time"`
-			Failed           bool          `yaml:"failed"`
-			FailedToRestart  bool          `yaml:"failed_to_restart"`
-			Changed          bool          `yaml:"changed"`
-			OutOfSync        bool          `yaml:"out_of_sync"`
-			Skipped          bool          `yaml:"skipped"`
-			ChangeCount      int           `yaml:"change_count"`
-			OutOfSyncCount   int           `yaml:"out_of_sync_count"`
-			Events           []interface{} `yaml:"events"`
-			CorrectiveChange bool          `yaml:"corrective_change"`
-		} `yaml:"File[/home/hathaway/src/heckler/nodes]"`
-		PackageNginx struct {
-			Title            string        `yaml:"title"`
-			File             string        `yaml:"file"`
-			Line             int           `yaml:"line"`
-			Resource         string        `yaml:"resource"`
-			ResourceType     string        `yaml:"resource_type"`
-			ProviderUsed     string        `yaml:"provider_used"`
-			ContainmentPath  []string      `yaml:"containment_path"`
-			EvaluationTime   float64       `yaml:"evaluation_time"`
-			Tags             []string      `yaml:"tags"`
-			Time             string        `yaml:"time"`
-			Failed           bool          `yaml:"failed"`
-			FailedToRestart  bool          `yaml:"failed_to_restart"`
-			Changed          bool          `yaml:"changed"`
-			OutOfSync        bool          `yaml:"out_of_sync"`
-			Skipped          bool          `yaml:"skipped"`
-			ChangeCount      int           `yaml:"change_count"`
-			OutOfSyncCount   int           `yaml:"out_of_sync_count"`
-			Events           []interface{} `yaml:"events"`
-			CorrectiveChange bool          `yaml:"corrective_change"`
-		} `yaml:"Package[nginx]"`
-		FileHomeHathawaySrcHecklerNodesWaldorf struct {
-			Title            string        `yaml:"title"`
-			File             string        `yaml:"file"`
-			Line             int           `yaml:"line"`
-			Resource         string        `yaml:"resource"`
-			ResourceType     string        `yaml:"resource_type"`
-			ProviderUsed     string        `yaml:"provider_used"`
-			ContainmentPath  []string      `yaml:"containment_path"`
-			EvaluationTime   float64       `yaml:"evaluation_time"`
-			Tags             []string      `yaml:"tags"`
-			Time             string        `yaml:"time"`
-			Failed           bool          `yaml:"failed"`
-			FailedToRestart  bool          `yaml:"failed_to_restart"`
-			Changed          bool          `yaml:"changed"`
-			OutOfSync        bool          `yaml:"out_of_sync"`
-			Skipped          bool          `yaml:"skipped"`
-			ChangeCount      int           `yaml:"change_count"`
-			OutOfSyncCount   int           `yaml:"out_of_sync_count"`
-			Events           []interface{} `yaml:"events"`
-			CorrectiveChange bool          `yaml:"corrective_change"`
-		} `yaml:"File[/home/hathaway/src/heckler/nodes/waldorf]"`
-		FileHomeHathawaySrcHecklerNodesWaldorfPoignant struct {
-			Title           string   `yaml:"title"`
-			File            string   `yaml:"file"`
-			Line            int      `yaml:"line"`
-			Resource        string   `yaml:"resource"`
-			ResourceType    string   `yaml:"resource_type"`
-			ProviderUsed    string   `yaml:"provider_used"`
-			ContainmentPath []string `yaml:"containment_path"`
-			EvaluationTime  float64  `yaml:"evaluation_time"`
-			Tags            []string `yaml:"tags"`
-			Time            string   `yaml:"time"`
-			Failed          bool     `yaml:"failed"`
-			FailedToRestart bool     `yaml:"failed_to_restart"`
-			Changed         bool     `yaml:"changed"`
-			OutOfSync       bool     `yaml:"out_of_sync"`
-			Skipped         bool     `yaml:"skipped"`
-			ChangeCount     int      `yaml:"change_count"`
-			OutOfSyncCount  int      `yaml:"out_of_sync_count"`
-			Events          []struct {
-				Audited          bool        `yaml:"audited"`
-				Property         string      `yaml:"property"`
-				PreviousValue    string      `yaml:"previous_value"`
-				DesiredValue     string      `yaml:"desired_value"`
-				HistoricalValue  interface{} `yaml:"historical_value"`
-				Message          string      `yaml:"message"`
-				Name             string      `yaml:"name"`
-				Status           string      `yaml:"status"`
-				Time             string      `yaml:"time"`
-				Redacted         interface{} `yaml:"redacted"`
-				CorrectiveChange bool        `yaml:"corrective_change"`
-			} `yaml:"events"`
-			CorrectiveChange bool `yaml:"corrective_change"`
-		} `yaml:"File[/home/hathaway/src/heckler/nodes/waldorf/poignant]"`
-		ServiceNginx struct {
-			Title           string   `yaml:"title"`
-			File            string   `yaml:"file"`
-			Line            int      `yaml:"line"`
-			Resource        string   `yaml:"resource"`
-			ResourceType    string   `yaml:"resource_type"`
-			ProviderUsed    string   `yaml:"provider_used"`
-			ContainmentPath []string `yaml:"containment_path"`
-			EvaluationTime  float64  `yaml:"evaluation_time"`
-			Tags            []string `yaml:"tags"`
-			Time            string   `yaml:"time"`
-			Failed          bool     `yaml:"failed"`
-			FailedToRestart bool     `yaml:"failed_to_restart"`
-			Changed         bool     `yaml:"changed"`
-			OutOfSync       bool     `yaml:"out_of_sync"`
-			Skipped         bool     `yaml:"skipped"`
-			ChangeCount     int      `yaml:"change_count"`
-			OutOfSyncCount  int      `yaml:"out_of_sync_count"`
-			Events          []struct {
-				Audited          bool        `yaml:"audited"`
-				Property         string      `yaml:"property"`
-				PreviousValue    string      `yaml:"previous_value"`
-				DesiredValue     string      `yaml:"desired_value"`
-				HistoricalValue  interface{} `yaml:"historical_value"`
-				Message          string      `yaml:"message"`
-				Name             string      `yaml:"name"`
-				Status           string      `yaml:"status"`
-				Time             string      `yaml:"time"`
-				Redacted         interface{} `yaml:"redacted"`
-				CorrectiveChange bool        `yaml:"corrective_change"`
-			} `yaml:"events"`
-			CorrectiveChange bool `yaml:"corrective_change"`
-		} `yaml:"Service[nginx]"`
-		SchedulePuppet struct {
-			Title            string        `yaml:"title"`
-			File             interface{}   `yaml:"file"`
-			Line             interface{}   `yaml:"line"`
-			Resource         string        `yaml:"resource"`
-			ResourceType     string        `yaml:"resource_type"`
-			ProviderUsed     interface{}   `yaml:"provider_used"`
-			ContainmentPath  []string      `yaml:"containment_path"`
-			EvaluationTime   float64       `yaml:"evaluation_time"`
-			Tags             []string      `yaml:"tags"`
-			Time             string        `yaml:"time"`
-			Failed           bool          `yaml:"failed"`
-			FailedToRestart  bool          `yaml:"failed_to_restart"`
-			Changed          bool          `yaml:"changed"`
-			OutOfSync        bool          `yaml:"out_of_sync"`
-			Skipped          bool          `yaml:"skipped"`
-			ChangeCount      int           `yaml:"change_count"`
-			OutOfSyncCount   int           `yaml:"out_of_sync_count"`
-			Events           []interface{} `yaml:"events"`
-			CorrectiveChange bool          `yaml:"corrective_change"`
-		} `yaml:"Schedule[puppet]"`
-		ScheduleHourly struct {
-			Title            string        `yaml:"title"`
-			File             interface{}   `yaml:"file"`
-			Line             interface{}   `yaml:"line"`
-			Resource         string        `yaml:"resource"`
-			ResourceType     string        `yaml:"resource_type"`
-			ProviderUsed     interface{}   `yaml:"provider_used"`
-			ContainmentPath  []string      `yaml:"containment_path"`
-			EvaluationTime   float64       `yaml:"evaluation_time"`
-			Tags             []string      `yaml:"tags"`
-			Time             string        `yaml:"time"`
-			Failed           bool          `yaml:"failed"`
-			FailedToRestart  bool          `yaml:"failed_to_restart"`
-			Changed          bool          `yaml:"changed"`
-			OutOfSync        bool          `yaml:"out_of_sync"`
-			Skipped          bool          `yaml:"skipped"`
-			ChangeCount      int           `yaml:"change_count"`
-			OutOfSyncCount   int           `yaml:"out_of_sync_count"`
-			Events           []interface{} `yaml:"events"`
-			CorrectiveChange bool          `yaml:"corrective_change"`
-		} `yaml:"Schedule[hourly]"`
-		ScheduleDaily struct {
-			Title            string        `yaml:"title"`
-			File             interface{}   `yaml:"file"`
-			Line             interface{}   `yaml:"line"`
-			Resource         string        `yaml:"resource"`
-			ResourceType     string        `yaml:"resource_type"`
-			ProviderUsed     interface{}   `yaml:"provider_used"`
-			ContainmentPath  []string      `yaml:"containment_path"`
-			EvaluationTime   float64       `yaml:"evaluation_time"`
-			Tags             []string      `yaml:"tags"`
-			Time             string        `yaml:"time"`
-			Failed           bool          `yaml:"failed"`
-			FailedToRestart  bool          `yaml:"failed_to_restart"`
-			Changed          bool          `yaml:"changed"`
-			OutOfSync        bool          `yaml:"out_of_sync"`
-			Skipped          bool          `yaml:"skipped"`
-			ChangeCount      int           `yaml:"change_count"`
-			OutOfSyncCount   int           `yaml:"out_of_sync_count"`
-			Events           []interface{} `yaml:"events"`
-			CorrectiveChange bool          `yaml:"corrective_change"`
-		} `yaml:"Schedule[daily]"`
-		ScheduleWeekly struct {
-			Title            string        `yaml:"title"`
-			File             interface{}   `yaml:"file"`
-			Line             interface{}   `yaml:"line"`
-			Resource         string        `yaml:"resource"`
-			ResourceType     string        `yaml:"resource_type"`
-			ProviderUsed     interface{}   `yaml:"provider_used"`
-			ContainmentPath  []string      `yaml:"containment_path"`
-			EvaluationTime   float64       `yaml:"evaluation_time"`
-			Tags             []string      `yaml:"tags"`
-			Time             string        `yaml:"time"`
-			Failed           bool          `yaml:"failed"`
-			FailedToRestart  bool          `yaml:"failed_to_restart"`
-			Changed          bool          `yaml:"changed"`
-			OutOfSync        bool          `yaml:"out_of_sync"`
-			Skipped          bool          `yaml:"skipped"`
-			ChangeCount      int           `yaml:"change_count"`
-			OutOfSyncCount   int           `yaml:"out_of_sync_count"`
-			Events           []interface{} `yaml:"events"`
-			CorrectiveChange bool          `yaml:"corrective_change"`
-		} `yaml:"Schedule[weekly]"`
-		ScheduleMonthly struct {
-			Title            string        `yaml:"title"`
-			File             interface{}   `yaml:"file"`
-			Line             interface{}   `yaml:"line"`
-			Resource         string        `yaml:"resource"`
-			ResourceType     string        `yaml:"resource_type"`
-			ProviderUsed     interface{}   `yaml:"provider_used"`
-			ContainmentPath  []string      `yaml:"containment_path"`
-			EvaluationTime   float64       `yaml:"evaluation_time"`
-			Tags             []string      `yaml:"tags"`
-			Time             string        `yaml:"time"`
-			Failed           bool          `yaml:"failed"`
-			FailedToRestart  bool          `yaml:"failed_to_restart"`
-			Changed          bool          `yaml:"changed"`
-			OutOfSync        bool          `yaml:"out_of_sync"`
-			Skipped          bool          `yaml:"skipped"`
-			ChangeCount      int           `yaml:"change_count"`
-			OutOfSyncCount   int           `yaml:"out_of_sync_count"`
-			Events           []interface{} `yaml:"events"`
-			CorrectiveChange bool          `yaml:"corrective_change"`
-		} `yaml:"Schedule[monthly]"`
-		ScheduleNever struct {
-			Title            string        `yaml:"title"`
-			File             interface{}   `yaml:"file"`
-			Line             interface{}   `yaml:"line"`
-			Resource         string        `yaml:"resource"`
-			ResourceType     string        `yaml:"resource_type"`
-			ProviderUsed     interface{}   `yaml:"provider_used"`
-			ContainmentPath  []string      `yaml:"containment_path"`
-			EvaluationTime   float64       `yaml:"evaluation_time"`
-			Tags             []string      `yaml:"tags"`
-			Time             string        `yaml:"time"`
-			Failed           bool          `yaml:"failed"`
-			FailedToRestart  bool          `yaml:"failed_to_restart"`
-			Changed          bool          `yaml:"changed"`
-			OutOfSync        bool          `yaml:"out_of_sync"`
-			Skipped          bool          `yaml:"skipped"`
-			ChangeCount      int           `yaml:"change_count"`
-			OutOfSyncCount   int           `yaml:"out_of_sync_count"`
-			Events           []interface{} `yaml:"events"`
-			CorrectiveChange bool          `yaml:"corrective_change"`
-		} `yaml:"Schedule[never]"`
-		FilebucketPuppet struct {
-			Title            string        `yaml:"title"`
-			File             interface{}   `yaml:"file"`
-			Line             interface{}   `yaml:"line"`
-			Resource         string        `yaml:"resource"`
-			ResourceType     string        `yaml:"resource_type"`
-			ProviderUsed     interface{}   `yaml:"provider_used"`
-			ContainmentPath  []string      `yaml:"containment_path"`
-			EvaluationTime   float64       `yaml:"evaluation_time"`
-			Tags             []string      `yaml:"tags"`
-			Time             string        `yaml:"time"`
-			Failed           bool          `yaml:"failed"`
-			FailedToRestart  bool          `yaml:"failed_to_restart"`
-			Changed          bool          `yaml:"changed"`
-			OutOfSync        bool          `yaml:"out_of_sync"`
-			Skipped          bool          `yaml:"skipped"`
-			ChangeCount      int           `yaml:"change_count"`
-			OutOfSyncCount   int           `yaml:"out_of_sync_count"`
-			Events           []interface{} `yaml:"events"`
-			CorrectiveChange bool          `yaml:"corrective_change"`
-		} `yaml:"Filebucket[puppet]"`
-	} `yaml:"resource_statuses"`
-	CorrectiveChange    bool   `yaml:"corrective_change"`
-	CatalogUUID         string `yaml:"catalog_uuid"`
-	CachedCatalogStatus string `yaml:"cached_catalog_status"`
+	Host                 string                    `yaml:"host"`
+	ConfigurationVersion int                       `yaml:"configuration_version"`
+	ReportFormat         int                       `yaml:"report_format"`
+	PuppetVersion        string                    `yaml:"puppet_version"`
+	Status               string                    `yaml:"status"`
+	TransactionCompleted bool                      `yaml:"transaction_completed"`
+	Noop                 bool                      `yaml:"noop"`
+	NoopPending          bool                      `yaml:"noop_pending"`
+	Environment          string                    `yaml:"environment"`
+	Logs                 []Log                     `yaml:"logs"`
+	ResourceStatuses     map[string]ResourceStatus `yaml:"resource_statuses"`
+	CorrectiveChange     bool                      `yaml:"corrective_change"`
+	CachedCatalogStatus  string                    `yaml:"cached_catalog_status"`
 }
 
-// An example showing how to unmarshal embedded
-// structs from YAML.
-
-type StructA struct {
-	A string `yaml:"a"`
+type Log struct {
+	Level   string `yaml:"level"`
+	Message string `yaml:"message"`
+	Source  string `yaml:"source"`
+	// removing for now, as it breaks crunch
+	// if resources are spread across source code
+	//File    string `yaml:"file"`
+	//Line    int    `yaml:"line"`
 }
 
-type StructB struct {
-	// Embedded structs are not treated as embedded in YAML by default. To do that,
-	// add the ",inline" annotation below
-	StructA `yaml:",inline"`
-	B       string `yaml:"b"`
+type Event struct {
+	Property         string `yaml:"property"`
+	PreviousValue    string `yaml:"previous_value"`
+	DesiredValue     string `yaml:"desired_value"`
+	Message          string `yaml:"message"`
+	Name             string `yaml:"name"`
+	Status           string `yaml:"status"`
+	CorrectiveChange bool   `yaml:"corrective_change"`
 }
 
-var data = `
-a: a string from struct A
-b: a string from struct B
-`
+type ResourceStatus struct {
+	ChangeCount      int      `yaml:"change_count"`
+	Changed          bool     `yaml:"changed"`
+	ContainmentPath  []string `yaml:"containment_path"`
+	CorrectiveChange bool     `yaml:"corrective_change"`
+	Failed           bool     `yaml:"failed"`
+	FailedToRestart  bool     `yaml:"failed_to_restart"`
+	// removing for now, as it breaks crunch
+	// if resources are spread across source code
+	// File             string   `yaml:"file"`
+	// Line             int      `yaml:"line"`
+	OutOfSync      bool     `yaml:"out_of_sync"`
+	OutOfSyncCount int      `yaml:"out_of_sync_count"`
+	ProviderUsed   string   `yaml:"provider_used"`
+	Resource       string   `yaml:"resource"`
+	ResourceType   string   `yaml:"resource_type"`
+	Skipped        bool     `yaml:"skipped"`
+	Tags           []string `yaml:"tags"`
+	Title          string   `yaml:"title"`
+	Events         []Event  `yaml:"events"`
+}
 
-func main() {
-	var pr PuppetReport
-	file, err := os.Open("/home/hathaway/src/heckler/reports/commit3_waldorf.yaml")
+type Node struct {
+	commitReports        map[string]*PuppetReport
+	commitDeltaResources map[string]map[string]*deltaResource
+}
+
+type deltaResource struct {
+	Title  string
+	Type   string
+	Events []Event
+	Logs   []Log
+}
+
+func printSlice(s []string) {
+	fmt.Printf("len=%d cap=%d %v\n", len(s), cap(s), s)
+}
+
+// 2. For each Node
+//   1. Create minimal noop for commit by subtracting Node commit noop from
+//      previous commit according to git history
+//    map commit -> noop
+//    map commitMin -> event_list
+// 3. Collect all minimal minimal noops for a given commit
+//    event list with count?
+// 4. Compress noops, a la puppet crunch
+// 5. Create Github issue against project version, include compressed noop output
+// 6. Assign issue to authors of commit & team
+// 7. Create a single issue for infrastructure for any nonaccounted for noop
+//    outputs
+
+// return list of commits as a sorted array
+func commitList() []string {
+	var commits []string
+	var s string
+
+	cmd := exec.Command("git", "log", "--pretty=tformat:%h", "--reverse")
+	cmd.Dir = "/home/hathaway/src/heckler/repo"
+	out, err := cmd.Output()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer file.Close()
-
-	data, err := ioutil.ReadAll(file)
-
-	err = yaml.Unmarshal([]byte(data), &pr)
-	if err != nil {
-		log.Fatalf("cannot unmarshal data: %v", err)
+	r := bytes.NewReader(out)
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		s = scanner.Text()
+		commits = append(commits, s)
 	}
-	fmt.Println(pr.Host)
-	// for _, log := range pr.Logs {
-	// 	fmt.Printf("%v: %v\n", log.Level, log.Source)
-	// 	fmt.Println(log.Message)
-	// }
+
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+	// printSlice(commits)
+	return commits
+}
+
+func deltaNoop(priorCommitNoop *PuppetReport, commitNoop *PuppetReport) map[string]*deltaResource {
+	var foundPrior bool
+	var deltaEvents []Event
+	var deltaLogs []Log
+	var dr map[string]*deltaResource
+
+	dr = make(map[string]*deltaResource)
+
+	for resourceTitle, r := range commitNoop.ResourceStatuses {
+		if len(r.Events) > 0 {
+			deltaEvents = nil
+			deltaLogs = nil
+
+			for _, e := range r.Events {
+				foundPrior = false
+				for _, pe := range priorCommitNoop.ResourceStatuses[resourceTitle].Events {
+					if e == pe {
+						foundPrior = true
+						break
+					}
+				}
+				if foundPrior == false {
+					deltaEvents = append(deltaEvents, e)
+				}
+			}
+
+			for _, l := range commitNoop.Logs {
+				if l.Source == resourceTitle {
+					foundPrior = false
+					for _, pl := range priorCommitNoop.Logs {
+						if l == pl {
+							foundPrior = true
+							break
+						}
+					}
+					if foundPrior == false {
+						deltaLogs = append(deltaLogs, l)
+					}
+				}
+			}
+
+			if len(deltaEvents) > 0 {
+				dr[resourceTitle] = new(deltaResource)
+				dr[resourceTitle].Title = resourceTitle
+				dr[resourceTitle].Type = r.ResourceType
+				dr[resourceTitle].Events = deltaEvents
+				dr[resourceTitle].Logs = deltaLogs
+			}
+		}
+	}
+
+	return dr
+}
+
+func crunch(commit string, targetDeltaResource *deltaResource, nodes map[string]*Node) {
+	var nodeList []string
+
+	for nodeName, node := range nodes {
+		if nodeDeltaResource, ok := node.commitDeltaResources[commit][targetDeltaResource.Title]; ok {
+			// fmt.Printf("crunching %v\n", targetDeltaResource.Title)
+			if cmp.Equal(targetDeltaResource, nodeDeltaResource) {
+				nodeList = append(nodeList, nodeName)
+				delete(node.commitDeltaResources[commit], targetDeltaResource.Title)
+			} else {
+				// fmt.Printf("Diff:\n %v", cmp.Diff(targetDeltaResource, nodeDeltaResource))
+			}
+		}
+	}
+	fmt.Printf("Resource: %v\n", targetDeltaResource.Title)
+	fmt.Printf("Nodes: %v\n", nodeList)
+	for _, e := range targetDeltaResource.Events {
+		fmt.Printf("Current State: %v\n", e.PreviousValue)
+		// XXX move base64 decode somewhere else
+		// also yell at puppet for this inconsistency!!!
+		if targetDeltaResource.Type == "File" && e.Property == "content" {
+			data, err := base64.StdEncoding.DecodeString(e.DesiredValue)
+			if err != nil {
+				log.Fatal(err)
+			}
+			desiredValue := string(data[:])
+			fmt.Printf("Desired State: %v\n", desiredValue)
+		} else {
+			fmt.Printf("Desired State: %v\n", e.DesiredValue)
+		}
+	}
+	for _, l := range targetDeltaResource.Logs {
+		fmt.Printf("Log:\n%v\n", strings.TrimRight(l.Message, "\n"))
+	}
+	fmt.Printf("\n")
+}
+
+func normalizeLogs(Logs []Log) []Log {
+	var newSource string
+	var newLogs []Log
+
+	for _, l := range Logs {
+		// Log referring to a puppet resource
+		reResource := regexp.MustCompile(`^/`)
+		// Log types to drop
+		reCurVal := regexp.MustCompile(`^current_value`)
+		reApply := regexp.MustCompile(`^Applied catalog`)
+		reClass := regexp.MustCompile(`^Class\[`)
+		reStage := regexp.MustCompile(`^Stage\[`)
+		if reCurVal.MatchString(l.Message) ||
+			reClass.MatchString(l.Source) ||
+			reStage.MatchString(l.Source) ||
+			reApply.MatchString(l.Message) {
+			continue
+		} else if reResource.MatchString(l.Source) {
+			reResourceHead := regexp.MustCompile(`^/[^/]*/[^/]*/`)
+			reResourceTail := regexp.MustCompile(`/[^/]*$`)
+			newSource = reResourceHead.ReplaceAllString(l.Source, "")
+			newSource = reResourceTail.ReplaceAllString(newSource, "")
+			reFileContent := regexp.MustCompile(`File\[.*content$`)
+			reDiff := regexp.MustCompile(`(?s)^.---`)
+			if reFileContent.MatchString(l.Source) && reDiff.MatchString(l.Message) {
+				l.Message = normalizeDiff(l.Message)
+			}
+			l.Source = newSource
+			// fmt.Printf("log: \n%v\n", l)
+			newLogs = append(newLogs, l)
+		} else {
+			fmt.Printf("Unaccounted for log: %v\n", l.Message)
+			fmt.Printf("Source: %v\n", l.Source)
+			newLogs = append(newLogs, l)
+		}
+	}
+
+	return newLogs
+}
+
+func normalizeDiff(msg string) string {
+	var newMsg string
+	var s string
+	var line int
+
+	scanner := bufio.NewScanner(strings.NewReader(msg))
+	line = 0
+	for scanner.Scan() {
+		s = scanner.Text()
+		if line > 2 {
+			newMsg += s + "\n"
+		}
+		line++
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return newMsg
+}
+
+func main() {
+	var err error
+	var file *os.File
+	var data []byte
+	var nodes map[string]*Node
+
+	nodes = make(map[string]*Node)
+
+	nodes["waldorf"] = new(Node)
+	nodes["statler"] = new(Node)
+	nodes["fozzie"] = new(Node)
+
+	commits := commitList()
+	for muppet, node := range nodes {
+		node.commitReports = make(map[string]*PuppetReport)
+		node.commitDeltaResources = make(map[string]map[string]*deltaResource)
+		for i, commit := range commits {
+			file, err = os.Open("/home/hathaway/src/heckler/reports/" + muppet + "/" + commit + ".yaml")
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer file.Close()
+
+			data, err = ioutil.ReadAll(file)
+
+			node.commitReports[commit] = new(PuppetReport)
+			err = yaml.Unmarshal([]byte(data), node.commitReports[commit])
+			if err != nil {
+				log.Fatalf("cannot unmarshal data: %v", err)
+			}
+			node.commitReports[commit].Logs = normalizeLogs(node.commitReports[commit].Logs)
+			if i > 0 {
+				node.commitDeltaResources[commit] = deltaNoop(node.commitReports[commits[i-1]], node.commitReports[commit])
+			}
+		}
+	}
+
+	for i := 1; i < len(commits); i++ {
+		fmt.Printf("\n# Commit: %v\n\n", commits[i])
+		for _, node := range nodes {
+			for _, r := range node.commitDeltaResources[commits[i]] {
+				crunch(commits[i], r, nodes)
+			}
+		}
+	}
+	os.Exit(0)
 }
