@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/base64"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -279,24 +280,39 @@ func normalizeDiff(msg string) string {
 	return newMsg
 }
 
+type hostFlags []string
+
+func (i *hostFlags) String() string {
+	return fmt.Sprint(*i)
+}
+
+func (i *hostFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
 func main() {
 	var err error
 	var file *os.File
 	var data []byte
 	var nodes map[string]*Node
+	var myFlags hostFlags
+
+	flag.Var(&myFlags, "node", "node hostnames to crunch")
+	flag.Parse()
 
 	nodes = make(map[string]*Node)
 
-	nodes["waldorf"] = new(Node)
-	nodes["statler"] = new(Node)
-	nodes["fozzie"] = new(Node)
+	for _, node := range myFlags {
+		nodes[node] = new(Node)
+	}
 
 	commits := commitList()
-	for muppet, node := range nodes {
+	for hostname, node := range nodes {
 		node.commitReports = make(map[string]*PuppetReport)
 		node.commitDeltaResources = make(map[string]map[string]*deltaResource)
 		for i, commit := range commits {
-			file, err = os.Open("/home/hathaway/src/heckler/reports/" + muppet + "/" + commit + ".yaml")
+			file, err = os.Open("/home/hathaway/src/heckler/reports/" + hostname + "/" + commit + ".yaml")
 			if err != nil {
 				log.Fatal(err)
 			}
