@@ -1,0 +1,78 @@
+#!/bin/bash
+
+set -e nounset
+set -e errexit
+set -e pipefail
+shopt -s lastpipe
+
+if [[ $EUID -ne 0 ]]; then
+  printf 'Must run as root!\n'
+  exit 1
+fi
+
+BASE_DIR='/var/tmp/heckler'
+
+REPORTS="${BASE_DIR}"/reports/"${1}"-"${2}"
+CONF="${BASE_DIR}"/infra
+VAR="${BASE_DIR}"/var
+
+mkdir -p "${CONF}"
+
+if [[ -e "${REPORTS}" ]]; then
+  rm -rf "${REPORTS}"
+fi
+mkdir -p "${REPORTS}"
+
+# puppet hacks
+export FACTER_ipaddress=do_not_use
+export RUBYLIB="${CONF}"/vendor/puppet/lib:"${CONF}"/vendor/facter/lib:"${CONF}"/vendor/hiera/lib:"${CONF}"/lib:$RUBYLIB
+export PATH="${CONF}"/vendor/puppet/bin:"${CONF}"/vendor/facter/bin:"${CONF}"/vendor/hiera/bin:$PATH
+
+PUPPET_ARGS=(
+  apply
+  '--modulepath='"${CONF}"/modules:"${CONF}"/vendor/modules
+  --confdir
+  "${CONF}"
+  --logdest
+  console
+  --user
+  jhathaway
+  --group
+  jhathaway
+  --logdest
+  syslog
+  --storeconfigs
+  --reports
+  store
+  --detailed-exitcodes
+  nodes
+)
+
+# XXX detailed exit codes? ; ! (( $? & 4 ))"
+
+pushd "${CONF}" >/dev/null
+if [[ -e .git ]]; then
+  git reset --hard
+  git clean -fd
+  echo XXX git fetch
+else
+  echo XXX git clone
+fi
+git log "${1}".."${2}" --pretty=tformat:"%h" | tac | mapfile -t COMMITS
+popd >/dev/null
+
+for commit in "${COMMITS[@]}"; do
+  pushd "${PWD}"/repo >/dev/null
+  git checkout "${commit}" >/dev/null
+  popd >/dev/null
+  if [[ "$commit" == "${COMMITS[0]}" ]]; then
+    echo puppet "${PUPPET_ARGS[@]}"
+  fi
+  report="${REPORTS}"/"${commit}"
+  echo puppet "${PUPPET_ARGS[@]}" --noop >"${report}".txt
+  cp "${VAR}"/state/last_run_report.yaml "${report}".yaml
+done
+
+chmod o+rX "${REPORTS}"
+printf 'World read set\n'
+printf 'Report complete\n'

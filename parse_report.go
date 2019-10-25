@@ -138,45 +138,43 @@ func deltaNoop(priorCommitNoop *PuppetReport, commitNoop *PuppetReport) map[stri
 	dr = make(map[string]*deltaResource)
 
 	for resourceTitle, r := range commitNoop.ResourceStatuses {
-		if len(r.Events) > 0 {
-			deltaEvents = nil
-			deltaLogs = nil
+		deltaEvents = nil
+		deltaLogs = nil
 
-			for _, e := range r.Events {
+		for _, e := range r.Events {
+			foundPrior = false
+			for _, pe := range priorCommitNoop.ResourceStatuses[resourceTitle].Events {
+				if e == pe {
+					foundPrior = true
+					break
+				}
+			}
+			if foundPrior == false {
+				deltaEvents = append(deltaEvents, e)
+			}
+		}
+
+		for _, l := range commitNoop.Logs {
+			if l.Source == resourceTitle {
 				foundPrior = false
-				for _, pe := range priorCommitNoop.ResourceStatuses[resourceTitle].Events {
-					if e == pe {
+				for _, pl := range priorCommitNoop.Logs {
+					if l == pl {
 						foundPrior = true
 						break
 					}
 				}
 				if foundPrior == false {
-					deltaEvents = append(deltaEvents, e)
+					deltaLogs = append(deltaLogs, l)
 				}
 			}
+		}
 
-			for _, l := range commitNoop.Logs {
-				if l.Source == resourceTitle {
-					foundPrior = false
-					for _, pl := range priorCommitNoop.Logs {
-						if l == pl {
-							foundPrior = true
-							break
-						}
-					}
-					if foundPrior == false {
-						deltaLogs = append(deltaLogs, l)
-					}
-				}
-			}
-
-			if len(deltaEvents) > 0 {
-				dr[resourceTitle] = new(deltaResource)
-				dr[resourceTitle].Title = resourceTitle
-				dr[resourceTitle].Type = r.ResourceType
-				dr[resourceTitle].Events = deltaEvents
-				dr[resourceTitle].Logs = deltaLogs
-			}
+		if len(deltaEvents) > 0 || len(deltaLogs) > 0 {
+			dr[resourceTitle] = new(deltaResource)
+			dr[resourceTitle].Title = resourceTitle
+			dr[resourceTitle].Type = r.ResourceType
+			dr[resourceTitle].Events = deltaEvents
+			dr[resourceTitle].Logs = deltaLogs
 		}
 	}
 

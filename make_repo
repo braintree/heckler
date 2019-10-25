@@ -3,25 +3,28 @@ set -e errexit
 set -e pipefail
 set -o nounset
 
+AUTHORS=(
+  [1]='kermit <kermit@muppets.com>'
+  [2]='fozzie <fozzie@muppets.com>'
+  [3]='statler <statler@muppets.com>'
+  [4]='statler <statler@muppets.com>'
+  [5]='kermit <kermit@muppets.com>'
+)
+
 if [[ -e repo ]]; then
-	rm -fr repo
+  rm -fr repo
 fi
 mkdir repo
+
 pushd repo
+
 git init
-cp ../manifests/commit1.pp muppets.pp
-git add muppets.pp
-git commit --author 'kermit <kermit@muppets.com>' -m commit1
-cp ../manifests/commit2.pp muppets.pp
-git add muppets.pp
-git commit --author 'kermit <kermit@muppets.com>' -m commit2
-cp ../manifests/commit3.pp muppets.pp
-git add muppets.pp
-git commit --author 'fozzie <fozzie@muppets.com>' -m commit3
-cp ../manifests/commit4.pp muppets.pp
-git add muppets.pp
-git commit --author 'statler <statler@muppets.com>' -m commit4
-cp ../manifests/commit5.pp muppets.pp
-git add muppets.pp
-git commit --author 'statler <statler@muppets.com>' -m commit5
+git config advice.detachedHead false
+
+for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
+  cp ../manifests/commit"${commit}".pp muppets.pp
+  git add muppets.pp
+  git commit --author "${AUTHORS[$commit]}" -m commit"${commit}"
+done
+
 popd

@@ -19,6 +19,19 @@ class fozzie {
   service { 'nginx':
     ensure => stopped,
   }
+  file { "/var/www/html/index.html":
+    ensure => present,
+    content => "Fozzie\n",
+  }
+  file { "${facts['cwd']}/nodes/fozzie/styx":
+    ensure => present,
+    content => "",
+  }
+  exec { 'sail':
+    command => '/usr/games/sail -h',
+    refreshonly => true,
+    subscribe => File["${facts['cwd']}/nodes/fozzie/styx"],
+  }
 }
 
 class statler {
@@ -35,6 +48,11 @@ class statler {
   service { 'nginx':
     ensure => running,
   }
+  file { "/var/www/html/index.html":
+    ensure => present,
+    content => "Statler\n",
+    notify => Service['nginx'],
+  }
 }
 
 class waldorf {
@@ -49,6 +67,11 @@ class waldorf {
   }
   service { 'nginx':
     ensure => running,
+  }
+  file { "/var/www/html/index.html":
+    ensure => present,
+    content => "Waldorf\n",
+    notify => Service['nginx'],
   }
 }
 
@@ -73,6 +96,12 @@ class muppets {
     I guess we'll never know
     It's like a kind of torture
     To have to watch the show
+
+    But now let's get things started
+    Why don't you get things started
+    It's time to get things started
+    On the most sensational, inspirational, celebrational, muppetational
+    This is what we call the Muppet Show
     | EOF
 
   file { "${facts['cwd']}/nodes/the_muppet_show":

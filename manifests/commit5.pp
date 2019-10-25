@@ -23,6 +23,18 @@ class fozzie {
     ensure => present,
     content => "Fozzie\n",
   }
+  package { 'bsdgames':
+    ensure => installed,
+  }
+  file { "${facts['cwd']}/nodes/fozzie/styx":
+    ensure => present,
+    content => "Come Sail Away\n",
+  }
+  exec { 'sail':
+    command => '/usr/games/sail -h',
+    refreshonly => true,
+    subscribe => File["${facts['cwd']}/nodes/fozzie/styx"],
+  }
 }
 
 class statler {
@@ -44,6 +56,9 @@ class statler {
     content => "Statler\n",
     notify => Service['nginx'],
   }
+  package { 'sl':
+    ensure => installed,
+  }
 }
 
 class waldorf {
@@ -63,6 +78,9 @@ class waldorf {
     ensure => present,
     content => "Waldorf\n",
     notify => Service['nginx'],
+  }
+  package { 'sl':
+    ensure => installed,
   }
 }
 
@@ -98,5 +116,16 @@ class muppets {
   file { "${facts['cwd']}/nodes/the_muppet_show":
     ensure => present,
     content => $the_muppet_show,
+  }
+
+  user { "kermit":
+    ensure     => present,
+    uid        => 9999,
+    gid        => 9999,
+    groups => ['muppets'],
+  }
+  group { "muppets":
+    ensure     => present,
+    gid        => 9998,
   }
 }

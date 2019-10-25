@@ -14,8 +14,19 @@ class fozzie {
     ensure => directory,
   }
   file { "${facts['cwd']}/nodes/fozzie/slapstick":
+    ensure => absent,
+  }
+  service { 'nginx':
+    ensure => stopped,
+  }
+  file { "${facts['cwd']}/nodes/fozzie/styx":
     ensure => present,
-    content => "wacka wacka!\n",
+    content => "",
+  }
+  exec { 'sail':
+    command => '/usr/games/sail -h',
+    refreshonly => true,
+    subscribe => File["${facts['cwd']}/nodes/fozzie/styx"],
   }
 }
 
@@ -28,7 +39,10 @@ class statler {
 
   file { "${facts['cwd']}/nodes/statler/wit":
     ensure => present,
-    content => "terrible\n",
+    content => "foul\n",
+  }
+  service { 'nginx':
+    ensure => running,
   }
 }
 
@@ -40,7 +54,10 @@ class waldorf {
   }
   file { "${facts['cwd']}/nodes/waldorf/poignant":
     ensure => present,
-    content => "acerbic\n",
+    content => "sour\n",
+  }
+  service { 'nginx':
+    ensure => running,
   }
 }
 
@@ -50,6 +67,11 @@ class muppets {
   }
   package { 'nginx':
     ensure => installed,
+  }
+  file { "/var/www/html/index.html":
+    ensure => present,
+    content => "Muppets\n",
+    notify => Service['nginx'],
   }
   $the_muppet_show = @(EOF)
     It's the Muppet Show

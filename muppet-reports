@@ -6,8 +6,8 @@ set -e pipefail
 shopt -s lastpipe
 
 if [[ $EUID -ne 0 ]]; then
-	printf 'Must run as root!\n'
-	exit 1
+  printf 'Must run as root!\n'
+  exit 1
 fi
 
 export PATH=/opt/puppetlabs/bin:$PATH
@@ -17,34 +17,39 @@ git checkout master
 git log --pretty=tformat:"%h" | tac | mapfile -t COMMITS
 popd >/dev/null
 
-declare -p COMMITS
-
 MUPPETS=(
-	waldorf
-	statler
-	fozzie
+  waldorf
+  statler
+  fozzie
 )
 
 if [[ -e reports ]]; then
-	rm -rf reports
+  rm -rf reports
 fi
 
 mkdir -p reports
 
+FACTER_nodename='fozzie' FACTER_cwd="${PWD}" \
+  puppet apply --confdir "${PWD}" --vardir "${PWD}/var" manifests/reset.pp
+
 for muppet in "${MUPPETS[@]}"; do
-	commit_num=1
-	for commit in "${COMMITS[@]}"; do
-		pushd "${PWD}"/repo >/dev/null
-		git checkout "${commit}" >/dev/null
-		popd >/dev/null
-		output=reports/commit"${commit_num}"_"${muppet}".txt
-		FACTER_nodename="${muppet}" FACTER_cwd="${PWD}" \
-			puppet apply --confdir "${PWD}" --vardir "${PWD}/var" repo/muppets.pp >"${output}" 2>&1
-		report=reports/commit"${commit_num}"_"${muppet}".yaml
-		cp var/state/last_run_report.yaml "${report}"
-		sed -i 's/^host: .*/host: '"${muppet}"'/' "${report}"
-		commit_num=$((commit_num + 1))
-	done
+  mkdir -p reports/"${muppet}"
+  for commit in "${COMMITS[@]}"; do
+    pushd "${PWD}"/repo >/dev/null
+    git checkout "${commit}" >/dev/null
+    popd >/dev/null
+    if [[ "$commit" == "${COMMITS[0]}" ]]; then
+      FACTER_nodename="${muppet}" FACTER_cwd="${PWD}" \
+        puppet apply --confdir "${PWD}" --vardir "${PWD}/var" repo/muppets.pp
+    fi
+    report=reports/"${muppet}"/"${commit}"
+    FACTER_nodename="${muppet}" FACTER_cwd="${PWD}" \
+      puppet apply --noop --confdir "${PWD}" --vardir "${PWD}/var" repo/muppets.pp >"${report}".txt 2>&1
+    cp var/state/last_run_report.yaml "${report}".yaml
+    chmod +r "${report}".yaml
+    sed -i 's/^host: .*/host: '"${muppet}"'/' "${report}".yaml
+  done
 done
 
-chmod 644 reports/*
+printf 'Set world read\n'
+printf 'Done\n'
