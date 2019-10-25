@@ -207,8 +207,9 @@ func crunch(commit string, targetDeltaResource *deltaResource, nodes map[string]
 			if err != nil {
 				// XXX nasty, fix?
 				desiredValue := e.DesiredValue
+			} else {
+				desiredValue := string(data[:])
 			}
-			desiredValue := string(data[:])
 			fmt.Printf("Desired State: %v\n", desiredValue)
 		} else {
 			fmt.Printf("Desired State: %v\n", e.DesiredValue)
