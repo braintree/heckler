@@ -106,12 +106,12 @@ func printSlice(s []string) {
 //    outputs
 
 // return list of commits as a sorted array
-func commitList() []string {
+func commitList(repoDir string, beginTree string, endTree string) []string {
 	var commits []string
 	var s string
 
-	cmd := exec.Command("git", "log", "--pretty=tformat:%h", "--reverse")
-	cmd.Dir = "/home/hathaway/src/heckler/repo"
+	cmd := exec.Command("git", "log", "--pretty=tformat:%h", "--reverse", beginTree+".."+endTree)
+	cmd.Dir = repoDir
 	out, err := cmd.Output()
 	if err != nil {
 		log.Fatal(err)
@@ -296,23 +296,31 @@ func main() {
 	var file *os.File
 	var data []byte
 	var nodes map[string]*Node
-	var myFlags hostFlags
+	var hosts hostFlags
+	var reportDir string
+	var puppetDir string
+	var beginTree string
+	var endTree string
 
-	flag.Var(&myFlags, "node", "node hostnames to crunch")
+	flag.Var(&hosts, "node", "node hostnames to crunch")
+	flag.StringVar(&reportDir, "report", "", "report dir")
+	flag.StringVar(&puppetDir, "puppet", "", "puppet repo")
+	flag.StringVar(&beginTree, "begin", "", "begin treeish")
+	flag.StringVar(&endTree, "end", "", "end treeish")
 	flag.Parse()
 
 	nodes = make(map[string]*Node)
 
-	for _, node := range myFlags {
+	for _, node := range hosts {
 		nodes[node] = new(Node)
 	}
 
-	commits := commitList()
+	commits := commitList(puppetDir, beginTree, endTree)
 	for hostname, node := range nodes {
 		node.commitReports = make(map[string]*PuppetReport)
 		node.commitDeltaResources = make(map[string]map[string]*deltaResource)
 		for i, commit := range commits {
-			file, err = os.Open("/home/hathaway/src/heckler/reports/" + hostname + "/" + commit + ".yaml")
+			file, err = os.Open(reportDir + "/" + hostname + "/" + commit + ".yaml")
 			if err != nil {
 				log.Fatal(err)
 			}
