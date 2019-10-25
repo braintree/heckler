@@ -240,10 +240,12 @@ func normalizeLogs(Logs []Log) []Log {
 			reApply.MatchString(l.Message) {
 			continue
 		} else if reResource.MatchString(l.Source) {
-			reResourceHead := regexp.MustCompile(`^/[^/]*/[^/]*/`)
 			reResourceTail := regexp.MustCompile(`/[^/]*$`)
-			newSource = reResourceHead.ReplaceAllString(l.Source, "")
-			newSource = reResourceTail.ReplaceAllString(newSource, "")
+			newSource = reResourceTail.ReplaceAllString(l.Source, "")
+
+			reResourceHead := regexp.MustCompile(`[^\/]+\[[^\[\]]+\]$`)
+			newSource = reResourceHead.FindString(newSource)
+
 			reFileContent := regexp.MustCompile(`File\[.*content$`)
 			reDiff := regexp.MustCompile(`(?s)^.---`)
 			if reFileContent.MatchString(l.Source) && reDiff.MatchString(l.Message) {
