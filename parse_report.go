@@ -110,7 +110,7 @@ func commitList(repoDir string, beginTree string, endTree string) []string {
 	var commits []string
 	var s string
 
-	cmd := exec.Command("git", "log", "--pretty=tformat:%h", "--reverse", beginTree+".."+endTree)
+	cmd := exec.Command("git", "log", "--no-merges", "--pretty=tformat:%h", "--reverse", beginTree+".."+endTree)
 	cmd.Dir = repoDir
 	out, err := cmd.Output()
 	if err != nil {
