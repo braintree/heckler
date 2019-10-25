@@ -184,6 +184,7 @@ func deltaNoop(priorCommitNoop *PuppetReport, commitNoop *PuppetReport) map[stri
 
 func crunch(commit string, targetDeltaResource *deltaResource, nodes map[string]*Node) {
 	var nodeList []string
+	var desiredValue string
 
 	for nodeName, node := range nodes {
 		if nodeDeltaResource, ok := node.commitDeltaResources[commit][targetDeltaResource.Title]; ok {
@@ -206,9 +207,9 @@ func crunch(commit string, targetDeltaResource *deltaResource, nodes map[string]
 			data, err := base64.StdEncoding.DecodeString(e.DesiredValue)
 			if err != nil {
 				// XXX nasty, fix?
-				desiredValue := e.DesiredValue
+				desiredValue = e.DesiredValue
 			} else {
-				desiredValue := string(data[:])
+				desiredValue = string(data[:])
 			}
 			fmt.Printf("Desired State: %v\n", desiredValue)
 		} else {
