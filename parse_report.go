@@ -205,7 +205,7 @@ func crunch(commit string, targetDeltaResource *deltaResource, nodes map[string]
 		if targetDeltaResource.Type == "File" && e.Property == "content" {
 			data, err := base64.StdEncoding.DecodeString(e.DesiredValue)
 			if err != nil {
-				log.Fatal(err)
+				log.Fatal(err + "input: " + e.DesiredValue)
 			}
 			desiredValue := string(data[:])
 			fmt.Printf("Desired State: %v\n", desiredValue)
