@@ -58,7 +58,7 @@ if [[ -e .git ]]; then
 else
   echo XXX git clone
 fi
-git log "${1}".."${2}" --pretty=tformat:"%h" | tac | mapfile -t COMMITS
+git log --no-merges "${1}".."${2}" --pretty=tformat:"%h" | tac | mapfile -t COMMITS
 popd >/dev/null
 
 for commit in "${COMMITS[@]}"; do
