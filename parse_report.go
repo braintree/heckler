@@ -76,7 +76,7 @@ type ResourceStatus struct {
 	Resource       string   `yaml:"resource"`
 	ResourceType   string   `yaml:"resource_type"`
 	Skipped        bool     `yaml:"skipped"`
-	Tags           []string `yaml:"tags"`
+	// Tags           []string `yaml:"tags"`
 	Title          string   `yaml:"title"`
 	Events         []Event  `yaml:"events"`
 }
