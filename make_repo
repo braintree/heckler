@@ -12,7 +12,7 @@ AUTHORS=(
 )
 
 if [[ -e repo ]]; then
-  rm -fr repo
+  sudo rm -fr repo
 fi
 mkdir repo
 
@@ -20,10 +20,21 @@ pushd repo
 
 git init
 git config advice.detachedHead false
+MUPPET_SHOW_MOD='modules/muppetshow'
+mkdir -p "${MUPPET_SHOW_MOD}"
+mkdir -p "${MUPPET_SHOW_MOD}"/manifests
+
+cp ../manifests/episode.pp "${MUPPET_SHOW_MOD}"/manifests/episode.pp
+git add "${MUPPET_SHOW_MOD}"/manifests/episode.pp
+
+cp ../puppet.conf puppet.conf
+git add puppet.conf
 
 for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
-  cp ../manifests/commit"${commit}".pp muppets.pp
-  git add muppets.pp
+  cp ../manifests/muppetshow"${commit}".pp "${MUPPET_SHOW_MOD}"/manifests/init.pp
+  git add "${MUPPET_SHOW_MOD}"/manifests/init.pp
+  cp ../manifests/nodes"${commit}".pp nodes.pp
+  git add nodes.pp
   git commit --author "${AUTHORS[$commit]}" -m commit"${commit}"
 done
 

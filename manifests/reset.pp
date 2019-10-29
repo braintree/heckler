@@ -8,18 +8,18 @@ node default {
 
 
 class fozzie {
-  include muppets
+  include muppetshow
 }
 
 class statler {
-  include muppets
+  include muppetshow
 }
 
 class waldorf {
-  include muppets
+  include muppetshow
 }
 
-class muppets {
+class muppetshow {
   file { "${facts['cwd']}/nodes":
     ensure => absent,
     force => true,

@@ -18,6 +18,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var RegexDefineType = regexp.MustCompile(`^[A-Z][a-z0-9_]*::[A-Z][a-z0-9_]*\[[^\]]+\]$`)
+var Debug = false
+
 type PuppetReport struct {
 	Host                 string                    `yaml:"host"`
 	ConfigurationVersion int                       `yaml:"configuration_version"`
@@ -82,10 +85,11 @@ type Node struct {
 }
 
 type deltaResource struct {
-	Title  string
-	Type   string
-	Events []Event
-	Logs   []Log
+	Title      string
+	Type       string
+	DefineType string
+	Events     []Event
+	Logs       []Log
 }
 
 func printSlice(s []string) {
@@ -110,7 +114,9 @@ func commitList(repoDir string, beginTree string, endTree string) []string {
 	var commits []string
 	var s string
 
-	cmd := exec.Command("git", "log", "--no-merges", "--pretty=tformat:%h", "--reverse", beginTree+".."+endTree)
+	//git log -n 1 --pretty=tformat:%h d1501a4
+	// XXX dedup
+	cmd := exec.Command("git", "log", "-n", "1", "--pretty=tformat:%h", beginTree)
 	cmd.Dir = repoDir
 	out, err := cmd.Output()
 	if err != nil {
@@ -126,7 +132,24 @@ func commitList(repoDir string, beginTree string, endTree string) []string {
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
-	// printSlice(commits)
+
+	cmd = exec.Command("git", "log", "--no-merges", "--pretty=tformat:%h", "--reverse", "^"+beginTree, endTree)
+	cmd.Dir = repoDir
+	out, err = cmd.Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	r = bytes.NewReader(out)
+	scanner = bufio.NewScanner(r)
+	for scanner.Scan() {
+		s = scanner.Text()
+		commits = append(commits, s)
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+
 	return commits
 }
 
@@ -135,12 +158,25 @@ func deltaNoop(priorCommitNoop *PuppetReport, commitNoop *PuppetReport) map[stri
 	var deltaEvents []Event
 	var deltaLogs []Log
 	var dr map[string]*deltaResource
+	var partOfDefine bool
+	var defineType string
 
 	dr = make(map[string]*deltaResource)
 
 	for resourceTitle, r := range commitNoop.ResourceStatuses {
+		partOfDefine = false
 		deltaEvents = nil
 		deltaLogs = nil
+		defineType = ""
+
+		cplen := len(r.ContainmentPath)
+		if cplen > 2 {
+			possibleDefineType := r.ContainmentPath[cplen-2]
+			if RegexDefineType.MatchString(possibleDefineType) {
+				partOfDefine = true
+				defineType = possibleDefineType
+			}
+		}
 
 		for _, e := range r.Events {
 			foundPrior = false
@@ -176,6 +212,9 @@ func deltaNoop(priorCommitNoop *PuppetReport, commitNoop *PuppetReport) map[stri
 			dr[resourceTitle].Type = r.ResourceType
 			dr[resourceTitle].Events = deltaEvents
 			dr[resourceTitle].Logs = deltaLogs
+			if partOfDefine {
+				dr[resourceTitle].DefineType = defineType
+			}
 		}
 	}
 
@@ -198,6 +237,9 @@ func crunch(commit string, targetDeltaResource *deltaResource, nodes map[string]
 		}
 	}
 	fmt.Printf("Resource: %v\n", targetDeltaResource.Title)
+	if targetDeltaResource.DefineType != "" {
+		fmt.Printf("Define: %v\n", targetDeltaResource.DefineType)
+	}
 	fmt.Printf("Nodes: %v\n", nodeList)
 	for _, e := range targetDeltaResource.Events {
 		fmt.Printf("Current State: %v\n", e.PreviousValue)
@@ -228,23 +270,29 @@ func normalizeLogs(Logs []Log) []Log {
 
 	for _, l := range Logs {
 		// Log referring to a puppet resource
-		reResource := regexp.MustCompile(`^/`)
-		// Log types to drop
-		reCurVal := regexp.MustCompile(`^current_value`)
-		reApply := regexp.MustCompile(`^Applied catalog`)
-		reClass := regexp.MustCompile(`^Class\[`)
-		reStage := regexp.MustCompile(`^Stage\[`)
-		if reCurVal.MatchString(l.Message) ||
-			reClass.MatchString(l.Source) ||
-			reStage.MatchString(l.Source) ||
-			reApply.MatchString(l.Message) {
-			continue
-		} else if reResource.MatchString(l.Source) {
-			reResourceTail := regexp.MustCompile(`/[^/]*$`)
-			newSource = reResourceTail.ReplaceAllString(l.Source, "")
+		regexResource := regexp.MustCompile(`^/`)
 
-			reResourceHead := regexp.MustCompile(`[^\/]+\[[^\[\]]+\]$`)
-			newSource = reResourceHead.FindString(newSource)
+		// Log msg values to drop
+		regexCurValMsg := regexp.MustCompile(`^current_value`)
+		regexApplyMsg := regexp.MustCompile(`^Applied catalog`)
+
+		// Log sources to drop
+		regexClass := regexp.MustCompile(`^Class\[`)
+		regexStage := regexp.MustCompile(`^Stage\[`)
+
+		if regexCurValMsg.MatchString(l.Message) ||
+			regexApplyMsg.MatchString(l.Message) {
+			continue
+		} else if regexClass.MatchString(l.Source) ||
+			regexStage.MatchString(l.Source) ||
+			RegexDefineType.MatchString(l.Source) {
+			continue
+		} else if regexResource.MatchString(l.Source) {
+			regexResourcePropertyTail := regexp.MustCompile(`/[^/]*$`)
+			newSource = regexResourcePropertyTail.ReplaceAllString(l.Source, "")
+
+			regexResource := regexp.MustCompile(`[^\/]+\[[^\[\]]+\]$`)
+			newSource = regexResource.FindString(newSource)
 
 			reFileContent := regexp.MustCompile(`File\[.*content$`)
 			reDiff := regexp.MustCompile(`(?s)^.---`)
@@ -252,7 +300,9 @@ func normalizeLogs(Logs []Log) []Log {
 				l.Message = normalizeDiff(l.Message)
 			}
 			l.Source = newSource
-			// fmt.Printf("log: \n%v\n", l)
+			if Debug {
+				fmt.Fprintf(os.Stderr, "log: \n%v\n", l)
+			}
 			newLogs = append(newLogs, l)
 		} else {
 			fmt.Printf("Unaccounted for log: %v\n", l.Message)
@@ -312,6 +362,7 @@ func main() {
 	flag.StringVar(&puppetDir, "puppet", "", "puppet repo")
 	flag.StringVar(&beginTree, "begin", "", "begin treeish")
 	flag.StringVar(&endTree, "end", "", "end treeish")
+	flag.BoolVar(&Debug, "debug", false, "enable debugging")
 	flag.Parse()
 
 	nodes = make(map[string]*Node)
@@ -346,7 +397,7 @@ func main() {
 	}
 
 	for i := 1; i < len(commits); i++ {
-		fmt.Printf("\n# Commit: %v\n\n", commits[i])
+		fmt.Printf("\n# Commit %v: %v\n\n", i, commits[i])
 		for _, node := range nodes {
 			for _, r := range node.commitDeltaResources[commits[i]] {
 				crunch(commits[i], r, nodes)
