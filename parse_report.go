@@ -224,6 +224,7 @@ func deltaNoop(priorCommitNoop *PuppetReport, commitNoop *PuppetReport) map[stri
 func crunch(commit string, targetDeltaResource *deltaResource, nodes map[string]*Node) {
 	var nodeList []string
 	var desiredValue string
+	var regexRubySym = regexp.MustCompile(`^:`)
 
 	for nodeName, node := range nodes {
 		if nodeDeltaResource, ok := node.commitDeltaResources[commit][targetDeltaResource.Title]; ok {
@@ -242,7 +243,7 @@ func crunch(commit string, targetDeltaResource *deltaResource, nodes map[string]
 	}
 	fmt.Printf("Nodes: %v\n", nodeList)
 	for _, e := range targetDeltaResource.Events {
-		fmt.Printf("Current State: %v\n", e.PreviousValue)
+		fmt.Printf("Current State: %v\n", regexRubySym.ReplaceAllString(e.PreviousValue, ""))
 		// XXX move base64 decode somewhere else
 		// also yell at puppet for this inconsistency!!!
 		if targetDeltaResource.Type == "File" && e.Property == "content" {
@@ -255,7 +256,7 @@ func crunch(commit string, targetDeltaResource *deltaResource, nodes map[string]
 			}
 			fmt.Printf("Desired State: %v\n", desiredValue)
 		} else {
-			fmt.Printf("Desired State: %v\n", e.DesiredValue)
+			fmt.Printf("Desired State: %v\n", regexRubySym.ReplaceAllString(e.DesiredValue, ""))
 		}
 	}
 	for _, l := range targetDeltaResource.Logs {
