@@ -34,4 +34,17 @@ class muppetshow {
   muppetshow::episode { "One":
     base => "${facts['cwd']}/nodes",
   }
+  concat { "${facts['cwd']}/nodes/cast":
+    ensure => present,
+  }
+  concat::fragment { 'MissPiggy':
+    target  => "${facts['cwd']}/nodes/cast",
+    content => "Miss Piggy\n",
+    order   => '01'
+  }
+  concat::fragment { 'RowlfTheDog':
+    target  => "${facts['cwd']}/nodes/cast",
+    content => "Rowlf the Dog\n",
+    order   => '02'
+  }
 }

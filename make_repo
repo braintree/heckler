@@ -20,6 +20,11 @@ pushd repo
 
 git init
 git config advice.detachedHead false
+
+mkdir -p modules
+cp -r ../manifests/vendor/* modules/
+git add modules
+
 MUPPET_SHOW_MOD='modules/muppetshow'
 mkdir -p "${MUPPET_SHOW_MOD}"
 mkdir -p "${MUPPET_SHOW_MOD}"/manifests

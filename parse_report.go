@@ -18,7 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var RegexDefineType = regexp.MustCompile(`^[A-Z][a-z0-9_]*::[A-Z][a-z0-9_]*\[[^\]]+\]$`)
+var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 var Debug = false
 
 type PuppetReport struct {
@@ -266,47 +266,70 @@ func crunch(commit string, targetDeltaResource *deltaResource, nodes map[string]
 
 func normalizeLogs(Logs []Log) []Log {
 	var newSource string
+	var origSource string
 	var newLogs []Log
 
+	// extract resource from log source
+	regexResourcePropertyTail := regexp.MustCompile(`/[a-z][a-z0-9_]*$`)
+	regexResourceTail := regexp.MustCompile(`[^\/]+\[[^\[\]]+\]$`)
+
+	// normalize diff
+	reFileContent := regexp.MustCompile(`File\[.*content$`)
+	reDiff := regexp.MustCompile(`(?s)^.---`)
+
+	// Log referring to a puppet resource
+	regexResource := regexp.MustCompile(`^/Stage`)
+
+	// Log msg values to drop
+	regexCurValMsg := regexp.MustCompile(`^current_value`)
+	regexApplyMsg := regexp.MustCompile(`^Applied catalog`)
+	regexRefreshMsg := regexp.MustCompile(`^Would have triggered 'refresh'`)
+
+	// Log sources to drop
+	regexClass := regexp.MustCompile(`^Class\[`)
+	regexStage := regexp.MustCompile(`^Stage\[`)
+
 	for _, l := range Logs {
-		// Log referring to a puppet resource
-		regexResource := regexp.MustCompile(`^/`)
-
-		// Log msg values to drop
-		regexCurValMsg := regexp.MustCompile(`^current_value`)
-		regexApplyMsg := regexp.MustCompile(`^Applied catalog`)
-
-		// Log sources to drop
-		regexClass := regexp.MustCompile(`^Class\[`)
-		regexStage := regexp.MustCompile(`^Stage\[`)
-
+		origSource = ""
+		newSource = ""
 		if regexCurValMsg.MatchString(l.Message) ||
 			regexApplyMsg.MatchString(l.Message) {
+			if Debug {
+				fmt.Fprintf(os.Stderr, "Dropping Log: %v: %v\n", l.Source, l.Message)
+			}
 			continue
 		} else if regexClass.MatchString(l.Source) ||
 			regexStage.MatchString(l.Source) ||
 			RegexDefineType.MatchString(l.Source) {
+			if Debug {
+				fmt.Fprintf(os.Stderr, "Dropping Log: %v: %v\n", l.Source, l.Message)
+			}
+			continue
+		} else if (!regexResource.MatchString(l.Source)) && regexRefreshMsg.MatchString(l.Message) {
+			if Debug {
+				fmt.Fprintf(os.Stderr, "Dropping Log: %v: %v\n", l.Source, l.Message)
+			}
 			continue
 		} else if regexResource.MatchString(l.Source) {
-			regexResourcePropertyTail := regexp.MustCompile(`/[^/]*$`)
+			origSource = l.Source
 			newSource = regexResourcePropertyTail.ReplaceAllString(l.Source, "")
+			newSource = regexResourceTail.FindString(newSource)
+			if newSource == "" {
+				fmt.Fprintf(os.Stderr, "newSource is empty!\n")
+				fmt.Fprintf(os.Stderr, "Log: '%v' -> '%v': %v\n", origSource, newSource, l.Message)
+				os.Exit(1)
+			}
 
-			regexResource := regexp.MustCompile(`[^\/]+\[[^\[\]]+\]$`)
-			newSource = regexResource.FindString(newSource)
-
-			reFileContent := regexp.MustCompile(`File\[.*content$`)
-			reDiff := regexp.MustCompile(`(?s)^.---`)
 			if reFileContent.MatchString(l.Source) && reDiff.MatchString(l.Message) {
 				l.Message = normalizeDiff(l.Message)
 			}
 			l.Source = newSource
 			if Debug {
-				fmt.Fprintf(os.Stderr, "log: \n%v\n", l)
+				fmt.Fprintf(os.Stderr, "Adding Log: '%v' -> '%v': %v\n", origSource, newSource, l.Message)
 			}
 			newLogs = append(newLogs, l)
 		} else {
-			fmt.Printf("Unaccounted for log: %v\n", l.Message)
-			fmt.Printf("Source: %v\n", l.Source)
+			fmt.Fprintf(os.Stderr, "Unaccounted for Log: %v: %v\n", l.Source, l.Message)
 			newLogs = append(newLogs, l)
 		}
 	}

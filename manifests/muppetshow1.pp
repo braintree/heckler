@@ -32,4 +32,8 @@ class muppetshow {
     ensure => present,
     content => '',
   }
+  file { "${facts['cwd']}/nodes/cast":
+    ensure => present,
+    content => "Cookie Monster\n",
+  }
 }
