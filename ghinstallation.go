@@ -30,11 +30,17 @@ func main() {
 	}
 
 	orgs, _, err := client.Organizations.List(context.Background(), "lollipopman", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 	fmt.Printf("orgs %v\n", orgs)
 
 	// list public repositories for org "github"
 	opt := &github.RepositoryListByOrgOptions{Type: "public"}
 	repos, _, err := client.Repositories.ListByOrg(context.Background(), "braintree", opt)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	fmt.Printf("repos %v\n", repos)
 }
