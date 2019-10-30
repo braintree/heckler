@@ -17,7 +17,7 @@ func main() {
 	tr := http.DefaultTransport
 
 	// Wrap the shared transport for use with the app ID 1 authenticating with installation ID 99.
-	itr, err := ghinstallation.NewKeyFromFile(tr, 7, 99, "heckler.2019-10-30.private-key.pem")
+	itr, err := ghinstallation.NewKeyFromFile(tr, 7, 11, "heckler.2019-10-30.private-key.pem")
 	if err != nil {
 		log.Fatal(err)
 	}
