@@ -1,6 +1,7 @@
 #!/bin/bash
-set -e errexit
-set -e pipefail
+
+set -o errexit
+set -o pipefail
 set -o nounset
 
 AUTHORS=(
@@ -11,12 +12,14 @@ AUTHORS=(
   [5]='kermit <kermit@muppets.com>'
 )
 
-if [[ -e repo ]]; then
-  sudo rm -fr repo
-fi
-mkdir repo
+REPO='muppetshow'
 
-pushd repo
+if [[ -e $REPO ]]; then
+  sudo rm -fr "${REPO}"
+fi
+mkdir "${REPO}"
+
+pushd "${REPO}"
 
 git init
 git config advice.detachedHead false
@@ -41,6 +44,14 @@ for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
   cp ../manifests/nodes"${commit}".pp nodes.pp
   git add nodes.pp
   git commit --author "${AUTHORS[$commit]}" -m commit"${commit}"
+  if ((commit == 1)); then
+    git tag v1
+  fi
 done
+git tag v2
+
+git remote add origin git@github.braintreeps.com:lollipopman/muppetshow.git
+git push -fu origin master
+git push -f --tags
 
 popd
