@@ -1,8 +1,8 @@
 #!/bin/bash
 
-set -e nounset
-set -e errexit
-set -e pipefail
+set -o nounset
+set -o errexit
+set -o pipefail
 shopt -s lastpipe
 
 if [[ $EUID -ne 0 ]]; then
@@ -11,11 +11,15 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 export PATH=/opt/puppetlabs/bin:$PATH
+REPO='muppetshow'
 
-pushd "${PWD}"/repo >/dev/null
-git checkout master
-git log --pretty=tformat:"%h" | tac | mapfile -t COMMITS
+pushd "${PWD}"/"${REPO}" >/dev/null
+git log --pretty=tformat:"%h" --reverse ^"${1}" "${2}" | mapfile -t COMMITS
+v1_hash="$(git rev-parse --short "${1}")"
 popd >/dev/null
+
+# add first commit to list
+COMMITS=("${v1_hash}" "${COMMITS[@]}")
 
 MUPPETS=(
   waldorf
@@ -30,21 +34,21 @@ fi
 mkdir -p reports
 
 FACTER_nodename='fozzie' FACTER_cwd="${PWD}" \
-  puppet apply --confdir "${PWD}"/repo --vardir "${PWD}/var" manifests/reset.pp
+  puppet apply --confdir "${PWD}"/"${REPO}" --vardir "${PWD}/var" manifests/reset.pp
 
 for muppet in "${MUPPETS[@]}"; do
   mkdir -p reports/"${muppet}"
   for commit in "${COMMITS[@]}"; do
-    pushd "${PWD}"/repo >/dev/null
+    pushd "${PWD}"/"${REPO}" >/dev/null
     git checkout "${commit}" >/dev/null
     popd >/dev/null
     if [[ "$commit" == "${COMMITS[0]}" ]]; then
       FACTER_nodename="${muppet}" FACTER_cwd="${PWD}" \
-        puppet apply --confdir "${PWD}"/repo --vardir "${PWD}/var" repo/nodes.pp
+        puppet apply --confdir "${PWD}"/"${REPO}" --vardir "${PWD}/var" "${REPO}"/nodes.pp
     fi
     report=reports/"${muppet}"/"${commit}"
     FACTER_nodename="${muppet}" FACTER_cwd="${PWD}" \
-      puppet apply --noop --confdir "${PWD}"/repo --vardir "${PWD}/var" repo/nodes.pp >"${report}".txt 2>&1
+      puppet apply --noop --confdir "${PWD}"/"${REPO}" --vardir "${PWD}/var" "${REPO}"/nodes.pp >"${report}".txt 2>&1
     cp var/state/last_run_report.yaml "${report}".yaml
     chmod +r "${report}".yaml
     sed -i 's/^host: .*/host: '"${muppet}"'/' "${report}".yaml
