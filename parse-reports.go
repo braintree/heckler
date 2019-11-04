@@ -425,6 +425,9 @@ func main() {
 			defer file.Close()
 
 			data, err = ioutil.ReadAll(file)
+			if err != nil {
+				log.Fatalf("cannot read report: %v", err)
+			}
 
 			node.commitReports[commit] = new(PuppetReport)
 			err = yaml.Unmarshal([]byte(data), node.commitReports[commit])
