@@ -43,8 +43,10 @@ type Log struct {
 	Level   string `yaml:"level"`
 	Message string `yaml:"message"`
 	Source  string `yaml:"source"`
-	// removing for now, as it breaks crunch
-	// if resources are spread across source code
+	//
+	// Removing these for now, as it breaks crunch for resources that are defined
+	// in diffent places in the source code.
+	//
 	//File    string `yaml:"file"`
 	//Line    int    `yaml:"line"`
 }
@@ -70,15 +72,15 @@ type ResourceStatus struct {
 	// if resources are spread across source code
 	// File             string   `yaml:"file"`
 	// Line             int      `yaml:"line"`
-	OutOfSync      bool     `yaml:"out_of_sync"`
-	OutOfSyncCount int      `yaml:"out_of_sync_count"`
-	ProviderUsed   string   `yaml:"provider_used"`
-	Resource       string   `yaml:"resource"`
-	ResourceType   string   `yaml:"resource_type"`
-	Skipped        bool     `yaml:"skipped"`
+	OutOfSync      bool   `yaml:"out_of_sync"`
+	OutOfSyncCount int    `yaml:"out_of_sync_count"`
+	ProviderUsed   string `yaml:"provider_used"`
+	Resource       string `yaml:"resource"`
+	ResourceType   string `yaml:"resource_type"`
+	Skipped        bool   `yaml:"skipped"`
 	// Tags           []string `yaml:"tags"`
-	Title          string   `yaml:"title"`
-	Events         []Event  `yaml:"events"`
+	Title  string  `yaml:"title"`
+	Events []Event `yaml:"events"`
 }
 
 type Node struct {
