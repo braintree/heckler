@@ -1,6 +1,6 @@
 # Commits
 
-## commit 1 author kermit, v1.0
+## commit 1 author kermit, v1
 
 - waldorf: create poignant file with 'acerbic'
 - statler: create wit file file with 'terrible'
@@ -62,4 +62,4 @@
 - statler: install sl
 - fozzie: install bsdgames
 
-## commit 5 author kermit, v2.0
+## commit 5 author kermit, v2
