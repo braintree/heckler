@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/pprof"
+	"sort"
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
@@ -44,8 +45,8 @@ type Log struct {
 	Message string `yaml:"message"`
 	Source  string `yaml:"source"`
 	//
-	// Removing these for now, as it breaks crunch for resources that are defined
-	// in diffent places in the source code.
+	// Removing these for now, as it breaks grouping for resources that are
+	// defined in diffent places in the source code.
 	//
 	//File    string `yaml:"file"`
 	//Line    int    `yaml:"line"`
@@ -68,8 +69,10 @@ type ResourceStatus struct {
 	CorrectiveChange bool     `yaml:"corrective_change"`
 	Failed           bool     `yaml:"failed"`
 	FailedToRestart  bool     `yaml:"failed_to_restart"`
-	// removing for now, as it breaks crunch
-	// if resources are spread across source code
+	//
+	// Removing these for now, as it breaks grouping for resources that are
+	// defined in diffent places in the source code.
+	//
 	// File             string   `yaml:"file"`
 	// Line             int      `yaml:"line"`
 	OutOfSync      bool   `yaml:"out_of_sync"`
@@ -94,6 +97,25 @@ type deltaResource struct {
 	DefineType string
 	Events     []Event
 	Logs       []Log
+}
+
+type groupResource struct {
+	Title      string
+	Type       string
+	DefineType string
+	Nodes      []string
+	Events     []*groupEvent
+	Logs       []*groupLog
+}
+
+type groupEvent struct {
+	PreviousValue string
+	DesiredValue  string
+}
+
+type groupLog struct {
+	Level   string
+	Message string
 }
 
 func printSlice(s []string) {
@@ -225,14 +247,18 @@ func deltaNoop(priorCommitNoop *PuppetReport, commitNoop *PuppetReport) map[stri
 	return dr
 }
 
-func crunch(commit string, targetDeltaResource *deltaResource, nodes map[string]*Node) {
+func groupResources(commit string, targetDeltaResource *deltaResource, nodes map[string]*Node, groupedCommits map[string][]*groupResource) {
 	var nodeList []string
 	var desiredValue string
+	// XXX Remove this hack, only needed for old versions of puppet 4.5?
 	var regexRubySym = regexp.MustCompile(`^:`)
+	var gr *groupResource
+	var ge *groupEvent
+	var gl *groupLog
 
 	for nodeName, node := range nodes {
 		if nodeDeltaResource, ok := node.commitDeltaResources[commit][targetDeltaResource.Title]; ok {
-			// fmt.Printf("crunching %v\n", targetDeltaResource.Title)
+			// fmt.Printf("grouping %v\n", targetDeltaResource.Title)
 			if cmp.Equal(targetDeltaResource, nodeDeltaResource) {
 				nodeList = append(nodeList, nodeName)
 				delete(node.commitDeltaResources[commit], targetDeltaResource.Title)
@@ -241,13 +267,18 @@ func crunch(commit string, targetDeltaResource *deltaResource, nodes map[string]
 			}
 		}
 	}
-	fmt.Printf("Resource: %v\n", targetDeltaResource.Title)
-	if targetDeltaResource.DefineType != "" {
-		fmt.Printf("Define: %v\n", targetDeltaResource.DefineType)
-	}
-	fmt.Printf("Nodes: %v\n", nodeList)
+
+	gr = new(groupResource)
+	gr.Title = targetDeltaResource.Title
+	gr.Type = targetDeltaResource.Type
+	gr.DefineType = targetDeltaResource.DefineType
+	sort.Strings(nodeList)
+	gr.Nodes = nodeList
+
 	for _, e := range targetDeltaResource.Events {
-		fmt.Printf("Current State: %v\n", regexRubySym.ReplaceAllString(e.PreviousValue, ""))
+		ge = new(groupEvent)
+
+		ge.PreviousValue = regexRubySym.ReplaceAllString(e.PreviousValue, "")
 		// XXX move base64 decode somewhere else
 		// also yell at puppet for this inconsistency!!!
 		if targetDeltaResource.Type == "File" && e.Property == "content" {
@@ -258,13 +289,33 @@ func crunch(commit string, targetDeltaResource *deltaResource, nodes map[string]
 			} else {
 				desiredValue = string(data[:])
 			}
-			fmt.Printf("Desired State: %v\n", desiredValue)
 		} else {
-			fmt.Printf("Desired State: %v\n", regexRubySym.ReplaceAllString(e.DesiredValue, ""))
+			desiredValue = regexRubySym.ReplaceAllString(e.DesiredValue, "")
 		}
+		ge.DesiredValue = desiredValue
+		gr.Events = append(gr.Events, ge)
 	}
 	for _, l := range targetDeltaResource.Logs {
-		fmt.Printf("Log:\n%v\n", strings.TrimRight(l.Message, "\n"))
+		gl = new(groupLog)
+		gl.Level = l.Level
+		gl.Message = strings.TrimRight(l.Message, "\n")
+		gr.Logs = append(gr.Logs, gl)
+	}
+	groupedCommits[commit] = append(groupedCommits[commit], gr)
+}
+
+func printGroupResource(gr *groupResource) {
+	fmt.Printf("Resource: %v\n", gr.Title)
+	if gr.DefineType != "" {
+		fmt.Printf("Define: %v\n", gr.DefineType)
+	}
+	fmt.Printf("Nodes: %v\n", gr.Nodes)
+	for _, ge := range gr.Events {
+		fmt.Printf("Current State: %v\n", ge.PreviousValue)
+		fmt.Printf("Desired State: %v\n", ge.DesiredValue)
+	}
+	for _, gl := range gr.Logs {
+		fmt.Printf("Log:\n%v\n", gl.Message)
 	}
 	fmt.Printf("\n")
 }
@@ -384,10 +435,13 @@ func main() {
 	var puppetDir string
 	var beginTree string
 	var endTree string
+	var groupedCommits map[string][]*groupResource
 	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
 	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
+	var c string
+	var gc []*groupResource
 
-	flag.Var(&hosts, "node", "node hostnames to crunch")
+	flag.Var(&hosts, "node", "node hostnames to group")
 	flag.StringVar(&reportDir, "report", "", "report dir")
 	flag.StringVar(&puppetDir, "puppet", "", "puppet repo")
 	flag.StringVar(&beginTree, "begin", "", "begin treeish")
@@ -408,12 +462,14 @@ func main() {
 	}
 
 	nodes = make(map[string]*Node)
+	groupedCommits = make(map[string][]*groupResource)
 
 	for _, node := range hosts {
 		nodes[node] = new(Node)
 	}
 
 	commits := commitList(puppetDir, beginTree, endTree)
+
 	for hostname, node := range nodes {
 		node.commitReports = make(map[string]*PuppetReport)
 		node.commitDeltaResources = make(map[string]map[string]*deltaResource)
@@ -442,13 +498,24 @@ func main() {
 	}
 
 	for i := 1; i < len(commits); i++ {
-		fmt.Printf("\n# Commit %v: %v\n\n", i, commits[i])
 		for _, node := range nodes {
 			for _, r := range node.commitDeltaResources[commits[i]] {
-				crunch(commits[i], r, nodes)
+				groupResources(commits[i], r, nodes, groupedCommits)
 			}
 		}
 	}
+
+	for i := 1; i < len(commits); i++ {
+		c = commits[i]
+		fmt.Printf("\n# Commit %v: %v\n\n", i, c)
+		gc = groupedCommits[c]
+		sort.Slice(gc, func(i, j int) bool { return gc[i].Title < gc[j].Title })
+		for _, r := range gc {
+			printGroupResource(r)
+		}
+	}
+
+	// cleanup
 	if *memprofile != "" {
 		f, err := os.Create(*memprofile)
 		if err != nil {
