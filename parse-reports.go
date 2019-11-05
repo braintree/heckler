@@ -598,7 +598,7 @@ func main() {
 	}
 
 	// GitHub
-	githubCreate("v8", commits, groupedCommits)
+	githubCreate("v10", commits, groupedCommits)
 
 	// cleanup
 	if *memprofile != "" {

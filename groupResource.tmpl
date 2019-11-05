@@ -2,21 +2,21 @@
 {{ range $i, $resource := . }}
 {{ add $i 1 }}.  **{{ $resource.Title }}**
     {{- if $resource.Diff }}
-    - Diff:
+    - *Diff:*
       ```diff
 {{ indent 6 $resource.Diff }}
       ```
     {{- end }}
-    - Nodes: {{ $resource.Nodes | join ", "}}
+    - *Hosts:* {{ $resource.Nodes | join ", "}}
     {{- if $resource.DefineType }}
-    - Define Type: {{ $resource.DefineType }}
+    - *Define Type:* **{{ $resource.DefineType }}**
     {{- end }}
     {{- range $resource.Events }}
-    - Current State: {{ .PreviousValue }}
-    - Desired State: {{ .DesiredValue }}
+    - *Current State:* {{ .PreviousValue }}
+    - *Desired State:* {{ .DesiredValue }}
     {{- end }}
     {{- if $resource.Logs }}
-    - Logs:
+    - *Logs:*
     {{- range $resource.Logs }}
         - {{ .Message }}
     {{- end }}
