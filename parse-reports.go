@@ -3,11 +3,13 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
@@ -15,11 +17,17 @@ import (
 	"runtime/pprof"
 	"sort"
 	"strings"
+	"text/template"
 
+	"github.com/Masterminds/sprig"
+	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-github/github"
 
 	"gopkg.in/yaml.v3"
 )
+
+const GitHubEnterpriseURL = "https://github.braintreeps.com/api/v3"
 
 var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 var Debug = false
@@ -103,6 +111,7 @@ type groupResource struct {
 	Title      string
 	Type       string
 	DefineType string
+	Diff       string
 	Nodes      []string
 	Events     []*groupEvent
 	Logs       []*groupLog
@@ -295,11 +304,17 @@ func groupResources(commit string, targetDeltaResource *deltaResource, nodes map
 		ge.DesiredValue = desiredValue
 		gr.Events = append(gr.Events, ge)
 	}
+	regexDiff := regexp.MustCompile(`^@@ `)
 	for _, l := range targetDeltaResource.Logs {
-		gl = new(groupLog)
-		gl.Level = l.Level
-		gl.Message = strings.TrimRight(l.Message, "\n")
-		gr.Logs = append(gr.Logs, gl)
+		if regexDiff.MatchString(l.Message) {
+			gr.Diff = strings.TrimSuffix(l.Message, "\n")
+		} else {
+
+			gl = new(groupLog)
+			gl.Level = l.Level
+			gl.Message = strings.TrimRight(l.Message, "\n")
+			gr.Logs = append(gr.Logs, gl)
+		}
 	}
 	groupedCommits[commit] = append(groupedCommits[commit], gr)
 }
@@ -425,6 +440,65 @@ func (i *hostFlags) Set(value string) error {
 	return nil
 }
 
+func githubCreate(endTree string, commits []string, groupedCommits map[string][]*groupResource) {
+	// Shared transport to reuse TCP connections.
+	tr := http.DefaultTransport
+
+	// Wrap the shared transport for use with the app ID 7 authenticating with
+	// installation ID 11.
+	itr, err := ghinstallation.NewKeyFromFile(tr, 7, 11, "heckler.2019-10-30.private-key.pem")
+	if err != nil {
+		log.Fatal(err)
+	}
+	itr.BaseURL = GitHubEnterpriseURL
+
+	// Use installation transport with github.com/google/go-github
+	client, err := github.NewEnterpriseClient(GitHubEnterpriseURL, GitHubEnterpriseURL, &http.Client{Transport: itr})
+	if err != nil {
+		log.Fatal(err)
+	}
+	ctx := context.Background()
+	m := &github.Milestone{
+		Title: github.String(endTree),
+	}
+	nm, _, err := client.Issues.CreateMilestone(ctx, "lollipopman", "muppetshow", m)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Successfully created new milestone: %v\n", *nm.Title)
+
+	var c string
+	var gc []*groupResource
+	for i := 1; i < len(commits); i++ {
+		c = commits[i]
+		gc = groupedCommits[c]
+		i := &github.IssueRequest{
+			Title:     github.String(c),
+			Assignee:  github.String("lollipopman"),
+			Body:      github.String(groupResourcesToMarkdown(gc)),
+			Milestone: nm.Number,
+		}
+		ni, _, err := client.Issues.Create(ctx, "lollipopman", "muppetshow", i)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("Successfully created new issue: %v\n", *ni.Title)
+	}
+}
+
+func groupResourcesToMarkdown(groupedResources []*groupResource) string {
+	var body strings.Builder
+	var err error
+
+	tpl := template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob("*.tmpl"))
+
+	err = tpl.ExecuteTemplate(&body, "groupResource.tmpl", groupedResources)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return body.String()
+}
+
 func main() {
 	var err error
 	var file *os.File
@@ -505,15 +579,26 @@ func main() {
 		}
 	}
 
+	// print
+	// for i := 1; i < len(commits); i++ {
+	// 	c = commits[i]
+	// 	fmt.Printf("\n# Commit %v: %v\n\n", i, c)
+	// 	gc = groupedCommits[c]
+	// 	sort.Slice(gc, func(i, j int) bool { return gc[i].Title < gc[j].Title })
+	// 	for _, r := range gc {
+	// 		printGroupResource(r)
+	// 	}
+	// }
+
 	for i := 1; i < len(commits); i++ {
 		c = commits[i]
 		fmt.Printf("\n# Commit %v: %v\n\n", i, c)
 		gc = groupedCommits[c]
-		sort.Slice(gc, func(i, j int) bool { return gc[i].Title < gc[j].Title })
-		for _, r := range gc {
-			printGroupResource(r)
-		}
+		fmt.Printf("%s", groupResourcesToMarkdown(gc))
 	}
+
+	// GitHub
+	githubCreate("v8", commits, groupedCommits)
 
 	// cleanup
 	if *memprofile != "" {
