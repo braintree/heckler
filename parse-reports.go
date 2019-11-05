@@ -24,6 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-github/github"
 
+	git "gopkg.in/libgit2/git2go.v28"
 	"gopkg.in/yaml.v3"
 )
 
@@ -117,6 +118,14 @@ type groupResource struct {
 	Logs       []*groupLog
 }
 
+type commit struct {
+	SHA     string
+	Author  string
+	Email   string
+	Summary string
+	Message string
+}
+
 type groupEvent struct {
 	PreviousValue string
 	DesiredValue  string
@@ -145,13 +154,16 @@ func printSlice(s []string) {
 //    outputs
 
 // return list of commits as a sorted array
-func commitList(repoDir string, beginTree string, endTree string) []string {
-	var commits []string
+func commitList(repoDir string, beginTree string, endTree string) []*commit {
+	var commitSHAs []string
+	var commits []*commit
 	var s string
+	var c *commit
+	var sig *git.Signature
 
 	//git log -n 1 --pretty=tformat:%h d1501a4
 	// XXX dedup
-	cmd := exec.Command("git", "log", "-n", "1", "--pretty=tformat:%h", beginTree)
+	cmd := exec.Command("git", "log", "-n", "1", "--pretty=tformat:%H", beginTree)
 	cmd.Dir = repoDir
 	out, err := cmd.Output()
 	if err != nil {
@@ -161,14 +173,14 @@ func commitList(repoDir string, beginTree string, endTree string) []string {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		s = scanner.Text()
-		commits = append(commits, s)
+		commitSHAs = append(commitSHAs, s)
 	}
 
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
 
-	cmd = exec.Command("git", "log", "--no-merges", "--pretty=tformat:%h", "--reverse", "^"+beginTree, endTree)
+	cmd = exec.Command("git", "log", "--no-merges", "--pretty=tformat:%H", "--reverse", "^"+beginTree, endTree)
 	cmd.Dir = repoDir
 	out, err = cmd.Output()
 	if err != nil {
@@ -178,11 +190,38 @@ func commitList(repoDir string, beginTree string, endTree string) []string {
 	scanner = bufio.NewScanner(r)
 	for scanner.Scan() {
 		s = scanner.Text()
-		commits = append(commits, s)
+		commitSHAs = append(commitSHAs, s)
 	}
 
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
+	}
+
+	repo, err := git.OpenRepository("/home/hathaway/src/heckler/muppetshow")
+	if err != nil {
+		panic(err)
+	}
+
+	for _, sha := range commitSHAs {
+		c = new(commit)
+		c.SHA = sha
+
+		oid, err := git.NewOid(c.SHA)
+		if err != nil {
+			panic(err)
+		}
+
+		commit, err := repo.LookupCommit(oid)
+		if err != nil {
+			panic(err)
+		}
+
+		sig = commit.Author()
+		c.Author = sig.Name
+		c.Email = sig.Email
+		c.Summary = commit.Summary()
+		c.Message = strings.TrimSuffix(commit.Message(), "\n")
+		commits = append(commits, c)
 	}
 
 	return commits
@@ -256,7 +295,7 @@ func deltaNoop(priorCommitNoop *PuppetReport, commitNoop *PuppetReport) map[stri
 	return dr
 }
 
-func groupResources(commit string, targetDeltaResource *deltaResource, nodes map[string]*Node, groupedCommits map[string][]*groupResource) {
+func groupResources(sha string, targetDeltaResource *deltaResource, nodes map[string]*Node, groupedCommits map[string][]*groupResource) {
 	var nodeList []string
 	var desiredValue string
 	// XXX Remove this hack, only needed for old versions of puppet 4.5?
@@ -266,11 +305,11 @@ func groupResources(commit string, targetDeltaResource *deltaResource, nodes map
 	var gl *groupLog
 
 	for nodeName, node := range nodes {
-		if nodeDeltaResource, ok := node.commitDeltaResources[commit][targetDeltaResource.Title]; ok {
+		if nodeDeltaResource, ok := node.commitDeltaResources[sha][targetDeltaResource.Title]; ok {
 			// fmt.Printf("grouping %v\n", targetDeltaResource.Title)
 			if cmp.Equal(targetDeltaResource, nodeDeltaResource) {
 				nodeList = append(nodeList, nodeName)
-				delete(node.commitDeltaResources[commit], targetDeltaResource.Title)
+				delete(node.commitDeltaResources[sha], targetDeltaResource.Title)
 			} else {
 				// fmt.Printf("Diff:\n %v", cmp.Diff(targetDeltaResource, nodeDeltaResource))
 			}
@@ -316,7 +355,7 @@ func groupResources(commit string, targetDeltaResource *deltaResource, nodes map
 			gr.Logs = append(gr.Logs, gl)
 		}
 	}
-	groupedCommits[commit] = append(groupedCommits[commit], gr)
+	groupedCommits[sha] = append(groupedCommits[sha], gr)
 }
 
 func printGroupResource(gr *groupResource) {
@@ -440,7 +479,7 @@ func (i *hostFlags) Set(value string) error {
 	return nil
 }
 
-func githubCreate(endTree string, commits []string, groupedCommits map[string][]*groupResource) {
+func githubCreate(endTree string, commits []*commit, groupedCommits map[string][]*groupResource) {
 	// Shared transport to reuse TCP connections.
 	tr := http.DefaultTransport
 
@@ -467,15 +506,15 @@ func githubCreate(endTree string, commits []string, groupedCommits map[string][]
 	}
 	fmt.Printf("Successfully created new milestone: %v\n", *nm.Title)
 
-	var c string
+	var c *commit
 	var gc []*groupResource
 	for i := 1; i < len(commits); i++ {
 		c = commits[i]
-		gc = groupedCommits[c]
+		gc = groupedCommits[c.SHA]
 		i := &github.IssueRequest{
-			Title:     github.String(c),
-			Assignee:  github.String("lollipopman"),
-			Body:      github.String(groupResourcesToMarkdown(gc)),
+			Title:     github.String(fmt.Sprintf("Puppet noop output for commit: '%v'", c.Summary)),
+			Assignee:  github.String(c.Author),
+			Body:      github.String(commitToMarkdown(c) + groupResourcesToMarkdown(gc)),
 			Milestone: nm.Number,
 		}
 		ni, _, err := client.Issues.Create(ctx, "lollipopman", "muppetshow", i)
@@ -499,6 +538,19 @@ func groupResourcesToMarkdown(groupedResources []*groupResource) string {
 	return body.String()
 }
 
+func commitToMarkdown(c *commit) string {
+	var body strings.Builder
+	var err error
+
+	tpl := template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob("*.tmpl"))
+
+	err = tpl.ExecuteTemplate(&body, "commit.tmpl", c)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return body.String()
+}
+
 func main() {
 	var err error
 	var file *os.File
@@ -512,7 +564,7 @@ func main() {
 	var groupedCommits map[string][]*groupResource
 	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
 	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
-	var c string
+	var c *commit
 	var gc []*groupResource
 
 	flag.Var(&hosts, "node", "node hostnames to group")
@@ -548,7 +600,7 @@ func main() {
 		node.commitReports = make(map[string]*PuppetReport)
 		node.commitDeltaResources = make(map[string]map[string]*deltaResource)
 		for i, commit := range commits {
-			file, err = os.Open(reportDir + "/" + hostname + "/" + commit + ".yaml")
+			file, err = os.Open(reportDir + "/" + hostname + "/" + commit.SHA + ".yaml")
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -559,22 +611,22 @@ func main() {
 				log.Fatalf("cannot read report: %v", err)
 			}
 
-			node.commitReports[commit] = new(PuppetReport)
-			err = yaml.Unmarshal([]byte(data), node.commitReports[commit])
+			node.commitReports[commit.SHA] = new(PuppetReport)
+			err = yaml.Unmarshal([]byte(data), node.commitReports[commit.SHA])
 			if err != nil {
 				log.Fatalf("cannot unmarshal data: %v", err)
 			}
-			node.commitReports[commit].Logs = normalizeLogs(node.commitReports[commit].Logs)
+			node.commitReports[commit.SHA].Logs = normalizeLogs(node.commitReports[commit.SHA].Logs)
 			if i > 0 {
-				node.commitDeltaResources[commit] = deltaNoop(node.commitReports[commits[i-1]], node.commitReports[commit])
+				node.commitDeltaResources[commit.SHA] = deltaNoop(node.commitReports[(commits[i-1]).SHA], node.commitReports[commit.SHA])
 			}
 		}
 	}
 
 	for i := 1; i < len(commits); i++ {
 		for _, node := range nodes {
-			for _, r := range node.commitDeltaResources[commits[i]] {
-				groupResources(commits[i], r, nodes, groupedCommits)
+			for _, r := range node.commitDeltaResources[(commits[i]).SHA] {
+				groupResources(commits[i].SHA, r, nodes, groupedCommits)
 			}
 		}
 	}
@@ -592,13 +644,14 @@ func main() {
 
 	for i := 1; i < len(commits); i++ {
 		c = commits[i]
-		fmt.Printf("\n# Commit %v: %v\n\n", i, c)
-		gc = groupedCommits[c]
+		fmt.Printf("## Puppet noop output for commit: '%v'\n\n", c.Summary)
+		fmt.Printf("%s", commitToMarkdown(c))
+		gc = groupedCommits[c.SHA]
 		fmt.Printf("%s", groupResourcesToMarkdown(gc))
 	}
 
 	// GitHub
-	githubCreate("v10", commits, groupedCommits)
+	githubCreate("v16", commits, groupedCommits)
 
 	// cleanup
 	if *memprofile != "" {

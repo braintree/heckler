@@ -14,8 +14,8 @@ export PATH=/opt/puppetlabs/bin:$PATH
 REPO='muppetshow'
 
 pushd "${PWD}"/"${REPO}" >/dev/null
-git log --pretty=tformat:"%h" --reverse ^"${1}" "${2}" | mapfile -t COMMITS
-v1_hash="$(git rev-parse --short "${1}")"
+git log --pretty=tformat:"%H" --reverse ^"${1}" "${2}" | mapfile -t COMMITS
+v1_hash="$(git rev-parse "${1}")"
 popd >/dev/null
 
 # add first commit to list

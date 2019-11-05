@@ -4,12 +4,46 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
+# AUTHORS=(
+#   [1]='lollipopman <hathaway@paypal.com>'
+#   [2]='ssgelm <stephen@braintreepayments.com>'
+#   [3]='zachz <zachary.zolton@getbraintree.com>'
+#   [4]='zachz <zachary.zolton@getbraintree.com>'
+#   [5]='lollipopman <hathaway@paypal.com>'
+# )
+
 AUTHORS=(
-  [1]='kermit <kermit@muppets.com>'
-  [2]='fozzie <fozzie@muppets.com>'
-  [3]='statler <statler@muppets.com>'
-  [4]='statler <statler@muppets.com>'
-  [5]='kermit <kermit@muppets.com>'
+  [1]='lollipopman <hathaway@paypal.com>'
+  [2]='lollipopman <hathaway@paypal.com>'
+  [3]='lollipopman <hathaway@paypal.com>'
+  [4]='lollipopman <hathaway@paypal.com>'
+  [5]='lollipopman <hathaway@paypal.com>'
+)
+
+MSGS=(
+  [1]='commit1'
+  [2]='stop nginx on fozzie & add episode one
+
+stop nginx on fozzie
+add episode one
+modify wit on statler
+modify poignant on waldor
+modify slapstick on fozzie'
+  [3]='finish the muppet show lyrics
+
+finish composing the muppet show lyrics
+move index out of muppetshow class into node
+class'
+  [4]='add some fun diversions
+
+add bsdgames on fozzie
+add sl to statler & waldorf
+'
+  [5]='add kermit user, modify sail input
+
+add kermit user and muppetshow group
+modify the input to the sail game
+'
 )
 
 REPO='muppetshow'
@@ -43,7 +77,7 @@ for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
   git add "${MUPPET_SHOW_MOD}"/manifests/init.pp
   cp ../manifests/nodes"${commit}".pp nodes.pp
   git add nodes.pp
-  git commit --author "${AUTHORS[$commit]}" -m commit"${commit}"
+  git commit --author "${AUTHORS[$commit]}" -F - <<<"${MSGS[commit]}"
   if ((commit == 1)); then
     git tag v1
   fi
