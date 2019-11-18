@@ -27,6 +27,13 @@ MUPPETS=(
   fozzie
 )
 
+PP_ARGS=(
+  --confdir
+  "${PWD}"/"${REPO}"
+  --vardir
+  "${PWD}/var"
+)
+
 if [[ -e reports ]]; then
   rm -rf reports
 fi
@@ -34,7 +41,7 @@ fi
 mkdir -p reports
 
 FACTER_nodename='fozzie' FACTER_cwd="${PWD}" \
-  puppet apply --confdir "${PWD}"/"${REPO}" --vardir "${PWD}/var" manifests/reset.pp
+  puppet apply "${PP_ARGS[@]}" manifests/reset.pp
 
 for muppet in "${MUPPETS[@]}"; do
   mkdir -p reports/"${muppet}"
@@ -44,11 +51,11 @@ for muppet in "${MUPPETS[@]}"; do
     popd >/dev/null
     if [[ "$commit" == "${COMMITS[0]}" ]]; then
       FACTER_nodename="${muppet}" FACTER_cwd="${PWD}" \
-        puppet apply --confdir "${PWD}"/"${REPO}" --vardir "${PWD}/var" "${REPO}"/nodes.pp
+        puppet apply --config_version "${commit}" "${PP_ARGS[@]}" "${REPO}"/nodes.pp
     fi
     report=reports/"${muppet}"/"${commit}"
     FACTER_nodename="${muppet}" FACTER_cwd="${PWD}" \
-      puppet apply --noop --confdir "${PWD}"/"${REPO}" --vardir "${PWD}/var" "${REPO}"/nodes.pp >"${report}".txt 2>&1
+      puppet apply --noop --config_version "${commit}" "${PP_ARGS[@]}" "${REPO}"/nodes.pp >"${report}".txt 2>&1
     cp var/state/last_run_report.yaml "${report}".yaml
     chmod +r "${report}".yaml
     sed -i 's/^host: .*/host: '"${muppet}"'/' "${report}".yaml
