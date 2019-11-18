@@ -4,14 +4,6 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-# AUTHORS=(
-#   [1]='lollipopman <hathaway@paypal.com>'
-#   [2]='ssgelm <stephen@braintreepayments.com>'
-#   [3]='zachz <zachary.zolton@getbraintree.com>'
-#   [4]='zachz <zachary.zolton@getbraintree.com>'
-#   [5]='lollipopman <hathaway@paypal.com>'
-# )
-
 AUTHORS=(
   [1]='lollipopman <hathaway@paypal.com>'
   [2]='lollipopman <hathaway@paypal.com>'
