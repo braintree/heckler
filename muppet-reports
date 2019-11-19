@@ -32,6 +32,8 @@ PP_ARGS=(
   "${PWD}"/"${REPO}"
   --vardir
   "${PWD}/var"
+  --config_version
+  "${PWD}/git-head-sha"
 )
 
 if [[ -e reports ]]; then
@@ -51,12 +53,12 @@ for muppet in "${MUPPETS[@]}"; do
     popd >/dev/null
     if [[ "$commit" == "${COMMITS[0]}" ]]; then
       FACTER_nodename="${muppet}" FACTER_cwd="${PWD}" \
-        puppet apply --config_version "${commit}" "${PP_ARGS[@]}" "${REPO}"/nodes.pp
+        puppet apply "${PP_ARGS[@]}" "${REPO}"/nodes.pp
     fi
     report=reports/"${muppet}"/"${commit}"
     FACTER_nodename="${muppet}" FACTER_cwd="${PWD}" \
-      puppet apply --noop --config_version "${commit}" "${PP_ARGS[@]}" "${REPO}"/nodes.pp >"${report}".txt 2>&1
-    cp var/state/last_run_report.yaml "${report}".yaml
+      puppet apply --noop "${PP_ARGS[@]}" "${REPO}"/nodes.pp >"${report}".txt 2>&1
+    cp var/reports/*/heckler_"${commit}".yaml "${report}".yaml
     chmod +r "${report}".yaml
     sed -i 's/^host: .*/host: '"${muppet}"'/' "${report}".yaml
   done

@@ -35,7 +35,7 @@ var Debug = false
 
 type PuppetReport struct {
 	Host                 string                    `yaml:"host"`
-	ConfigurationVersion int                       `yaml:"configuration_version"`
+	ConfigurationVersion string                    `yaml:"configuration_version"`
 	ReportFormat         int                       `yaml:"report_format"`
 	PuppetVersion        string                    `yaml:"puppet_version"`
 	Status               string                    `yaml:"status"`

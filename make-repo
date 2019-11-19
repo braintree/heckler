@@ -61,8 +61,10 @@ mkdir -p "${MUPPET_SHOW_MOD}"/manifests
 cp ../manifests/episode.pp "${MUPPET_SHOW_MOD}"/manifests/episode.pp
 git add "${MUPPET_SHOW_MOD}"/manifests/episode.pp
 
-cp ../puppet.conf puppet.conf
+cp ../puppet.conf ./
 git add puppet.conf
+cp ../git-head-sha ./
+git add git-head-sha
 
 for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
   cp ../manifests/muppetshow"${commit}".pp "${MUPPET_SHOW_MOD}"/manifests/init.pp
