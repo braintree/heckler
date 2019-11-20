@@ -7,25 +7,32 @@ Puppet::Reports.register_report(:heckler) do
         neither events nor logs associated with them are removed, i.e. only
         resources which are changing are kept."
 
-  def found_resource_in_logs(report, resource)
+  def resource_log_map(report)
     regex_resource_property_tail = %r{/[a-z][a-z0-9_]*$}
     regex_resource_tail = %r{[^\/]+\[[^\[\]]+\]$}
+    regex_resource = %r{^/Stage}
+
+    log_map = {}
 
     report["logs"].each do |log|
+      if log["source"] !~ regex_resource
+        next
+      end
       log_source = log["source"].sub(regex_resource_property_tail, "")
       log_source = log_source[regex_resource_tail]
-      if log_source == resource
-        return true
+      if !log_map.has_key?(log_source)
+        log_map[log_source] = true
       end
     end
 
-    false
+    return log_map
   end
 
   def process
     report = to_data_hash
+    resource_logs = resource_log_map(report)
     report["resource_statuses"] = report["resource_statuses"].select do |_, resource|
-      if resource["events"] != [] || found_resource_in_logs(report, resource["resource"])
+      if resource["events"].length > 0 || resource_logs.has_key?(resource["resource"])
         true
       else
         false
