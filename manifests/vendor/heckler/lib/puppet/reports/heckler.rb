@@ -28,16 +28,47 @@ Puppet::Reports.register_report(:heckler) do
     return log_map
   end
 
+  # stolen from upstream puppet 6.9
+  def heckler_to_data_hash
+    hash = {
+      "host" => @host,
+      "time" => @time.iso8601(9),
+      "configuration_version" => @configuration_version,
+      "transaction_uuid" => @transaction_uuid,
+      "report_format" => @report_format,
+      "puppet_version" => @puppet_version,
+      "status" => @status,
+      "transaction_completed" => @transaction_completed,
+      "noop" => @noop,
+      "noop_pending" => @noop_pending,
+      "environment" => @environment,
+      "logs" => @logs.map { |log| log.to_data_hash },
+      "metrics" => Hash[@metrics.map { |key, metric| [key, metric.to_data_hash] }],
+      "corrective_change" => @corrective_change,
+    }
+
+    # The following is include only when set
+    hash["master_used"] = @master_used unless @master_used.nil?
+    hash["catalog_uuid"] = @catalog_uuid unless @catalog_uuid.nil?
+    hash["code_id"] = @code_id unless @code_id.nil?
+    hash["job_id"] = @job_id unless @job_id.nil?
+    hash["cached_catalog_status"] = @cached_catalog_status unless @cached_catalog_status.nil?
+    hash
+  end
+
   def process
-    report = to_data_hash
+    report = heckler_to_data_hash
     resource_logs = resource_log_map(report)
-    report["resource_statuses"] = report["resource_statuses"].select do |_, resource|
-      if resource["events"].length > 0 || resource_logs.has_key?(resource["resource"])
+
+    report["resource_statuses"] = self.resource_statuses.select do |_, resource|
+      if resource.events.length > 0 || resource_logs.has_key?(resource.resource)
         true
       else
         false
       end
     end
+
+    report["resource_statuses"] = Hash[report["resource_statuses"].map { |key, rs| [key, rs.nil? ? nil : rs.to_data_hash] }]
 
     dir = File.join(Puppet[:reportdir], host)
 
