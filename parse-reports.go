@@ -167,7 +167,7 @@ func commitList(repoDir string, beginTree string, endTree string) []*commit {
 	cmd.Dir = repoDir
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(out, err)
 	}
 	r := bytes.NewReader(out)
 	scanner := bufio.NewScanner(r)
@@ -184,7 +184,7 @@ func commitList(repoDir string, beginTree string, endTree string) []*commit {
 	cmd.Dir = repoDir
 	out, err = cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(out, err)
 	}
 	r = bytes.NewReader(out)
 	scanner = bufio.NewScanner(r)
