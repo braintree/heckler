@@ -1,0 +1,46 @@
+version: '3.7'
+services:
+  node1:
+    build:
+      context: ./node
+      args:
+        - HOSTNAME=node1
+    image: node1:latest
+    volumes:
+      - type: bind
+        source: /sys/fs/cgroup
+        target: /sys/fs/cgroup
+      - type: tmpfs
+        target: /tmp
+      - type: tmpfs
+        target: /run
+      - type: tmpfs
+        target: /run/lock
+    networks:
+          heckler:
+            ipv4_address: 172.18.0.2
+  node2:
+    build:
+      context: ./node
+      args:
+        - HOSTNAME=node2
+    image: node2:latest
+    volumes:
+      - type: bind
+        source: /sys/fs/cgroup
+        target: /sys/fs/cgroup
+      - type: tmpfs
+        target: /tmp
+      - type: tmpfs
+        target: /run
+      - type: tmpfs
+        target: /run/lock
+    networks:
+          heckler:
+            ipv4_address: 172.18.0.3
+networks:
+  heckler:
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.18.0.0/24"
