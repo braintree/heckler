@@ -28,7 +28,8 @@ Puppet::Reports.register_report(:heckler) do
     return log_map
   end
 
-  # stolen from upstream puppet 6.9
+  # stolen from upstream puppet 6.9, as puppet's 4.5 version # does not turn
+  # all the objects parts into a hash
   def heckler_to_data_hash
     hash = {
       "host" => @host,
