@@ -2,6 +2,12 @@
 
 set -o errexit
 set -o nounset
+set -o pipefail
+shopt -s lastpipe
 
-cd muppetshow
-exec git rev-parse HEAD
+if [[ -v PUPPET_COMMIT ]] && [[ -n "${PUPPET_COMMIT}" ]]; then
+  printf '%s\n' "${PUPPET_COMMIT}"
+else
+  cd muppetshow
+  exec git rev-parse HEAD
+fi
