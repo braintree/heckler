@@ -77,7 +77,7 @@ for commit in "${COMMITS[@]}"; do
     puppet "${PUPPET_ARGS[@]}"
   fi
   report="${REPORTS}"/"${commit}"
-  puppet "${PUPPET_ARGS[@]}" --noop |sed 's/\x1b\[[0-9;]*m//g' 2>&1 |tee "${report}".txt
+  puppet "${PUPPET_ARGS[@]}" --noop | sed 's/\x1b\[[0-9;]*m//g' 2>&1 | tee "${report}".txt
   popd >/dev/null
   cp "${VAR}"/state/last_run_report.yaml "${report}".yaml
 done
