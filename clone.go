@@ -124,6 +124,26 @@ func fastForward(repo *git.Repository) error {
 	return nil
 }
 
+func walk(repo *git.Repository) error {
+	var err error
+
+	rv, err := repo.Walk()
+	if err != nil {
+		return err
+	}
+	err = rv.PushRange("HEAD~10..HEAD")
+	if err != nil {
+		return err
+	}
+
+	var gi git.Oid
+	for rv.Next(&gi) == nil {
+		fmt.Printf("%v\n", gi.String())
+	}
+
+	return nil
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
@@ -157,6 +177,10 @@ func main() {
 		log.Fatal(err)
 	}
 	err = fastForward(repo)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = walk(repo)
 	if err != nil {
 		log.Fatal(err)
 	}
