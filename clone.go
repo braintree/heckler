@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,6 +15,114 @@ import (
 )
 
 const GitHubEnterpriseURL = "https://github.braintreeps.com/api/v3"
+
+func clone(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptions) (*git.Repository, error) {
+	var repo *git.Repository
+	var err error
+
+	if _, err = os.Stat(path.Join(cloneDir, ".git")); os.IsNotExist(err) {
+		fmt.Println("cloning")
+		repo, err = git.Clone(remoteUrl, cloneDir, cloneOptions)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		repo, err = git.OpenRepository(cloneDir)
+		if err != nil {
+			return nil, err
+		}
+	}
+	err = repo.Remotes.SetUrl("origin", remoteUrl)
+	if err != nil {
+		return nil, err
+	}
+	return repo, nil
+}
+
+func fastForward(repo *git.Repository) error {
+	remote, err := repo.Remotes.Lookup("origin")
+	if err != nil {
+		return err
+	}
+
+	// XXX only fetch specific branch?
+	err = remote.Fetch([]string{}, nil, "")
+	if err != nil {
+		return err
+	}
+
+	// open master branch of remote
+	remoteBranch, err := repo.References.Lookup("refs/remotes/origin/master")
+	if err != nil {
+		return err
+	}
+
+	// grab commit from head of branch, use annotated variety which
+	// includes what ref it was looked up from
+	annotatedCommit, err := repo.AnnotatedCommitFromRef(remoteBranch)
+	if err != nil {
+		return err
+	}
+
+	// Do the merge analysis
+	mergeHeads := make([]*git.AnnotatedCommit, 1)
+	mergeHeads[0] = annotatedCommit
+	analysis, _, err := repo.MergeAnalysis(mergeHeads)
+	if err != nil {
+		return err
+	}
+	remoteBranchID := remoteBranch.Target()
+	remoteBranchObj, err := repo.Lookup(remoteBranchID)
+	if err != nil {
+		return err
+	}
+
+	remoteBranchCommit, err := remoteBranchObj.AsCommit()
+	if err != nil {
+		return err
+	}
+
+	if (analysis & git.MergeAnalysisUpToDate) != 0 {
+		fmt.Println("Already up to date")
+		return nil
+	}
+
+	if (analysis & git.MergeAnalysisFastForward) == 0 {
+		fmt.Println("Not a fast forward, bailing")
+		return errors.New("Not a fast forward, bailing")
+	}
+
+	fmt.Printf("Fast forward...")
+	// Fast-forward changes
+	// Get remote tree
+	remoteTree, err := repo.LookupTree(remoteBranchCommit.TreeId())
+	if err != nil {
+		return err
+	}
+
+	// Checkout
+	checkoutOpts := git.CheckoutOpts{
+		Strategy: git.CheckoutSafe,
+	}
+	err = repo.CheckoutTree(remoteTree, &checkoutOpts)
+	if err != nil {
+		return err
+	}
+
+	branchRef, err := repo.References.Lookup("refs/heads/master")
+	if err != nil {
+		return err
+	}
+
+	// Point branch to the same object as the remote branch
+	_, err = branchRef.SetTarget(remoteBranchID, "")
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Success")
+	return nil
+}
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -40,107 +149,15 @@ func main() {
 		log.Fatal(err)
 	}
 
-	localRepo := "/home/admin/tmp/muppetshow"
-
-	var repo *git.Repository
-
+	cloneDir := "/home/admin/tmp/muppetshow"
+	cloneOptions := &git.CloneOptions{}
 	remoteUrl := fmt.Sprintf("https://x-access-token:%s@github.braintreeps.com/lollipopman/muppetshow", tok)
-	if _, err = os.Stat(path.Join(localRepo, ".git")); os.IsNotExist(err) {
-		fmt.Println("cloning")
-		cloneOptions := &git.CloneOptions{}
-		repo, err = git.Clone(remoteUrl, localRepo, cloneOptions)
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		repo, err = git.OpenRepository(localRepo)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	err = repo.Remotes.SetUrl("origin", remoteUrl)
+	repo, err := clone(remoteUrl, cloneDir, cloneOptions)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	remote, err := repo.Remotes.Lookup("origin")
+	err = fastForward(repo)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// XXX only fetch specific branch?
-	err = remote.Fetch([]string{}, nil, "")
-	if err != nil {
-		log.Fatal(err)
-	}
-	remoteBranch, err := repo.References.Lookup("refs/remotes/origin/master")
-	if err != nil {
-		log.Fatal(err)
-	}
-	annotatedCommit, err := repo.AnnotatedCommitFromRef(remoteBranch)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Do the merge analysis
-	mergeHeads := make([]*git.AnnotatedCommit, 1)
-	mergeHeads[0] = annotatedCommit
-	analysis, _, err := repo.MergeAnalysis(mergeHeads)
-	if err != nil {
-		log.Fatal(err)
-	}
-	remoteBranchID := remoteBranch.Target()
-	remoteBranchObj, err := repo.Lookup(remoteBranchID)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	remoteBranchCommit, err := remoteBranchObj.AsCommit()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if analysis&git.MergeAnalysisUpToDate != 0 {
-		fmt.Println("Up to date")
-		os.Exit(0)
-	} else if analysis&git.MergeAnalysisFastForward != 0 {
-		fmt.Println("fast forward")
-		// Fast-forward changes
-		// Get remote tree
-		remoteTree, err := repo.LookupTree(remoteBranchCommit.TreeId())
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// Checkout
-		checkoutOpts := git.CheckoutOpts{
-			Strategy: git.CheckoutSafe,
-		}
-		err = repo.CheckoutTree(remoteTree, &checkoutOpts)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		branchRef, err := repo.References.Lookup("refs/heads/master")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// Point branch to the object
-		_, err = branchRef.SetTarget(remoteBranchID, "")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// if _, err := head.SetTarget(remoteBranchID, ""); err != nil {
-		// 	log.Fatal(err)
-		// }
-
-		fmt.Println("Success")
-	} else {
-		fmt.Println("not up to date")
-		os.Exit(0)
-	}
-
 }
