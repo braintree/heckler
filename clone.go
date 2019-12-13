@@ -128,10 +128,12 @@ func walk(repo *git.Repository) error {
 	var err error
 
 	rv, err := repo.Walk()
+	rv.Sorting(git.SortTopological)
 	if err != nil {
 		return err
 	}
-	err = rv.PushRange("HEAD~10..HEAD")
+	err = rv.PushRef("refs/tags/v2")
+	err = rv.HideRef("refs/tags/v1")
 	if err != nil {
 		return err
 	}
