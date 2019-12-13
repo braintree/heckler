@@ -1,11 +1,10 @@
 version: '3.7'
 services:
-  node1:
+  fozzie:
     build:
       context: ./node
-      args:
-        - HOSTNAME=node1
-    image: node1:latest
+    image: heckler-node:latest
+    hostname: fozzie
     volumes:
       - type: bind
         source: /sys/fs/cgroup
@@ -19,12 +18,11 @@ services:
     networks:
           heckler:
             ipv4_address: 172.18.0.2
-  node2:
+  statler:
     build:
       context: ./node
-      args:
-        - HOSTNAME=node2
-    image: node2:latest
+    image: heckler-node:latest
+    hostname: statler
     volumes:
       - type: bind
         source: /sys/fs/cgroup
@@ -38,6 +36,24 @@ services:
     networks:
           heckler:
             ipv4_address: 172.18.0.3
+  waldorf:
+    build:
+      context: ./node
+    image: heckler-node:latest
+    hostname: waldorf
+    volumes:
+      - type: bind
+        source: /sys/fs/cgroup
+        target: /sys/fs/cgroup
+      - type: tmpfs
+        target: /tmp
+      - type: tmpfs
+        target: /run
+      - type: tmpfs
+        target: /run/lock
+    networks:
+          heckler:
+            ipv4_address: 172.18.0.4
 networks:
   heckler:
     ipam:

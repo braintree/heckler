@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+pushd /ssh_configs >/dev/null
+cp sshd_config ssh_known_hosts /etc/ssh/
+cp "${HOSTNAME}"/host/* /etc/ssh/
+chmod 700 /etc/ssh/ssh_host_ecdsa_key
+cp -r "${HOSTNAME}"/root /root/.ssh
+chmod 700 /root/.ssh
+chmod 700 /root/.ssh/id_ecdsa
+cp authorized_keys /root/.ssh/
+popd >/dev/null
+
+exec /lib/systemd/systemd
