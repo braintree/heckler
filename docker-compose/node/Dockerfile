@@ -5,6 +5,8 @@ RUN apt-get update && \
       ca-certificates \
       curl \
       git \
+      # tmux term def
+      ncurses-term \
       openssh-server \
       systemd \
       tree \

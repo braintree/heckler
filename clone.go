@@ -40,7 +40,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cloneDir := "/home/admin/tmp/muppetshow"
+	cloneDir := "/data/muppetshow"
 	cloneOptions := &git.CloneOptions{}
 	remoteUrl := fmt.Sprintf("https://x-access-token:%s@github.braintreeps.com/lollipopman/muppetshow", tok)
 	repo, err := gitutil.Clone(remoteUrl, cloneDir, cloneOptions)
