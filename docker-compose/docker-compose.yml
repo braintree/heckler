@@ -15,6 +15,9 @@ services:
         target: /run
       - type: tmpfs
         target: /run/lock
+      - type: bind
+        source: ../
+        target: /heckler
     networks:
           heckler:
             ipv4_address: 172.18.0.2
@@ -33,6 +36,9 @@ services:
         target: /run
       - type: tmpfs
         target: /run/lock
+      - type: bind
+        source: ../
+        target: /heckler
     networks:
           heckler:
             ipv4_address: 172.18.0.3
@@ -51,9 +57,33 @@ services:
         target: /run
       - type: tmpfs
         target: /run/lock
+      - type: bind
+        source: ../
+        target: /heckler
     networks:
           heckler:
             ipv4_address: 172.18.0.4
+  heckler:
+    build:
+      context: ./node
+    image: heckler-node:latest
+    hostname: heckler
+    volumes:
+      - type: bind
+        source: /sys/fs/cgroup
+        target: /sys/fs/cgroup
+      - type: tmpfs
+        target: /tmp
+      - type: tmpfs
+        target: /run
+      - type: tmpfs
+        target: /run/lock
+      - type: bind
+        source: ../
+        target: /heckler
+    networks:
+          heckler:
+            ipv4_address: 172.18.0.5
 networks:
   heckler:
     ipam:
