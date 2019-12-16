@@ -10,6 +10,8 @@ AUTHORS=(
   [3]='lollipopman <hathaway@paypal.com>'
   [4]='lollipopman <hathaway@paypal.com>'
   [5]='lollipopman <hathaway@paypal.com>'
+  [6]='lollipopman <hathaway@paypal.com>'
+  [7]='lollipopman <hathaway@paypal.com>'
 )
 
 MSGS=(
@@ -26,12 +28,14 @@ modify slapstick on fozzie'
 finish composing the muppet show lyrics
 move index out of muppetshow class into node
 class'
-  [4]='add some fun diversions
+  [4]='New Movie'
+  [5]='Gonzo'
+  [6]='add some fun diversions
 
 add bsdgames on fozzie
 add sl to statler & waldorf
 '
-  [5]='add kermit user, modify sail input
+  [7]='add kermit user, modify sail input
 
 add kermit user and muppetshow group
 modify the input to the sail game
@@ -67,6 +71,12 @@ cp ../git-head-sha ./
 git add git-head-sha
 
 for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
+  if ((commit == 4)); then
+    git checkout -b manhattan
+  fi
+  if ((commit == 6)); then
+    git checkout master
+  fi
   cp ../manifests/muppetshow"${commit}".pp "${MUPPET_SHOW_MOD}"/manifests/init.pp
   git add "${MUPPET_SHOW_MOD}"/manifests/init.pp
   cp ../manifests/nodes"${commit}".pp nodes.pp
@@ -76,6 +86,7 @@ for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
     git tag v1
   fi
 done
+git merge -m manhattan manhattan
 git tag v2
 
 git remote add origin git@github.braintreeps.com:lollipopman/muppetshow.git

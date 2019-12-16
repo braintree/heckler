@@ -31,6 +31,17 @@ class muppetshow {
     ensure => present,
     content => $the_muppet_show,
   }
+
+  user { "kermit":
+    ensure     => present,
+    uid        => 9999,
+    gid        => 9999,
+    groups => ['muppets'],
+  }
+  group { "muppets":
+    ensure     => present,
+    gid        => 9998,
+  }
   muppetshow::episode { "One":
     base => "${facts['cwd']}/nodes",
   }

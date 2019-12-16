@@ -19,17 +19,16 @@ class fozzie {
   service { 'nginx':
     ensure => stopped,
   }
-  file { "${facts['cwd']}/nodes/fozzie/manhattan":
-    ensure => present,
-    content => "Let's take manhattan!\n",
-  }
   file { "/var/www/html/index.html":
     ensure => present,
     content => "Fozzie\n",
   }
+  package { 'bsdgames':
+    ensure => installed,
+  }
   file { "${facts['cwd']}/nodes/fozzie/styx":
     ensure => present,
-    content => "",
+    content => "Come Sail Away\n",
   }
   exec { 'sail':
     command => '/usr/games/sail -h',
@@ -57,6 +56,9 @@ class statler {
     content => "Statler\n",
     notify => Service['nginx'],
   }
+  package { 'sl':
+    ensure => installed,
+  }
 }
 
 class waldorf {
@@ -76,5 +78,8 @@ class waldorf {
     ensure => present,
     content => "Waldorf\n",
     notify => Service['nginx'],
+  }
+  package { 'sl':
+    ensure => installed,
   }
 }
