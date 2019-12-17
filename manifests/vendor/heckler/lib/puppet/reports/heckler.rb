@@ -5,7 +5,7 @@ require "puppet/util"
 Puppet::Reports.register_report(:heckler) do
   desc "This is identical to the yaml report, except resources that have
         neither events nor logs associated with them are removed, i.e. only
-        resources which are changing are kept."
+        include resources which are changing."
 
   def resource_log_map(report)
     regex_resource_property_tail = %r{/[a-z][a-z0-9_]*$}
@@ -28,8 +28,8 @@ Puppet::Reports.register_report(:heckler) do
     return log_map
   end
 
-  # stolen from upstream puppet 6.9, as puppet's 4.5 version # does not turn
-  # all the objects parts into a hash
+  # Stolen from upstream puppet 6.9, as puppet's 4.5 version does not turn all
+  # parts of the object into hashes
   def heckler_to_data_hash
     hash = {
       "host" => @host,
