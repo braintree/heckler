@@ -94,7 +94,6 @@ Puppet::Reports.register_report(:heckler) do
         fh.print report.to_yaml
       end
     rescue => detail
-      Puppet.crit("Unable to write report: invalid configuration_version")
       Puppet.log_exception(detail, "Could not write report for #{host} at #{file}: #{detail}")
     end
 
