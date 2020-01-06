@@ -3,9 +3,11 @@ require "fileutils"
 require "puppet/util"
 
 Puppet::Reports.register_report(:heckler) do
-  desc "This is identical to the yaml report, except resources that have
-        neither events nor logs associated with them are removed, i.e. only
-        include resources which are changing."
+  desc "This is identical to the standard puppet yaml report, except resources
+       that have neither events nor logs associated with them are removed, i.e. it
+       only includes resources which are changing, also this report is serilized as
+       json so that it is compatible with the Go structs generated from the protobuf
+       definitions."
 
   def resource_log_map(report)
     regex_resource_property_tail = %r{/[a-z][a-z0-9_]*$}
@@ -71,7 +73,7 @@ Puppet::Reports.register_report(:heckler) do
 
     report["resource_statuses"] = Hash[report["resource_statuses"].map { |key, rs| [key, rs.nil? ? nil : rs.to_data_hash] }]
 
-    dir = File.join(Puppet[:reportdir], host)
+    dir = File.join(Puppet[:reportdir], 'heckler')
 
     if !Puppet::FileSystem.exist?(dir)
       FileUtils.mkdir_p(dir)
@@ -86,12 +88,12 @@ Puppet::Reports.register_report(:heckler) do
       return
     end
 
-    name = "heckler_" + report["configuration_version"] + ".yaml"
+    name = "heckler_" + report["configuration_version"] + ".json"
     file = File.join(dir, name)
 
     begin
       Puppet::Util.replace_file(file, 0640) do |fh|
-        fh.print report.to_yaml
+        fh.print report.to_json
       end
     rescue => detail
       Puppet.log_exception(detail, "Could not write report for #{host} at #{file}: #{detail}")
@@ -101,3 +103,4 @@ Puppet::Reports.register_report(:heckler) do
     file
   end
 end
+
