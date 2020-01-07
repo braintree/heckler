@@ -66,12 +66,7 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 		return err
 	}
 	remoteBranchID := remoteBranch.Target()
-	remoteBranchObj, err := repo.Lookup(remoteBranchID)
-	if err != nil {
-		return err
-	}
-
-	remoteBranchCommit, err := remoteBranchObj.AsCommit()
+	remoteBranchCommit, err := repo.LookupCommit(remoteBranchID)
 	if err != nil {
 		return err
 	}
