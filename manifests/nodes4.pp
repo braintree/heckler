@@ -31,11 +31,6 @@ class fozzie {
     ensure => present,
     content => "",
   }
-  exec { 'sail':
-    command => '/usr/games/sail -h',
-    refreshonly => true,
-    subscribe => File["${facts['cwd']}/nodes/fozzie/styx"],
-  }
 }
 
 class statler {
