@@ -31,14 +31,16 @@ func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptio
 	return repo, nil
 }
 
-func FastForward(repo *git.Repository) error {
+func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
+	var err error
+
 	remote, err := repo.Remotes.Lookup("origin")
 	if err != nil {
 		return err
 	}
 
 	// XXX only fetch specific branch?
-	err = remote.Fetch([]string{}, nil, "")
+	err = remote.Fetch([]string{}, fetchOptions, "")
 	if err != nil {
 		return err
 	}
