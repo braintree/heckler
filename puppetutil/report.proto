@@ -1,0 +1,78 @@
+syntax = "proto3";
+package puppetutil;
+
+message Event {
+  string property = 1;
+  string previous_value = 2;
+  string desired_value = 3;
+  string message = 4;
+  string name = 5;
+  string status = 6;
+  bool corrective_change = 7;
+}
+
+message Log {
+  string level = 1;
+  string message = 2;
+  string source = 3;
+	//
+	// XXX Removing these for now, as it breaks grouping for resources that are
+	// defined in diffent places in the source code. Should they be readded, i.e.
+	// is the common case to have the same source line & file location, probably?
+	//
+  // string file = 4;
+  // int64 line = 5;
+}
+
+message PuppetReport {
+  string host = 1;
+  string configuration_version = 2;
+  int64 report_format = 3;
+  string puppet_version = 4;
+  string status = 5;
+  bool transaction_completed = 6;
+  bool noop = 7;
+  bool noop_pending = 8;
+  string environment = 9;
+  repeated Log logs = 10;
+  map<string,ResourceStatus> resource_statuses = 11;
+  bool corrective_change = 12;
+  string cached_catalog_status = 13;
+}
+
+message ResourceStatus {
+  int64 change_count = 1;
+  bool changed = 2;
+  repeated string containment_path = 3;
+  bool corrective_change = 4;
+  bool failed = 5;
+  bool failed_to_restart = 6;
+	//
+	// XXX Removing these for now, as it breaks grouping for resources that are
+	// defined in diffent places in the source code. Should they be readded, i.e.
+	// is the common case to have the same source line & file location, probably?
+	//
+  // string file = ?;
+  // int64 line = ?;
+  bool out_of_sync = 7;
+  int64 out_of_sync_count = 8;
+  string provider_used = 9;
+  string resource = 10;
+  string resource_type = 11;
+  bool skipped = 12;
+  string title = 13;
+  repeated Event events = 14;
+}
+
+// The Rizzo service definition.
+service Rizzo {
+  // applies a ref
+  rpc PuppetApply (PuppetApplyRequest) returns (PuppetReport) {}
+}
+
+// The request message containing the git rev identifier, e.g. a tag or a
+// commit id
+message PuppetApplyRequest {
+  string rev = 1;
+  bool noop = 2;
+}
