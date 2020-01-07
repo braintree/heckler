@@ -109,6 +109,23 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 		return err
 	}
 
+	index, err := repo.Index()
+	if err != nil {
+		return err
+	}
+	err = index.ReadTree(remoteTree)
+	if err != nil {
+		return err
+	}
+	err = index.Write()
+	if err != nil {
+		return err
+	}
+	err = repo.SetHead("refs/heads/master")
+	if err != nil {
+		return err
+	}
+
 	fmt.Println("Success")
 	return nil
 }
