@@ -8,6 +8,5 @@ shopt -s lastpipe
 if [[ -v PUPPET_COMMIT ]] && [[ -n "${PUPPET_COMMIT}" ]]; then
   printf '%s\n' "${PUPPET_COMMIT}"
 else
-  cd muppetshow
   exec git rev-parse HEAD
 fi
