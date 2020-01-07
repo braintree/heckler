@@ -43,11 +43,11 @@ func main() {
 	cloneDir := "/data/muppetshow"
 	cloneOptions := &git.CloneOptions{}
 	remoteUrl := fmt.Sprintf("https://x-access-token:%s@github.braintreeps.com/lollipopman/muppetshow", tok)
-	repo, err := gitutil.Clone(remoteUrl, cloneDir, cloneOptions)
+	repo, err := gitutil.CloneOrOpen(remoteUrl, cloneDir, cloneOptions)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = gitutil.FastForward(repo)
+	err = gitutil.FastForward(repo, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
