@@ -9,12 +9,11 @@ import (
 	git "github.com/libgit2/git2go"
 )
 
-func Clone(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptions) (*git.Repository, error) {
+func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptions) (*git.Repository, error) {
 	var repo *git.Repository
 	var err error
 
 	if _, err = os.Stat(path.Join(cloneDir, ".git")); os.IsNotExist(err) {
-		fmt.Println("cloning")
 		repo, err = git.Clone(remoteUrl, cloneDir, cloneOptions)
 		if err != nil {
 			return nil, err
