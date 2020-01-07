@@ -3,7 +3,7 @@ File {
 }
 
 node default {
-  include $facts['nodename']
+  include $facts['hostname']
 }
 
 
@@ -20,7 +20,7 @@ class waldorf {
 }
 
 class muppetshow {
-  file { "${facts['cwd']}/nodes":
+  file { "/data/puppet_apply":
     ensure => absent,
     force => true,
   }

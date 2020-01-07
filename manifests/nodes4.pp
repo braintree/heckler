@@ -3,23 +3,23 @@ File {
 }
 
 node default {
-  include $facts['nodename']
+  include $facts['hostname']
 }
 
 
 class fozzie {
   include muppetshow
 
-  file { "${facts['cwd']}/nodes/fozzie":
+  file { "/data/puppet_apply/fozzie":
     ensure => directory,
   }
-  file { "${facts['cwd']}/nodes/fozzie/slapstick":
+  file { "/data/puppet_apply/fozzie/slapstick":
     ensure => absent,
   }
   service { 'nginx':
     ensure => stopped,
   }
-  file { "${facts['cwd']}/nodes/fozzie/manhattan":
+  file { "/data/puppet_apply/fozzie/manhattan":
     ensure => present,
     content => "Let's take manhattan!\n",
   }
@@ -27,7 +27,7 @@ class fozzie {
     ensure => present,
     content => "Fozzie\n",
   }
-  file { "${facts['cwd']}/nodes/fozzie/styx":
+  file { "/data/puppet_apply/fozzie/styx":
     ensure => present,
     content => "",
   }
@@ -36,11 +36,11 @@ class fozzie {
 class statler {
   include muppetshow
 
-  file { "${facts['cwd']}/nodes/statler":
+  file { "/data/puppet_apply/statler":
     ensure => directory,
   }
 
-  file { "${facts['cwd']}/nodes/statler/wit":
+  file { "/data/puppet_apply/statler/wit":
     ensure => present,
     content => "foul\n",
   }
@@ -57,10 +57,10 @@ class statler {
 class waldorf {
   include muppetshow
 
-  file { "${facts['cwd']}/nodes/waldorf":
+  file { "/data/puppet_apply/waldorf":
     ensure => directory,
   }
-  file { "${facts['cwd']}/nodes/waldorf/poignant":
+  file { "/data/puppet_apply/waldorf/poignant":
     ensure => present,
     content => "sour\n",
   }

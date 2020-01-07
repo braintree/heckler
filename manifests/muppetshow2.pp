@@ -1,5 +1,5 @@
 class muppetshow {
-  file { "${facts['cwd']}/nodes":
+  file { "/data/puppet_apply":
     ensure => directory,
   }
   package { 'nginx':
@@ -21,23 +21,23 @@ class muppetshow {
     It's time to raise the curtain on the Muppet Show tonight
     | EOF
 
-  file { "${facts['cwd']}/nodes/the_muppet_show":
+  file { "/data/puppet_apply/the_muppet_show":
     ensure => present,
     content => $the_muppet_show,
   }
   muppetshow::episode { "One":
-    base => "${facts['cwd']}/nodes",
+    base => "/data/puppet_apply",
   }
-  concat { "${facts['cwd']}/nodes/cast":
+  concat { "/data/puppet_apply/cast":
     ensure => present,
   }
   concat::fragment { 'MissPiggy':
-    target  => "${facts['cwd']}/nodes/cast",
+    target  => "/data/puppet_apply/cast",
     content => "Miss Piggy\n",
     order   => '01'
   }
   concat::fragment { 'RowlfTheDog':
-    target  => "${facts['cwd']}/nodes/cast",
+    target  => "/data/puppet_apply/cast",
     content => "Rowlf the Dog\n",
     order   => '02'
   }
