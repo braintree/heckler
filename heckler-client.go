@@ -23,11 +23,23 @@ func (i *hostFlags) Set(value string) error {
 	return nil
 }
 
+func hecklerApply(rc puppetutil.RizzoClient, c chan<- puppetutil.PuppetReport, par puppetutil.PuppetApplyRequest) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
+	defer cancel()
+	r, err := rc.PuppetApply(ctx, &par)
+	if err != nil {
+		c <- puppetutil.PuppetReport{}
+	}
+	c <- *r
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var hosts hostFlags
 	var beginRev string
 	var noop bool
+	var rizzoClients []puppetutil.RizzoClient
+	var c chan puppetutil.PuppetReport
 
 	flag.Var(&hosts, "node", "node hostnames to group")
 	flag.StringVar(&beginRev, "begin", "", "begin rev")
@@ -43,14 +55,16 @@ func main() {
 			log.Fatalf("did not connect: %v", err)
 		}
 		defer conn.Close()
-		c := puppetutil.NewRizzoClient(conn)
+		rizzoClients = append(rizzoClients, puppetutil.NewRizzoClient(conn))
+	}
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
-		defer cancel()
-		r, err := c.PuppetApply(ctx, &puppetutil.PuppetApplyRequest{Rev: beginRev, Noop: noop})
-		if err != nil {
-			log.Fatalf("could not apply: %v", err)
-		}
+	par := puppetutil.PuppetApplyRequest{Rev: beginRev, Noop: noop}
+	c = make(chan puppetutil.PuppetReport, len(rizzoClients))
+	for _, rc := range rizzoClients {
+		go hecklerApply(rc, c, par)
+	}
+
+	for r := range c {
 		jpr, err := json.MarshalIndent(r, "", "\t")
 		if err != nil {
 			log.Fatalf("could not apply: %v", err)
