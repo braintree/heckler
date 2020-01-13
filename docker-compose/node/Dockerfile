@@ -24,6 +24,7 @@ RUN apt-get update && \
       2>&1
 RUN echo 'root:heckler' | chpasswd
 COPY setup_ssh_exec_systemd /setup_ssh_exec_systemd
+COPY heckler.sh /etc/profile.d/
 RUN chmod 755 /setup_ssh_exec_systemd
 ADD ssh_configs /ssh_configs
 
