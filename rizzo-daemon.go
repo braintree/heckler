@@ -198,24 +198,3 @@ func main() {
 		log.Fatalf("failed to serve: %v", err)
 	}
 }
-
-// func main() {
-// 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-//
-// 	rv, err := repo.Walk()
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	rv.Sorting(git.SortTopological)
-// 	err = rv.PushHead()
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	err = rv.HideRef("refs/tags/v1")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-//
-// 	var gi git.Oid
-// 	for rv.Next(&gi) == nil {
-//
