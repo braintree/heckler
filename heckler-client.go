@@ -78,13 +78,25 @@ func hecklerApply(rc puppetutil.RizzoClient, c chan<- puppetutil.PuppetReport, p
 	c <- *r
 }
 
+func grpcConnect(host string, clientConnChan chan *grpc.ClientConn) {
+	var conn *grpc.ClientConn
+	address := host + ":50051"
+	log.Printf("Dialing: %v", address)
+	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	log.Printf("Connected: %T", conn)
+	clientConnChan <- conn
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var hosts hostFlags
 	var beginRev string
 	var noop bool
 	var rizzoClients []puppetutil.RizzoClient
-	var c chan puppetutil.PuppetReport
+	var puppetReportChan chan puppetutil.PuppetReport
 
 	flag.Var(&hosts, "node", "node hostnames to group")
 	flag.StringVar(&beginRev, "begin", "", "begin rev")
@@ -100,25 +112,28 @@ func main() {
 		log.Fatalf("Unable to fetch repo: %v", err)
 	}
 
-	// Set up a connection to the server.
+	var clientConnChan chan *grpc.ClientConn
+	var conn *grpc.ClientConn
+	clientConnChan = make(chan *grpc.ClientConn)
+
+	// Set up connections to the servers
 	for _, host := range hosts {
-		address := host + ":50051"
-		log.Printf("Dialing: %v", address)
-		conn, err := grpc.Dial(host+":50051", grpc.WithInsecure(), grpc.WithBlock())
-		if err != nil {
-			log.Fatalf("did not connect: %v", err)
-		}
-		defer conn.Close()
+		go grpcConnect(host, clientConnChan)
+	}
+
+	for range hosts {
+		conn = <-clientConnChan
 		rizzoClients = append(rizzoClients, puppetutil.NewRizzoClient(conn))
 	}
 
 	par := puppetutil.PuppetApplyRequest{Rev: beginRev, Noop: noop}
-	c = make(chan puppetutil.PuppetReport, len(rizzoClients))
+	puppetReportChan = make(chan puppetutil.PuppetReport, len(rizzoClients))
 	for _, rc := range rizzoClients {
-		go hecklerApply(rc, c, par)
+		go hecklerApply(rc, puppetReportChan, par)
 	}
 
-	for r := range c {
+	for range hosts {
+		r := <-puppetReportChan
 		jpr, err := json.MarshalIndent(r, "", "\t")
 		if err != nil {
 			log.Fatalf("could not apply: %v", err)
