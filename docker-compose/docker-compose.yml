@@ -5,6 +5,8 @@ services:
       context: ./node
     image: heckler-node:latest
     hostname: fozzie
+    # needed to avoid facter using dns search for fqdn
+    dns_search: ""
     volumes:
       - type: bind
         source: /sys/fs/cgroup
@@ -26,6 +28,8 @@ services:
       context: ./node
     image: heckler-node:latest
     hostname: statler
+    # needed to avoid facter using dns search for fqdn
+    dns_search: ""
     volumes:
       - type: bind
         source: /sys/fs/cgroup
@@ -47,6 +51,8 @@ services:
       context: ./node
     image: heckler-node:latest
     hostname: waldorf
+    # needed to avoid facter using dns search for fqdn
+    dns_search: ""
     volumes:
       - type: bind
         source: /sys/fs/cgroup
@@ -68,6 +74,8 @@ services:
       context: ./node
     image: heckler-node:latest
     hostname: heckler
+    # needed to avoid facter using dns search for fqdn
+    dns_search: ""
     volumes:
       - type: bind
         source: /sys/fs/cgroup
