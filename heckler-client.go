@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"./gitutil"
@@ -81,12 +81,12 @@ func hecklerApply(rc puppetutil.RizzoClient, c chan<- puppetutil.PuppetReport, p
 func grpcConnect(host string, clientConnChan chan *grpc.ClientConn) {
 	var conn *grpc.ClientConn
 	address := host + ":50051"
-	log.Printf("Dialing: %v", address)
+	log.Printf("Dialing: %v", host)
 	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		log.Fatalf("Unable to connect to: %v, %v", host, err)
 	}
-	log.Printf("Connected: %T", conn)
+	log.Printf("Connected: %v", host)
 	clientConnChan <- conn
 }
 
@@ -94,20 +94,33 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var hosts hostFlags
 	var beginRev string
+	var endRev string
+	var rev string
 	var noop bool
 	var rizzoClients []puppetutil.RizzoClient
 	var puppetReportChan chan puppetutil.PuppetReport
+	puppetReportChan = make(chan puppetutil.PuppetReport, len(rizzoClients))
 
 	flag.Var(&hosts, "node", "node hostnames to group")
-	flag.StringVar(&beginRev, "begin", "", "begin rev")
+	flag.StringVar(&beginRev, "beginrev", "", "begin rev")
+	flag.StringVar(&endRev, "endrev", "", "end rev")
+	flag.StringVar(&rev, "rev", "", "rev to apply or noop")
 	flag.BoolVar(&noop, "noop", false, "noop")
 	flag.Parse()
 
-	if len(hosts) == 0 {
-		log.Fatalf("must supply node list")
+	if rev != "" && (beginRev != "" || endRev != "") {
+		fmt.Printf("The -rev flag cannot be combined with the -beginrev or the -endrev\n")
+		flag.Usage()
+		os.Exit(1)
 	}
 
-	_, err := fetchRepo()
+	if len(hosts) == 0 {
+		fmt.Printf("You must supply one or more nodes\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	repo, err := fetchRepo()
 	if err != nil {
 		log.Fatalf("Unable to fetch repo: %v", err)
 	}
@@ -116,7 +129,6 @@ func main() {
 	var conn *grpc.ClientConn
 	clientConnChan = make(chan *grpc.ClientConn)
 
-	// Set up connections to the servers
 	for _, host := range hosts {
 		go grpcConnect(host, clientConnChan)
 	}
@@ -126,18 +138,48 @@ func main() {
 		rizzoClients = append(rizzoClients, puppetutil.NewRizzoClient(conn))
 	}
 
-	par := puppetutil.PuppetApplyRequest{Rev: beginRev, Noop: noop}
-	puppetReportChan = make(chan puppetutil.PuppetReport, len(rizzoClients))
-	for _, rc := range rizzoClients {
-		go hecklerApply(rc, puppetReportChan, par)
+	if rev != "" {
+		par := puppetutil.PuppetApplyRequest{Rev: rev, Noop: noop}
+		for _, rc := range rizzoClients {
+			go hecklerApply(rc, puppetReportChan, par)
+		}
+
+		for range hosts {
+			r := <-puppetReportChan
+			log.Printf("Applied: %s@%s", r.Host, r.ConfigurationVersion)
+		}
 	}
 
-	for range hosts {
-		r := <-puppetReportChan
-		jpr, err := json.MarshalIndent(r, "", "\t")
+	if beginRev != "" && endRev != "" {
+
+		log.Printf("Walk begun nooping: %s..%s\n", beginRev, endRev)
+		rv, err := repo.Walk()
 		if err != nil {
-			log.Fatalf("could not apply: %v", err)
+			log.Fatal(err)
 		}
-		log.Printf("%s", jpr)
+		rv.Sorting(git.SortTopological)
+		err = rv.PushRef("refs/tags/v2")
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = rv.HideRef("refs/tags/v1")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var gi git.Oid
+		for rv.Next(&gi) == nil {
+			log.Printf("Nooping commit: %v\n", gi.String())
+			par := puppetutil.PuppetApplyRequest{Rev: gi.String(), Noop: true}
+			for _, rc := range rizzoClients {
+				go hecklerApply(rc, puppetReportChan, par)
+			}
+
+			for range hosts {
+				r := <-puppetReportChan
+				log.Printf("Received noop: %s@%s", r.Host, r.ConfigurationVersion)
+			}
+		}
+		log.Println("Walk Successful")
 	}
 }
