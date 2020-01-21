@@ -1,6 +1,6 @@
-### Commit [{{ .SHA }}](https://github.braintreeps.com/lollipopman/muppetshow/commit/{{ .SHA }})
+### Commit [{{ .AsObject.Id }}](https://github.braintreeps.com/lollipopman/muppetshow/commit/{{ .AsObject.Id }})
 
-- *Author:* {{ .Author }} (<{{ .Email }}>)
+- *Author:* {{ .Author.Name }} (<{{ .Author.Email }}>)
 - *Message:*
   ```
 {{ .Message | indent 2 }}
