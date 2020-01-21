@@ -11,7 +11,10 @@ RUN apt-get update && \
       # facter complains about missing locales
       locales-all \
       systemd \
+      # debuging tools
+      jq \
       tree \
+      less \
       vim-tiny \
       2>&1
 RUN curl -sO https://apt.puppet.com/puppet6-release-buster.deb
