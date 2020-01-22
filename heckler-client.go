@@ -609,7 +609,9 @@ func main() {
 		}
 
 		for host, node := range nodes {
-			if i > 0 {
+			if i == 0 {
+				node.commitDeltaResources[commitId] = deltaNoop(new(puppetutil.PuppetReport), node.commitReports[commitId])
+			} else {
 				log.Printf("Creating delta resource: %s@(%s - %s)", host, commitId.String(), commitIds[i-1].String())
 				node.commitDeltaResources[commitId] = deltaNoop(node.commitReports[commitIds[i-1]], node.commitReports[commitId])
 				if Debug {
@@ -630,7 +632,7 @@ func main() {
 
 	var c *git.Commit
 	var gc []*groupResource
-	for i := 1; i < len(commitIds); i++ {
+	for i := 0; i < len(commitIds); i++ {
 		c, err = repo.LookupCommit(&commitIds[i])
 		if err != nil {
 			log.Fatal("Could not lookup commit:", err)
