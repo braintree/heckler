@@ -411,7 +411,10 @@ func commitIdList(repo *git.Repository, beginRev string, endRev string) ([]git.O
 		return []git.Oid{}, err
 	}
 
-	rv.Sorting(git.SortTopological)
+	// We what to sort by the topology of the date of the commits. Also, reverse
+	// the sort so the first commit in the array is the earliest commit or oldest
+	// ancestor in the topology.
+	rv.Sorting(git.SortTopological | git.SortReverse)
 
 	// XXX only tags???
 	err = rv.PushRef("refs/tags/" + endRev)
@@ -425,9 +428,10 @@ func commitIdList(repo *git.Repository, beginRev string, endRev string) ([]git.O
 
 	var gi git.Oid
 	for rv.Next(&gi) == nil {
-		commitIds = append([]git.Oid{gi}, commitIds...)
+		commitIds = append(commitIds, gi)
+		log.Printf("commit: %s\n", gi.String())
 	}
-	log.Printf("Walk Successful\n")
+	log.Printf("Walk Complete\n")
 
 	return commitIds, nil
 }
