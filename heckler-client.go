@@ -402,13 +402,16 @@ func grpcConnect(node *Node, clientConnChan chan *Node) {
 	clientConnChan <- node
 }
 
-func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]git.Oid, error) {
+func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]git.Oid, map[git.Oid]*git.Commit, error) {
 	var commitLogIds []git.Oid
+	var commits map[git.Oid]*git.Commit
+
+	commits = make(map[git.Oid]*git.Commit)
 
 	log.Printf("Walk begun: %s..%s\n", beginRev, endRev)
 	rv, err := repo.Walk()
 	if err != nil {
-		return []git.Oid{}, err
+		return nil, nil, err
 	}
 
 	// We what to sort by the topology of the date of the commits. Also, reverse
@@ -419,24 +422,30 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 	// XXX only tags???
 	err = rv.PushRef("refs/tags/" + endRev)
 	if err != nil {
-		return []git.Oid{}, err
+		return nil, nil, err
 	}
 	err = rv.HideRef("refs/tags/" + beginRev)
 	if err != nil {
-		return []git.Oid{}, err
+		return nil, nil, err
 	}
 
+	var c *git.Commit
 	var gi git.Oid
 	for rv.Next(&gi) == nil {
 		commitLogIds = append(commitLogIds, gi)
+		c, err = repo.LookupCommit(&gi)
+		if err != nil {
+			return nil, nil, err
+		}
+		commits[gi] = c
 		log.Printf("commit: %s\n", gi.String())
 	}
 	log.Printf("Walk Complete\n")
 
-	return commitLogIds, nil
+	return commitLogIds, commits, nil
 }
 
-func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupResource, repo *git.Repository) {
+func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupResource, commits map[git.Oid]*git.Commit) {
 	// Shared transport to reuse TCP connections.
 	tr := http.DefaultTransport
 
@@ -463,21 +472,14 @@ func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits
 	}
 	fmt.Printf("Successfully created new milestone: %v\n", *nm.Title)
 
-	var c *git.Commit
-	var gc []*groupResource
-	for i := 0; i < len(commitLogIds); i++ {
-		gc = groupedCommits[commitLogIds[i]]
-		c, err = repo.LookupCommit(&commitLogIds[i])
-		if err != nil {
-			log.Fatal("Could not lookup commit:", err)
-		}
-		i := &github.IssueRequest{
-			Title:     github.String(fmt.Sprintf("Puppet noop output for commit: '%v'", c.Summary())),
-			Assignee:  github.String(c.Author().Name),
-			Body:      github.String(commitToMarkdown(c) + groupResourcesToMarkdown(gc)),
+	for _, gi := range commitLogIds {
+		githubIssue := &github.IssueRequest{
+			Title:     github.String(fmt.Sprintf("Puppet noop output for commit: '%v'", commits[gi].Summary())),
+			Assignee:  github.String(commits[gi].Author().Name),
+			Body:      github.String(commitToMarkdown(commits[gi]) + groupResourcesToMarkdown(groupedCommits[gi])),
 			Milestone: nm.Number,
 		}
-		ni, _, err := client.Issues.Create(ctx, "lollipopman", "muppetshow", i)
+		ni, _, err := client.Issues.Create(ctx, "lollipopman", "muppetshow", githubIssue)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -598,7 +600,7 @@ func main() {
 		node.commitDeltaResources = make(map[git.Oid]map[string]*deltaResource)
 	}
 
-	commitLogIds, err := commitLogIdList(repo, beginRev, endRev)
+	commitLogIds, commits, err := commitLogIdList(repo, beginRev, endRev)
 	if err != nil {
 		log.Fatalf("Unable to get commit id list", err)
 	}
@@ -672,30 +674,23 @@ func main() {
 		}
 	}
 
-	for i := 0; i < len(commitLogIds); i++ {
-		log.Printf("Grouping: %s", commitLogIds[i].String())
+	for _, gi := range commitLogIds {
+		log.Printf("Grouping: %s", gi.String())
 		for _, node := range nodes {
-			for _, dr := range node.commitDeltaResources[commitLogIds[i]] {
-				groupResources(commitLogIds[i], dr, nodes, groupedCommits)
+			for _, dr := range node.commitDeltaResources[gi] {
+				groupResources(gi, dr, nodes, groupedCommits)
 			}
 		}
 	}
 
-	var c *git.Commit
-	var gc []*groupResource
-	for i := 0; i < len(commitLogIds); i++ {
-		c, err = repo.LookupCommit(&commitLogIds[i])
-		if err != nil {
-			log.Fatal("Could not lookup commit:", err)
-		}
-		fmt.Printf("## Puppet noop output for commit: '%v'\n\n", c.Summary())
-		fmt.Printf("%s", commitToMarkdown(c))
-		gc = groupedCommits[commitLogIds[i]]
-		fmt.Printf("%s", groupResourcesToMarkdown(gc))
+	for _, gi := range commitLogIds {
+		fmt.Printf("## Puppet noop output for commit: '%v'\n\n", commits[gi].Summary())
+		fmt.Printf("%s", commitToMarkdown(commits[gi]))
+		fmt.Printf("%s", groupResourcesToMarkdown(groupedCommits[gi]))
 	}
 
 	if githubMilestone != "" {
-		githubCreate(githubMilestone, commitLogIds, groupedCommits, repo)
+		githubCreate(githubMilestone, commitLogIds, groupedCommits, commits)
 	}
 
 	// cleanup
