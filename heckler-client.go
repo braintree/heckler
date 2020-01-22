@@ -436,6 +436,55 @@ func commitIdList(repo *git.Repository, beginRev string, endRev string) ([]git.O
 	return commitIds, nil
 }
 
+func githubCreate(githubMilestone string, commitIds []git.Oid, groupedCommits map[git.Oid][]*groupResource, repo *git.Repository) {
+	// Shared transport to reuse TCP connections.
+	tr := http.DefaultTransport
+
+	// Wrap the shared transport for use with the app ID 7 authenticating with
+	// installation ID 11.
+	itr, err := ghinstallation.NewKeyFromFile(tr, 7, 11, "heckler.2019-10-30.private-key.pem")
+	if err != nil {
+		log.Fatal(err)
+	}
+	itr.BaseURL = GitHubEnterpriseURL
+
+	// Use installation transport with github.com/google/go-github
+	client, err := github.NewEnterpriseClient(GitHubEnterpriseURL, GitHubEnterpriseURL, &http.Client{Transport: itr})
+	if err != nil {
+		log.Fatal(err)
+	}
+	ctx := context.Background()
+	m := &github.Milestone{
+		Title: github.String(githubMilestone),
+	}
+	nm, _, err := client.Issues.CreateMilestone(ctx, "lollipopman", "muppetshow", m)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Successfully created new milestone: %v\n", *nm.Title)
+
+	var c *git.Commit
+	var gc []*groupResource
+	for i := 0; i < len(commitIds); i++ {
+		gc = groupedCommits[commitIds[i]]
+		c, err = repo.LookupCommit(&commitIds[i])
+		if err != nil {
+			log.Fatal("Could not lookup commit:", err)
+		}
+		i := &github.IssueRequest{
+			Title:     github.String(fmt.Sprintf("Puppet noop output for commit: '%v'", c.Summary())),
+			Assignee:  github.String(c.Author().Name),
+			Body:      github.String(commitToMarkdown(c) + groupResourcesToMarkdown(gc)),
+			Milestone: nm.Number,
+		}
+		ni, _, err := client.Issues.Create(ctx, "lollipopman", "muppetshow", i)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("Successfully created new issue: %v\n", *ni.Title)
+	}
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var hosts hostFlags
@@ -443,6 +492,7 @@ func main() {
 	var endRev string
 	var rev string
 	var noop bool
+	var githubMilestone string
 	var data []byte
 	var nodes map[string]*Node
 	var puppetReportChan chan puppetutil.PuppetReport
@@ -457,6 +507,7 @@ func main() {
 	flag.StringVar(&endRev, "endrev", "", "end rev")
 	flag.StringVar(&rev, "rev", "", "rev to apply or noop")
 	flag.BoolVar(&noop, "noop", false, "noop")
+	flag.StringVar(&githubMilestone, "github", "", "Github milestone to create")
 	flag.BoolVar(&Debug, "debug", false, "enable debugging")
 	flag.Parse()
 
@@ -643,8 +694,9 @@ func main() {
 		fmt.Printf("%s", groupResourcesToMarkdown(gc))
 	}
 
-	// GitHub
-	// githubCreate("v16", commits, groupedCommits)
+	if githubMilestone != "" {
+		githubCreate(githubMilestone, commitIds, groupedCommits, repo)
+	}
 
 	// cleanup
 	if *memprofile != "" {
