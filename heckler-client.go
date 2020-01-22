@@ -269,7 +269,7 @@ func deltaNoop(priorCommitNoop *puppetutil.PuppetReport, commitNoop *puppetutil.
 	return dr
 }
 
-func groupResources(commitId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node, groupedCommits map[git.Oid][]*groupResource) {
+func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node, groupedCommits map[git.Oid][]*groupResource) {
 	var nodeList []string
 	var desiredValue string
 	// XXX Remove this hack, only needed for old versions of puppet 4.5?
@@ -279,11 +279,11 @@ func groupResources(commitId git.Oid, targetDeltaResource *deltaResource, nodes 
 	var gl *groupLog
 
 	for nodeName, node := range nodes {
-		if nodeDeltaResource, ok := node.commitDeltaResources[commitId][targetDeltaResource.Title]; ok {
+		if nodeDeltaResource, ok := node.commitDeltaResources[commitLogId][targetDeltaResource.Title]; ok {
 			// fmt.Printf("grouping %v\n", targetDeltaResource.Title)
 			if cmp.Equal(targetDeltaResource, nodeDeltaResource) {
 				nodeList = append(nodeList, nodeName)
-				delete(node.commitDeltaResources[commitId], targetDeltaResource.Title)
+				delete(node.commitDeltaResources[commitLogId], targetDeltaResource.Title)
 			} else {
 				// fmt.Printf("Diff:\n %v", cmp.Diff(targetDeltaResource, nodeDeltaResource))
 			}
@@ -329,7 +329,7 @@ func groupResources(commitId git.Oid, targetDeltaResource *deltaResource, nodes 
 			gr.Logs = append(gr.Logs, gl)
 		}
 	}
-	groupedCommits[commitId] = append(groupedCommits[commitId], gr)
+	groupedCommits[commitLogId] = append(groupedCommits[commitLogId], gr)
 }
 
 func (i *hostFlags) String() string {
@@ -402,8 +402,8 @@ func grpcConnect(node *Node, clientConnChan chan *Node) {
 	clientConnChan <- node
 }
 
-func commitIdList(repo *git.Repository, beginRev string, endRev string) ([]git.Oid, error) {
-	var commitIds []git.Oid
+func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]git.Oid, error) {
+	var commitLogIds []git.Oid
 
 	log.Printf("Walk begun: %s..%s\n", beginRev, endRev)
 	rv, err := repo.Walk()
@@ -428,15 +428,15 @@ func commitIdList(repo *git.Repository, beginRev string, endRev string) ([]git.O
 
 	var gi git.Oid
 	for rv.Next(&gi) == nil {
-		commitIds = append(commitIds, gi)
+		commitLogIds = append(commitLogIds, gi)
 		log.Printf("commit: %s\n", gi.String())
 	}
 	log.Printf("Walk Complete\n")
 
-	return commitIds, nil
+	return commitLogIds, nil
 }
 
-func githubCreate(githubMilestone string, commitIds []git.Oid, groupedCommits map[git.Oid][]*groupResource, repo *git.Repository) {
+func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupResource, repo *git.Repository) {
 	// Shared transport to reuse TCP connections.
 	tr := http.DefaultTransport
 
@@ -465,9 +465,9 @@ func githubCreate(githubMilestone string, commitIds []git.Oid, groupedCommits ma
 
 	var c *git.Commit
 	var gc []*groupResource
-	for i := 0; i < len(commitIds); i++ {
-		gc = groupedCommits[commitIds[i]]
-		c, err = repo.LookupCommit(&commitIds[i])
+	for i := 0; i < len(commitLogIds); i++ {
+		gc = groupedCommits[commitLogIds[i]]
+		c, err = repo.LookupCommit(&commitLogIds[i])
 		if err != nil {
 			log.Fatal("Could not lookup commit:", err)
 		}
@@ -598,7 +598,7 @@ func main() {
 		node.commitDeltaResources = make(map[git.Oid]map[string]*deltaResource)
 	}
 
-	commitIds, err := commitIdList(repo, beginRev, endRev)
+	commitLogIds, err := commitLogIdList(repo, beginRev, endRev)
 	if err != nil {
 		log.Fatalf("Unable to get commit id list", err)
 	}
@@ -608,12 +608,12 @@ func main() {
 	var file *os.File
 	var rprt *puppetutil.PuppetReport
 
-	for i, commitId := range commitIds {
-		log.Printf("Nooping: %s (%d of %d)", commitId.String(), i, len(commitIds))
-		par := puppetutil.PuppetApplyRequest{Rev: commitId.String(), Noop: true}
+	for i, commitLogId := range commitLogIds {
+		log.Printf("Nooping: %s (%d of %d)", commitLogId.String(), i, len(commitLogIds))
+		par := puppetutil.PuppetApplyRequest{Rev: commitLogId.String(), Noop: true}
 		noopRequests = 0
 		for host, node := range nodes {
-			reportPath = revdir + "/" + host + "/" + commitId.String() + ".json"
+			reportPath = revdir + "/" + host + "/" + commitLogId.String() + ".json"
 			if _, err := os.Stat(reportPath); err == nil {
 				file, err = os.Open(reportPath)
 				if err != nil {
@@ -634,7 +634,7 @@ func main() {
 					log.Fatalf("Host mismatch %s != %s", host, rprt.Host)
 				}
 				log.Printf("Found serialized noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
-				nodes[rprt.Host].commitReports[commitId] = rprt
+				nodes[rprt.Host].commitReports[commitLogId] = rprt
 			} else {
 				go hecklerApply(node.rizzoClient, puppetReportChan, par)
 				noopRequests++
@@ -644,10 +644,10 @@ func main() {
 		for j := 0; j < noopRequests; j++ {
 			rprt := <-puppetReportChan
 			log.Printf("Received noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
-			nodes[rprt.Host].commitReports[commitId] = &rprt
-			nodes[rprt.Host].commitReports[commitId].Logs = normalizeLogs(nodes[rprt.Host].commitReports[commitId].Logs)
+			nodes[rprt.Host].commitReports[commitLogId] = &rprt
+			nodes[rprt.Host].commitReports[commitLogId].Logs = normalizeLogs(nodes[rprt.Host].commitReports[commitLogId].Logs)
 
-			reportPath = revdir + "/" + rprt.Host + "/" + commitId.String() + ".json"
+			reportPath = revdir + "/" + rprt.Host + "/" + commitLogId.String() + ".json"
 			data, err = json.Marshal(rprt)
 			if err != nil {
 				log.Fatalf("Cannot marshal report: %v", err)
@@ -661,41 +661,41 @@ func main() {
 
 		for host, node := range nodes {
 			if i == 0 {
-				node.commitDeltaResources[commitId] = deltaNoop(new(puppetutil.PuppetReport), node.commitReports[commitId])
+				node.commitDeltaResources[commitLogId] = deltaNoop(new(puppetutil.PuppetReport), node.commitReports[commitLogId])
 			} else {
-				log.Printf("Creating delta resource: %s@(%s - %s)", host, commitId.String(), commitIds[i-1].String())
-				node.commitDeltaResources[commitId] = deltaNoop(node.commitReports[commitIds[i-1]], node.commitReports[commitId])
+				log.Printf("Creating delta resource: %s@(%s - %s)", host, commitLogId.String(), commitLogIds[i-1].String())
+				node.commitDeltaResources[commitLogId] = deltaNoop(node.commitReports[commitLogIds[i-1]], node.commitReports[commitLogId])
 				if Debug {
-					fmt.Printf("Delta resources: len %v\n", len(node.commitDeltaResources[commitId]))
+					fmt.Printf("Delta resources: len %v\n", len(node.commitDeltaResources[commitLogId]))
 				}
 			}
 		}
 	}
 
-	for i := 0; i < len(commitIds); i++ {
-		log.Printf("Grouping: %s", commitIds[i].String())
+	for i := 0; i < len(commitLogIds); i++ {
+		log.Printf("Grouping: %s", commitLogIds[i].String())
 		for _, node := range nodes {
-			for _, dr := range node.commitDeltaResources[commitIds[i]] {
-				groupResources(commitIds[i], dr, nodes, groupedCommits)
+			for _, dr := range node.commitDeltaResources[commitLogIds[i]] {
+				groupResources(commitLogIds[i], dr, nodes, groupedCommits)
 			}
 		}
 	}
 
 	var c *git.Commit
 	var gc []*groupResource
-	for i := 0; i < len(commitIds); i++ {
-		c, err = repo.LookupCommit(&commitIds[i])
+	for i := 0; i < len(commitLogIds); i++ {
+		c, err = repo.LookupCommit(&commitLogIds[i])
 		if err != nil {
 			log.Fatal("Could not lookup commit:", err)
 		}
 		fmt.Printf("## Puppet noop output for commit: '%v'\n\n", c.Summary())
 		fmt.Printf("%s", commitToMarkdown(c))
-		gc = groupedCommits[commitIds[i]]
+		gc = groupedCommits[commitLogIds[i]]
 		fmt.Printf("%s", groupResourcesToMarkdown(gc))
 	}
 
 	if githubMilestone != "" {
-		githubCreate(githubMilestone, commitIds, groupedCommits, repo)
+		githubCreate(githubMilestone, commitLogIds, groupedCommits, repo)
 	}
 
 	// cleanup
