@@ -196,7 +196,7 @@ func groupResourcesToMarkdown(groupedResources []*groupResource) string {
 	return body.String()
 }
 
-func deltaNoop(priorCommitNoop *puppetutil.PuppetReport, commitNoop *puppetutil.PuppetReport) map[string]*deltaResource {
+func deltaNoop(commitNoop *puppetutil.PuppetReport, priorCommitNoops []*puppetutil.PuppetReport) map[string]*deltaResource {
 	var foundPrior bool
 	var deltaEvents []*puppetutil.Event
 	var deltaLogs []*puppetutil.Log
@@ -222,19 +222,17 @@ func deltaNoop(priorCommitNoop *puppetutil.PuppetReport, commitNoop *puppetutil.
 		}
 
 		for _, e := range r.Events {
-			if priorResourceStatuses, ok := priorCommitNoop.ResourceStatuses[resourceTitle]; ok {
-				foundPrior = false
-				for _, pe := range priorResourceStatuses.Events {
-					if *e == *pe {
-						foundPrior = true
-						break
+			foundPrior = false
+			for _, priorCommitNoop := range priorCommitNoops {
+				if priorResourceStatuses, ok := priorCommitNoop.ResourceStatuses[resourceTitle]; ok {
+					for _, pe := range priorResourceStatuses.Events {
+						if *e == *pe {
+							foundPrior = true
+						}
 					}
 				}
-				if foundPrior == false {
-					deltaEvents = append(deltaEvents, e)
-				}
-			} else {
-				// no prior events at all, so no need to compare
+			}
+			if foundPrior == false {
 				deltaEvents = append(deltaEvents, e)
 			}
 		}
@@ -242,10 +240,11 @@ func deltaNoop(priorCommitNoop *puppetutil.PuppetReport, commitNoop *puppetutil.
 		for _, l := range commitNoop.Logs {
 			if l.Source == resourceTitle {
 				foundPrior = false
-				for _, pl := range priorCommitNoop.Logs {
-					if *l == *pl {
-						foundPrior = true
-						break
+				for _, priorCommitNoop := range priorCommitNoops {
+					for _, pl := range priorCommitNoop.Logs {
+						if *l == *pl {
+							foundPrior = true
+						}
 					}
 				}
 				if foundPrior == false {
@@ -487,6 +486,16 @@ func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits
 	}
 }
 
+func commitParentReports(commit *git.Commit, commitReports map[git.Oid]*puppetutil.PuppetReport) []*puppetutil.PuppetReport {
+	var parentReports []*puppetutil.PuppetReport
+
+	parentCount := commit.ParentCount()
+	for i := uint(0); i < parentCount; i++ {
+		parentReports = append(parentReports, commitReports[*commit.ParentId(i)])
+	}
+	return parentReports
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var hosts hostFlags
@@ -660,15 +669,17 @@ func main() {
 			}
 
 		}
+	}
 
-		for host, node := range nodes {
+	for host, node := range nodes {
+		for i, gi := range commitLogIds {
 			if i == 0 {
-				node.commitDeltaResources[commitLogId] = deltaNoop(new(puppetutil.PuppetReport), node.commitReports[commitLogId])
+				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], []*puppetutil.PuppetReport{new(puppetutil.PuppetReport)})
 			} else {
-				log.Printf("Creating delta resource: %s@(%s - %s)", host, commitLogId.String(), commitLogIds[i-1].String())
-				node.commitDeltaResources[commitLogId] = deltaNoop(node.commitReports[commitLogIds[i-1]], node.commitReports[commitLogId])
+				log.Printf("Creating delta resource: %s@%s", host, gi.String())
+				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], commitParentReports(commits[gi], node.commitReports))
 				if Debug {
-					fmt.Printf("Delta resources: len %v\n", len(node.commitDeltaResources[commitLogId]))
+					fmt.Printf("Delta resources: len %v\n", len(node.commitDeltaResources[gi]))
 				}
 			}
 		}
