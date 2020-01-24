@@ -678,9 +678,6 @@ func main() {
 			} else {
 				log.Printf("Creating delta resource: %s@%s", host, gi.String())
 				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], commitParentReports(commits[gi], node.commitReports))
-				if Debug {
-					fmt.Printf("Delta resources: len %v\n", len(node.commitDeltaResources[gi]))
-				}
 			}
 		}
 	}
