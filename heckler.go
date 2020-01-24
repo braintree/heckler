@@ -496,6 +496,18 @@ func commitParentReports(commit *git.Commit, commitReports map[git.Oid]*puppetut
 	return parentReports
 }
 
+func markdownOutput(commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, groupedCommits map[git.Oid][]*groupedResource) {
+	for _, gi := range commitLogIds {
+		if len(groupedCommits[gi]) == 0 {
+			log.Printf("Skipping %s, no noop output\n", gi.String())
+			continue
+		}
+		fmt.Printf("## Puppet noop output for commit: '%v'\n\n", commits[gi].Summary())
+		fmt.Printf("%s", commitToMarkdown(commits[gi]))
+		fmt.Printf("%s", groupedResourcesToMarkdown(groupedCommits[gi]))
+	}
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var hosts hostFlags
@@ -503,6 +515,7 @@ func main() {
 	var endRev string
 	var rev string
 	var noop bool
+	var markdownOut bool
 	var githubMilestone string
 	var data []byte
 	var nodes map[string]*Node
@@ -518,6 +531,7 @@ func main() {
 	flag.StringVar(&endRev, "endrev", "", "end rev")
 	flag.StringVar(&rev, "rev", "", "rev to apply or noop")
 	flag.BoolVar(&noop, "noop", false, "noop")
+	flag.BoolVar(&markdownOut, "md", false, "Generate markdown output")
 	flag.StringVar(&githubMilestone, "github", "", "Github milestone to create")
 	flag.BoolVar(&Debug, "debug", false, "enable debugging")
 	flag.Parse()
@@ -691,10 +705,8 @@ func main() {
 		}
 	}
 
-	for _, gi := range commitLogIds {
-		fmt.Printf("## Puppet noop output for commit: '%v'\n\n", commits[gi].Summary())
-		fmt.Printf("%s", commitToMarkdown(commits[gi]))
-		fmt.Printf("%s", groupedResourcesToMarkdown(groupedCommits[gi]))
+	if markdownOut {
+		markdownOutput(commitLogIds, commits, groupedCommits)
 	}
 
 	if githubMilestone != "" {
