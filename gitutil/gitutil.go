@@ -3,6 +3,7 @@ package gitutil
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path"
 
@@ -72,16 +73,16 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 	}
 
 	if (analysis & git.MergeAnalysisUpToDate) != 0 {
-		fmt.Println("Already up to date")
+		log.Println("Already up to date")
 		return nil
 	}
 
 	if (analysis & git.MergeAnalysisFastForward) == 0 {
-		fmt.Println("Not a fast forward, bailing")
+		log.Println("Not a fast forward, bailing")
 		return errors.New("Not a fast forward, bailing")
 	}
 
-	fmt.Printf("Fast forward...")
+	log.Printf("Fast forward...")
 	// Fast-forward changes
 	// Get remote tree
 	remoteTree, err := repo.LookupTree(remoteBranchCommit.TreeId())
@@ -126,7 +127,7 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 		return err
 	}
 
-	fmt.Println("Success")
+	log.Println("Success")
 	return nil
 }
 
