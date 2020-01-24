@@ -472,6 +472,10 @@ func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits
 	fmt.Printf("Successfully created new milestone: %v\n", *nm.Title)
 
 	for _, gi := range commitLogIds {
+		if len(groupedCommits[gi]) == 0 {
+			log.Printf("Skipping %s, no noop output\n", gi.String())
+			continue
+		}
 		githubIssue := &github.IssueRequest{
 			Title:     github.String(fmt.Sprintf("Puppet noop output for commit: '%v'", commits[gi].Summary())),
 			Assignee:  github.String(commits[gi].Author().Name),
