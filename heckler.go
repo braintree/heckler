@@ -51,7 +51,7 @@ type deltaResource struct {
 	Logs       []*puppetutil.Log
 }
 
-type groupResource struct {
+type groupedResource struct {
 	Title      string
 	Type       string
 	DefineType string
@@ -183,13 +183,13 @@ func commitToMarkdown(c *git.Commit) string {
 	return body.String()
 }
 
-func groupResourcesToMarkdown(groupedResources []*groupResource) string {
+func groupedResourcesToMarkdown(groupedResources []*groupedResource) string {
 	var body strings.Builder
 	var err error
 
 	tpl := template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob("*.tmpl"))
 
-	err = tpl.ExecuteTemplate(&body, "groupResource.tmpl", groupedResources)
+	err = tpl.ExecuteTemplate(&body, "groupedResource.tmpl", groupedResources)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -268,12 +268,12 @@ func deltaNoop(commitNoop *puppetutil.PuppetReport, priorCommitNoops []*puppetut
 	return dr
 }
 
-func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node, groupedCommits map[git.Oid][]*groupResource) {
+func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node, groupedCommits map[git.Oid][]*groupedResource) {
 	var nodeList []string
 	var desiredValue string
 	// XXX Remove this hack, only needed for old versions of puppet 4.5?
 	var regexRubySym = regexp.MustCompile(`^:`)
-	var gr *groupResource
+	var gr *groupedResource
 	var ge *groupEvent
 	var gl *groupLog
 
@@ -289,7 +289,7 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 		}
 	}
 
-	gr = new(groupResource)
+	gr = new(groupedResource)
 	gr.Title = targetDeltaResource.Title
 	gr.Type = targetDeltaResource.Type
 	gr.DefineType = targetDeltaResource.DefineType
@@ -444,7 +444,7 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 	return commitLogIds, commits, nil
 }
 
-func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupResource, commits map[git.Oid]*git.Commit) {
+func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit) {
 	// Shared transport to reuse TCP connections.
 	tr := http.DefaultTransport
 
@@ -475,7 +475,7 @@ func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits
 		githubIssue := &github.IssueRequest{
 			Title:     github.String(fmt.Sprintf("Puppet noop output for commit: '%v'", commits[gi].Summary())),
 			Assignee:  github.String(commits[gi].Author().Name),
-			Body:      github.String(commitToMarkdown(commits[gi]) + groupResourcesToMarkdown(groupedCommits[gi])),
+			Body:      github.String(commitToMarkdown(commits[gi]) + groupedResourcesToMarkdown(groupedCommits[gi])),
 			Milestone: nm.Number,
 		}
 		ni, _, err := client.Issues.Create(ctx, "lollipopman", "muppetshow", githubIssue)
@@ -599,9 +599,9 @@ func main() {
 		os.Mkdir(revdir+"/"+host, 077)
 	}
 
-	var groupedCommits map[git.Oid][]*groupResource
+	var groupedCommits map[git.Oid][]*groupedResource
 
-	groupedCommits = make(map[git.Oid][]*groupResource)
+	groupedCommits = make(map[git.Oid][]*groupedResource)
 
 	// XXX Should or can this be done in new(Node)?
 	for _, node := range nodes {
@@ -694,7 +694,7 @@ func main() {
 	for _, gi := range commitLogIds {
 		fmt.Printf("## Puppet noop output for commit: '%v'\n\n", commits[gi].Summary())
 		fmt.Printf("%s", commitToMarkdown(commits[gi]))
-		fmt.Printf("%s", groupResourcesToMarkdown(groupedCommits[gi]))
+		fmt.Printf("%s", groupedResourcesToMarkdown(groupedCommits[gi]))
 	}
 
 	if githubMilestone != "" {
