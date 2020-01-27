@@ -703,8 +703,8 @@ func main() {
 	for _, gi := range commitLogIds {
 		log.Printf("Grouping: %s", gi.String())
 		for _, node := range nodes {
-			for _, dr := range node.commitDeltaResources[gi] {
-				groupResources(gi, dr, nodes, groupedCommits)
+			for _, nodeDeltaRes := range node.commitDeltaResources[gi] {
+				groupResources(gi, nodeDeltaRes, nodes, groupedCommits)
 			}
 		}
 	}
