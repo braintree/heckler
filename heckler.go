@@ -287,12 +287,9 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 
 	for nodeName, node := range nodes {
 		if nodeDeltaResource, ok := node.commitDeltaResources[commitLogId][targetDeltaResource.Title]; ok {
-			// fmt.Printf("grouping %v\n", targetDeltaResource.Title)
 			if cmp.Equal(targetDeltaResource, nodeDeltaResource) {
 				nodeList = append(nodeList, nodeName)
 				delete(node.commitDeltaResources[commitLogId], targetDeltaResource.Title)
-			} else {
-				// fmt.Printf("Diff:\n %v", cmp.Diff(targetDeltaResource, nodeDeltaResource))
 			}
 		}
 	}
