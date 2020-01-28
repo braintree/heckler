@@ -202,78 +202,77 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource) string {
 	return body.String()
 }
 
+func resourceDefineType(res *puppetutil.ResourceStatus) string {
+	var defineType string
+
+	cplen := len(res.ContainmentPath)
+	if cplen > 2 {
+		possibleDefineType := res.ContainmentPath[cplen-2]
+		if RegexDefineType.MatchString(possibleDefineType) {
+			defineType = possibleDefineType
+		}
+	}
+	return defineType
+}
+
 func deltaNoop(commitNoop *puppetutil.PuppetReport, priorCommitNoops []*puppetutil.PuppetReport) map[ResourceTitle]*deltaResource {
-	var foundPrior bool
+	var foundPriorLog bool
+	var foundPriorEvent bool
 	var deltaEvents []*puppetutil.Event
 	var deltaLogs []*puppetutil.Log
-	var dr map[ResourceTitle]*deltaResource
-	var partOfDefine bool
-	var defineType string
+	var deltaResources map[ResourceTitle]*deltaResource
 	var resourceTitle ResourceTitle
 
-	dr = make(map[ResourceTitle]*deltaResource)
+	deltaResources = make(map[ResourceTitle]*deltaResource)
 
-	for resourceTitleString, r := range commitNoop.ResourceStatuses {
-		resourceTitle = ResourceTitle(resourceTitleString)
-		partOfDefine = false
+	for resourceTitleStr, r := range commitNoop.ResourceStatuses {
 		deltaEvents = nil
 		deltaLogs = nil
-		defineType = ""
 
-		cplen := len(r.ContainmentPath)
-		if cplen > 2 {
-			possibleDefineType := r.ContainmentPath[cplen-2]
-			if RegexDefineType.MatchString(possibleDefineType) {
-				partOfDefine = true
-				defineType = possibleDefineType
-			}
-		}
-
-		for _, e := range r.Events {
-			foundPrior = false
+		for _, event := range r.Events {
+			foundPriorEvent = false
 			for _, priorCommitNoop := range priorCommitNoops {
-				if priorResourceStatuses, ok := priorCommitNoop.ResourceStatuses[string(resourceTitle)]; ok {
-					for _, pe := range priorResourceStatuses.Events {
-						if *e == *pe {
-							foundPrior = true
+				if priorResourceStatuses, ok := priorCommitNoop.ResourceStatuses[resourceTitleStr]; ok {
+					for _, priorEvent := range priorResourceStatuses.Events {
+						if *event == *priorEvent {
+							foundPriorEvent = true
 						}
 					}
 				}
 			}
-			if foundPrior == false {
-				deltaEvents = append(deltaEvents, e)
+			if foundPriorEvent == false {
+				deltaEvents = append(deltaEvents, event)
 			}
 		}
 
-		for _, l := range commitNoop.Logs {
-			if ResourceTitle(l.Source) == resourceTitle {
-				foundPrior = false
+		for _, log := range commitNoop.Logs {
+			if log.Source == resourceTitleStr {
+				foundPriorLog = false
 				for _, priorCommitNoop := range priorCommitNoops {
-					for _, pl := range priorCommitNoop.Logs {
-						if *l == *pl {
-							foundPrior = true
+					for _, priorLog := range priorCommitNoop.Logs {
+						if *log == *priorLog {
+							foundPriorLog = true
 						}
 					}
 				}
-				if foundPrior == false {
-					deltaLogs = append(deltaLogs, l)
+				if foundPriorLog == false {
+					deltaLogs = append(deltaLogs, log)
 				}
 			}
 		}
 
 		if len(deltaEvents) > 0 || len(deltaLogs) > 0 {
-			dr[resourceTitle] = new(deltaResource)
-			dr[resourceTitle].Title = resourceTitle
-			dr[resourceTitle].Type = r.ResourceType
-			dr[resourceTitle].Events = deltaEvents
-			dr[resourceTitle].Logs = deltaLogs
-			if partOfDefine {
-				dr[resourceTitle].DefineType = defineType
-			}
+			resourceTitle = ResourceTitle(resourceTitleStr)
+			deltaResources[resourceTitle] = new(deltaResource)
+			deltaResources[resourceTitle].Title = resourceTitle
+			deltaResources[resourceTitle].Type = r.ResourceType
+			deltaResources[resourceTitle].Events = deltaEvents
+			deltaResources[resourceTitle].Logs = deltaLogs
+			deltaResources[resourceTitle].DefineType = resourceDefineType(r)
 		}
 	}
 
-	return dr
+	return deltaResources
 }
 
 func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node) *groupedResource {
