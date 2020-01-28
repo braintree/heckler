@@ -215,9 +215,41 @@ func resourceDefineType(res *puppetutil.ResourceStatus) string {
 	return defineType
 }
 
+func priorEvent(event *puppetutil.Event, resourceTitleStr string, priorCommitNoops []*puppetutil.PuppetReport) bool {
+	for _, priorCommitNoop := range priorCommitNoops {
+		if priorResourceStatuses, ok := priorCommitNoop.ResourceStatuses[resourceTitleStr]; ok {
+			for _, priorEvent := range priorResourceStatuses.Events {
+				if *event == *priorEvent {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func priorLog(log *puppetutil.Log, priorCommitNoops []*puppetutil.PuppetReport) bool {
+	for _, priorCommitNoop := range priorCommitNoops {
+		for _, priorLog := range priorCommitNoop.Logs {
+			if *log == *priorLog {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func initDeltaResource(resourceTitle ResourceTitle, r *puppetutil.ResourceStatus, deltaEvents []*puppetutil.Event, deltaLogs []*puppetutil.Log) *deltaResource {
+	deltaRes := new(deltaResource)
+	deltaRes.Title = resourceTitle
+	deltaRes.Type = r.ResourceType
+	deltaRes.Events = deltaEvents
+	deltaRes.Logs = deltaLogs
+	deltaRes.DefineType = resourceDefineType(r)
+	return deltaRes
+}
+
 func deltaNoop(commitNoop *puppetutil.PuppetReport, priorCommitNoops []*puppetutil.PuppetReport) map[ResourceTitle]*deltaResource {
-	var foundPriorLog bool
-	var foundPriorEvent bool
 	var deltaEvents []*puppetutil.Event
 	var deltaLogs []*puppetutil.Log
 	var deltaResources map[ResourceTitle]*deltaResource
@@ -230,32 +262,14 @@ func deltaNoop(commitNoop *puppetutil.PuppetReport, priorCommitNoops []*puppetut
 		deltaLogs = nil
 
 		for _, event := range r.Events {
-			foundPriorEvent = false
-			for _, priorCommitNoop := range priorCommitNoops {
-				if priorResourceStatuses, ok := priorCommitNoop.ResourceStatuses[resourceTitleStr]; ok {
-					for _, priorEvent := range priorResourceStatuses.Events {
-						if *event == *priorEvent {
-							foundPriorEvent = true
-						}
-					}
-				}
-			}
-			if foundPriorEvent == false {
+			if priorEvent(event, resourceTitleStr, priorCommitNoops) == false {
 				deltaEvents = append(deltaEvents, event)
 			}
 		}
 
 		for _, log := range commitNoop.Logs {
 			if log.Source == resourceTitleStr {
-				foundPriorLog = false
-				for _, priorCommitNoop := range priorCommitNoops {
-					for _, priorLog := range priorCommitNoop.Logs {
-						if *log == *priorLog {
-							foundPriorLog = true
-						}
-					}
-				}
-				if foundPriorLog == false {
+				if priorLog(log, priorCommitNoops) == false {
 					deltaLogs = append(deltaLogs, log)
 				}
 			}
@@ -263,12 +277,7 @@ func deltaNoop(commitNoop *puppetutil.PuppetReport, priorCommitNoops []*puppetut
 
 		if len(deltaEvents) > 0 || len(deltaLogs) > 0 {
 			resourceTitle = ResourceTitle(resourceTitleStr)
-			deltaResources[resourceTitle] = new(deltaResource)
-			deltaResources[resourceTitle].Title = resourceTitle
-			deltaResources[resourceTitle].Type = r.ResourceType
-			deltaResources[resourceTitle].Events = deltaEvents
-			deltaResources[resourceTitle].Logs = deltaLogs
-			deltaResources[resourceTitle].DefineType = resourceDefineType(r)
+			deltaResources[resourceTitle] = initDeltaResource(resourceTitle, r, deltaEvents, deltaLogs)
 		}
 	}
 
