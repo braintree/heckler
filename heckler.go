@@ -39,12 +39,12 @@ type hostFlags []string
 type Node struct {
 	host                 string
 	commitReports        map[git.Oid]*puppetutil.PuppetReport
-	commitDeltaResources map[git.Oid]map[string]*deltaResource
+	commitDeltaResources map[git.Oid]map[ResourceTitle]*deltaResource
 	rizzoClient          puppetutil.RizzoClient
 }
 
 type deltaResource struct {
-	Title      string
+	Title      ResourceTitle
 	Type       string
 	DefineType string
 	Events     []*puppetutil.Event
@@ -52,7 +52,7 @@ type deltaResource struct {
 }
 
 type groupedResource struct {
-	Title      string
+	Title      ResourceTitle
 	Type       string
 	DefineType string
 	Diff       string
@@ -70,6 +70,8 @@ type groupLog struct {
 	Level   string
 	Message string
 }
+
+type ResourceTitle string
 
 func prettyPrint(i interface{}) string {
 	s, _ := json.MarshalIndent(i, "", "\t")
@@ -174,6 +176,7 @@ func commitToMarkdown(c *git.Commit) string {
 	var body strings.Builder
 	var err error
 
+	// XXX better way to not duplicate this code?
 	tpl := template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob("*.tmpl"))
 
 	err = tpl.ExecuteTemplate(&body, "commit.tmpl", c)
@@ -187,6 +190,9 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource) string {
 	var body strings.Builder
 	var err error
 
+	sort.Slice(groupedResources, func(i, j int) bool { return string(groupedResources[i].Title) < string(groupedResources[j].Title) })
+
+	// XXX better way to not duplicate this code?
 	tpl := template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob("*.tmpl"))
 
 	err = tpl.ExecuteTemplate(&body, "groupedResource.tmpl", groupedResources)
@@ -196,17 +202,19 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource) string {
 	return body.String()
 }
 
-func deltaNoop(commitNoop *puppetutil.PuppetReport, priorCommitNoops []*puppetutil.PuppetReport) map[string]*deltaResource {
+func deltaNoop(commitNoop *puppetutil.PuppetReport, priorCommitNoops []*puppetutil.PuppetReport) map[ResourceTitle]*deltaResource {
 	var foundPrior bool
 	var deltaEvents []*puppetutil.Event
 	var deltaLogs []*puppetutil.Log
-	var dr map[string]*deltaResource
+	var dr map[ResourceTitle]*deltaResource
 	var partOfDefine bool
 	var defineType string
+	var resourceTitle ResourceTitle
 
-	dr = make(map[string]*deltaResource)
+	dr = make(map[ResourceTitle]*deltaResource)
 
-	for resourceTitle, r := range commitNoop.ResourceStatuses {
+	for resourceTitleString, r := range commitNoop.ResourceStatuses {
+		resourceTitle = ResourceTitle(resourceTitleString)
 		partOfDefine = false
 		deltaEvents = nil
 		deltaLogs = nil
@@ -224,7 +232,7 @@ func deltaNoop(commitNoop *puppetutil.PuppetReport, priorCommitNoops []*puppetut
 		for _, e := range r.Events {
 			foundPrior = false
 			for _, priorCommitNoop := range priorCommitNoops {
-				if priorResourceStatuses, ok := priorCommitNoop.ResourceStatuses[resourceTitle]; ok {
+				if priorResourceStatuses, ok := priorCommitNoop.ResourceStatuses[string(resourceTitle)]; ok {
 					for _, pe := range priorResourceStatuses.Events {
 						if *e == *pe {
 							foundPrior = true
@@ -238,7 +246,7 @@ func deltaNoop(commitNoop *puppetutil.PuppetReport, priorCommitNoops []*puppetut
 		}
 
 		for _, l := range commitNoop.Logs {
-			if l.Source == resourceTitle {
+			if ResourceTitle(l.Source) == resourceTitle {
 				foundPrior = false
 				for _, priorCommitNoop := range priorCommitNoops {
 					for _, pl := range priorCommitNoop.Logs {
@@ -268,7 +276,7 @@ func deltaNoop(commitNoop *puppetutil.PuppetReport, priorCommitNoops []*puppetut
 	return dr
 }
 
-func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node, groupedCommits map[git.Oid][]*groupedResource) {
+func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node) *groupedResource {
 	var nodeList []string
 	var desiredValue string
 	// XXX Remove this hack, only needed for old versions of puppet 4.5?
@@ -328,7 +336,8 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 			gr.Logs = append(gr.Logs, gl)
 		}
 	}
-	groupedCommits[commitLogId] = append(groupedCommits[commitLogId], gr)
+	log.Printf("Appending groupedResource %v\n", gr.Title)
+	return gr
 }
 
 func (i *hostFlags) String() string {
@@ -624,7 +633,7 @@ func main() {
 	// XXX Should or can this be done in new(Node)?
 	for _, node := range nodes {
 		node.commitReports = make(map[git.Oid]*puppetutil.PuppetReport)
-		node.commitDeltaResources = make(map[git.Oid]map[string]*deltaResource)
+		node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 	}
 
 	commitLogIds, commits, err := commitLogIdList(repo, beginRev, endRev)
@@ -704,7 +713,7 @@ func main() {
 		log.Printf("Grouping: %s", gi.String())
 		for _, node := range nodes {
 			for _, nodeDeltaRes := range node.commitDeltaResources[gi] {
-				groupResources(gi, nodeDeltaRes, nodes, groupedCommits)
+				groupedCommits[gi] = append(groupedCommits[gi], groupResources(gi, nodeDeltaRes, nodes))
 			}
 		}
 	}
