@@ -99,6 +99,18 @@ Puppet::Reports.register_report(:heckler) do
       Puppet.log_exception(detail, "Could not write report for #{host} at #{file}: #{detail}")
     end
 
+    if report["noop"] == false && report["status"] != "falied"
+        apply_name = "heckler_last_apply.json"
+        apply_file = File.join(dir, apply_name)
+      begin
+        Puppet::Util.replace_file(apply_file, 0640) do |fh|
+          fh.print report.to_json
+        end
+      rescue => detail
+        Puppet.log_exception(detail, "Could not write apply report for #{host} at #{apply_file}: #{detail}")
+      end
+    end
+
     # Only testing cares about the return value
     file
   end

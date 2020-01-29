@@ -124,6 +124,29 @@ func (s *server) PuppetApply(ctx context.Context, req *puppetutil.PuppetApplyReq
 	return pr, nil
 }
 
+// PuppetLastApply implements rizzo.RizzoServer
+func (s *server) PuppetLastApply(ctx context.Context, req *puppetutil.PuppetLastApplyRequest) (*puppetutil.PuppetReport, error) {
+	var err error
+
+	log.Printf("PuppetLastApply: request received")
+	file, err := os.Open("/var/tmp/reports/heckler/heckler_last_apply.json")
+	if err != nil {
+		return &puppetutil.PuppetReport{}, err
+	}
+	defer file.Close()
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		return &puppetutil.PuppetReport{}, err
+	}
+	pr := new(puppetutil.PuppetReport)
+	err = json.Unmarshal([]byte(data), pr)
+	if err != nil {
+		return &puppetutil.PuppetReport{}, err
+	}
+	log.Printf("PuppetLastApply: status@%s", pr.ConfigurationVersion)
+	return pr, nil
+}
+
 func makeCredentialsCallback() git.CredentialsCallback {
 	called := false
 	return func(url string, username string, allowedTypes git.CredType) (git.ErrorCode, *git.Cred) {

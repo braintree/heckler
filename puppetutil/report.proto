@@ -68,6 +68,7 @@ message ResourceStatus {
 service Rizzo {
   // applies a ref
   rpc PuppetApply (PuppetApplyRequest) returns (PuppetReport) {}
+  rpc PuppetLastApply (PuppetLastApplyRequest) returns (PuppetReport) {}
 }
 
 // The request message containing the git rev identifier, e.g. a tag or a
@@ -76,3 +77,6 @@ message PuppetApplyRequest {
   string rev = 1;
   bool noop = 2;
 }
+
+// Ask for last apply report
+message PuppetLastApplyRequest {}

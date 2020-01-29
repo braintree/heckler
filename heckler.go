@@ -514,6 +514,28 @@ func commitParentReports(commit *git.Commit, commitReports map[git.Oid]*puppetut
 	return parentReports
 }
 
+func hecklerLastApply(rc puppetutil.RizzoClient, c chan<- puppetutil.PuppetReport) {
+	plar := puppetutil.PuppetLastApplyRequest{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
+	defer cancel()
+	r, err := rc.PuppetLastApply(ctx, &plar)
+	if err != nil {
+		c <- puppetutil.PuppetReport{}
+	}
+	c <- *r
+}
+
+func nodeStatus(nodes map[string]*Node, puppetReportChan chan puppetutil.PuppetReport) {
+	for _, node := range nodes {
+		go hecklerLastApply(node.rizzoClient, puppetReportChan)
+	}
+
+	for range nodes {
+		r := <-puppetReportChan
+		fmt.Printf("Status: %s@%s\n", r.Host, r.ConfigurationVersion)
+	}
+}
+
 func markdownOutput(commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, groupedCommits map[git.Oid][]*groupedResource) {
 	for _, gi := range commitLogIds {
 		if len(groupedCommits[gi]) == 0 {
@@ -533,6 +555,7 @@ func main() {
 	var endRev string
 	var rev string
 	var noop bool
+	var status bool
 	var markdownOut bool
 	var githubMilestone string
 	var data []byte
@@ -548,6 +571,7 @@ func main() {
 	flag.StringVar(&beginRev, "beginrev", "", "begin rev")
 	flag.StringVar(&endRev, "endrev", "", "end rev")
 	flag.StringVar(&rev, "rev", "", "rev to apply or noop")
+	flag.BoolVar(&status, "status", false, "Query node apply status")
 	flag.BoolVar(&noop, "noop", false, "noop")
 	flag.BoolVar(&markdownOut, "md", false, "Generate markdown output")
 	flag.StringVar(&githubMilestone, "github", "", "Github milestone to create")
@@ -564,6 +588,12 @@ func main() {
 			log.Fatal("could not start CPU profile: ", err)
 		}
 		defer pprof.StopCPUProfile()
+	}
+
+	if status && (rev != "" || beginRev != "" || endRev != "") {
+		fmt.Printf("The -status flag cannot be combined with: rev, beginrev, or endrev\n")
+		flag.Usage()
+		os.Exit(1)
 	}
 
 	if rev != "" && (beginRev != "" || endRev != "") {
@@ -600,6 +630,11 @@ func main() {
 		node = <-clientConnChan
 		log.Printf("Conn %s\n", node.host)
 		nodes[node.host] = node
+	}
+
+	if status {
+		nodeStatus(nodes, puppetReportChan)
+		os.Exit(0)
 	}
 
 	if rev != "" {
