@@ -643,7 +643,7 @@ func main() {
 			go hecklerApply(node.rizzoClient, puppetReportChan, par)
 		}
 
-		for range hosts {
+		for range nodes {
 			r := <-puppetReportChan
 			log.Printf("Applied: %s@%s", r.Host, r.ConfigurationVersion)
 		}
