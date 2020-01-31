@@ -191,7 +191,16 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource) string {
 	var body strings.Builder
 	var err error
 
-	sort.Slice(groupedResources, func(i, j int) bool { return string(groupedResources[i].Title) < string(groupedResources[j].Title) })
+	sort.Slice(
+		groupedResources,
+		func(i, j int) bool {
+			if string(groupedResources[i].Title) == string(groupedResources[j].Title) {
+				// if the resources titles are equal sort by the list of nodes affected
+				return strings.Join(groupedResources[i].Nodes[:], ",") < strings.Join(groupedResources[j].Nodes[:], ",")
+			} else {
+				return string(groupedResources[i].Title) < string(groupedResources[j].Title)
+			}
+		})
 
 	// XXX better way to not duplicate this code?
 	tpl := template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob("*.tmpl"))
