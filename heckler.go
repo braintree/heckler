@@ -41,6 +41,7 @@ type Node struct {
 	commitReports        map[git.Oid]*puppetutil.PuppetReport
 	commitDeltaResources map[git.Oid]map[ResourceTitle]*deltaResource
 	rizzoClient          puppetutil.RizzoClient
+	lastApply            *git.Oid
 }
 
 type deltaResource struct {
@@ -525,15 +526,24 @@ func hecklerLastApply(rc puppetutil.RizzoClient, c chan<- puppetutil.PuppetRepor
 	c <- *r
 }
 
-func nodeStatus(nodes map[string]*Node, puppetReportChan chan puppetutil.PuppetReport) {
+func updateLastApply(nodes map[string]*Node, puppetReportChan chan puppetutil.PuppetReport, repo *git.Repository) error {
+	var err error
+
 	for _, node := range nodes {
 		go hecklerLastApply(node.rizzoClient, puppetReportChan)
 	}
 
+	var obj *git.Object
 	for range nodes {
 		r := <-puppetReportChan
-		fmt.Printf("Status: %s@%s\n", r.Host, r.ConfigurationVersion)
+		obj, err = repo.RevparseSingle(r.ConfigurationVersion)
+		if err != nil {
+			return err
+		}
+		nodes[r.Host].lastApply = obj.Id()
 	}
+
+	return nil
 }
 
 func markdownOutput(commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, groupedCommits map[git.Oid][]*groupedResource) {
@@ -633,7 +643,13 @@ func main() {
 	}
 
 	if status {
-		nodeStatus(nodes, puppetReportChan)
+		err = updateLastApply(nodes, puppetReportChan, repo)
+		if err != nil {
+			log.Fatalf("Unable to update lastApply: %v", err)
+		}
+		for _, node := range nodes {
+			fmt.Printf("Status: %s@%s\n", node.host, node.lastApply.String())
+		}
 		os.Exit(0)
 	}
 
