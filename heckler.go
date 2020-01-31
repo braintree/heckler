@@ -267,6 +267,10 @@ func deltaNoop(commitNoop *puppetutil.PuppetReport, priorCommitNoops []*puppetut
 
 	deltaResources = make(map[ResourceTitle]*deltaResource)
 
+	if commitNoop.ResourceStatuses == nil {
+		return deltaResources
+	}
+
 	for resourceTitleStr, r := range commitNoop.ResourceStatuses {
 		deltaEvents = nil
 		deltaLogs = nil
@@ -566,8 +570,18 @@ func markdownOutput(commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, gro
 		fmt.Printf("%s", groupedResourcesToMarkdown(groupedCommits[gi]))
 	}
 }
+func commitAlreadyApplied(appliedCommit *git.Oid, commit *git.Oid, repo *git.Repository) bool {
+	if appliedCommit.Equal(commit) {
+		return true
+	}
+	descendant, err := repo.DescendantOf(appliedCommit, commit)
+	if err != nil {
+		log.Fatalf("Cannot determine descendant status: %v", err)
+	}
+	return descendant
+}
 
-func noopCommitRange(nodes map[string]*Node, puppetReportChan chan puppetutil.PuppetReport, beginRev, endRev string, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit) (map[git.Oid][]*groupedResource, error) {
+func noopCommitRange(nodes map[string]*Node, puppetReportChan chan puppetutil.PuppetReport, beginRev, endRev string, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, repo *git.Repository) (map[git.Oid][]*groupedResource, error) {
 	var err error
 	var data []byte
 	// Make dir structure
@@ -600,31 +614,40 @@ func noopCommitRange(nodes map[string]*Node, puppetReportChan chan puppetutil.Pu
 		par := puppetutil.PuppetApplyRequest{Rev: commitLogId.String(), Noop: true}
 		noopRequests = 0
 		for host, node := range nodes {
+			if node.lastApply == nil {
+				log.Fatalf("Node, %s, does not have a lastApply commit id", node.host)
+			}
 			reportPath = revdir + "/" + host + "/" + commitLogId.String() + ".json"
-			if _, err := os.Stat(reportPath); err == nil {
-				file, err = os.Open(reportPath)
-				if err != nil {
-					log.Fatal(err)
-				}
-				defer file.Close()
-
-				data, err = ioutil.ReadAll(file)
-				if err != nil {
-					log.Fatalf("cannot read report: %v", err)
-				}
-				rprt = new(puppetutil.PuppetReport)
-				err = json.Unmarshal([]byte(data), rprt)
-				if err != nil {
-					log.Fatalf("cannot unmarshal report: %v", err)
-				}
-				if host != rprt.Host {
-					log.Fatalf("Host mismatch %s != %s", host, rprt.Host)
-				}
-				log.Printf("Found serialized noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
-				nodes[rprt.Host].commitReports[commitLogId] = rprt
+			if commitAlreadyApplied(node.lastApply, &commitLogId, repo) {
+				// Use empty report if commit already applied, i.e. empty puppet noop diff
+				log.Printf("Already applied using empty noop: %s@%s", node.host, commitLogId.String())
+				nodes[node.host].commitReports[commitLogId] = new(puppetutil.PuppetReport)
 			} else {
-				go hecklerApply(node.rizzoClient, puppetReportChan, par)
-				noopRequests++
+				if _, err := os.Stat(reportPath); err == nil {
+					file, err = os.Open(reportPath)
+					if err != nil {
+						log.Fatal(err)
+					}
+					defer file.Close()
+
+					data, err = ioutil.ReadAll(file)
+					if err != nil {
+						log.Fatalf("cannot read report: %v", err)
+					}
+					rprt = new(puppetutil.PuppetReport)
+					err = json.Unmarshal([]byte(data), rprt)
+					if err != nil {
+						log.Fatalf("cannot unmarshal report: %v", err)
+					}
+					if host != rprt.Host {
+						log.Fatalf("Host mismatch %s != %s", host, rprt.Host)
+					}
+					log.Printf("Found serialized noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
+					nodes[rprt.Host].commitReports[commitLogId] = rprt
+				} else {
+					go hecklerApply(node.rizzoClient, puppetReportChan, par)
+					noopRequests++
+				}
 			}
 		}
 
@@ -781,9 +804,13 @@ func main() {
 		if err != nil {
 			log.Fatalf("Unable to get commit id list", err)
 		}
-		groupedCommits, err := noopCommitRange(nodes, puppetReportChan, beginRev, endRev, commitLogIds, commits)
+		err = updateLastApply(nodes, puppetReportChan, repo)
 		if err != nil {
 			log.Fatalf("Unable to update lastApply: %v", err)
+		}
+		groupedCommits, err := noopCommitRange(nodes, puppetReportChan, beginRev, endRev, commitLogIds, commits, repo)
+		if err != nil {
+			log.Fatalf("Unable to create groupedCommits: %v", err)
 		}
 		if markdownOut {
 			markdownOutput(commitLogIds, commits, groupedCommits)
