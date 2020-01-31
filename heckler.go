@@ -567,6 +567,108 @@ func markdownOutput(commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, gro
 	}
 }
 
+func noopCommitRange(nodes map[string]*Node, puppetReportChan chan puppetutil.PuppetReport, beginRev, endRev string, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit) (map[git.Oid][]*groupedResource, error) {
+	var err error
+	var data []byte
+	// Make dir structure
+	// e.g. /var/heckler/v1..v2//oid.json
+
+	revdir := fmt.Sprintf("/var/heckler/%s..%s", beginRev, endRev)
+
+	os.MkdirAll(revdir, 077)
+	for host, _ := range nodes {
+		os.Mkdir(revdir+"/"+host, 077)
+	}
+
+	var groupedCommits map[git.Oid][]*groupedResource
+
+	groupedCommits = make(map[git.Oid][]*groupedResource)
+
+	// XXX Should or can this be done in new(Node)?
+	for _, node := range nodes {
+		node.commitReports = make(map[git.Oid]*puppetutil.PuppetReport)
+		node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
+	}
+
+	var noopRequests int
+	var reportPath string
+	var file *os.File
+	var rprt *puppetutil.PuppetReport
+
+	for i, commitLogId := range commitLogIds {
+		log.Printf("Nooping: %s (%d of %d)", commitLogId.String(), i, len(commitLogIds))
+		par := puppetutil.PuppetApplyRequest{Rev: commitLogId.String(), Noop: true}
+		noopRequests = 0
+		for host, node := range nodes {
+			reportPath = revdir + "/" + host + "/" + commitLogId.String() + ".json"
+			if _, err := os.Stat(reportPath); err == nil {
+				file, err = os.Open(reportPath)
+				if err != nil {
+					log.Fatal(err)
+				}
+				defer file.Close()
+
+				data, err = ioutil.ReadAll(file)
+				if err != nil {
+					log.Fatalf("cannot read report: %v", err)
+				}
+				rprt = new(puppetutil.PuppetReport)
+				err = json.Unmarshal([]byte(data), rprt)
+				if err != nil {
+					log.Fatalf("cannot unmarshal report: %v", err)
+				}
+				if host != rprt.Host {
+					log.Fatalf("Host mismatch %s != %s", host, rprt.Host)
+				}
+				log.Printf("Found serialized noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
+				nodes[rprt.Host].commitReports[commitLogId] = rprt
+			} else {
+				go hecklerApply(node.rizzoClient, puppetReportChan, par)
+				noopRequests++
+			}
+		}
+
+		for j := 0; j < noopRequests; j++ {
+			rprt := <-puppetReportChan
+			log.Printf("Received noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
+			nodes[rprt.Host].commitReports[commitLogId] = &rprt
+			nodes[rprt.Host].commitReports[commitLogId].Logs = normalizeLogs(nodes[rprt.Host].commitReports[commitLogId].Logs)
+
+			reportPath = revdir + "/" + rprt.Host + "/" + commitLogId.String() + ".json"
+			data, err = json.Marshal(rprt)
+			if err != nil {
+				log.Fatalf("Cannot marshal report: %v", err)
+			}
+			err = ioutil.WriteFile(reportPath, data, 0644)
+			if err != nil {
+				log.Fatalf("Cannot write report: %v", err)
+			}
+
+		}
+	}
+
+	for host, node := range nodes {
+		for i, gi := range commitLogIds {
+			if i == 0 {
+				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], []*puppetutil.PuppetReport{new(puppetutil.PuppetReport)})
+			} else {
+				log.Printf("Creating delta resource: %s@%s", host, gi.String())
+				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], commitParentReports(commits[gi], node.commitReports))
+			}
+		}
+	}
+
+	for _, gi := range commitLogIds {
+		log.Printf("Grouping: %s", gi.String())
+		for _, node := range nodes {
+			for _, nodeDeltaRes := range node.commitDeltaResources[gi] {
+				groupedCommits[gi] = append(groupedCommits[gi], groupResources(gi, nodeDeltaRes, nodes))
+			}
+		}
+	}
+	return groupedCommits, nil
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var hosts hostFlags
@@ -577,7 +679,6 @@ func main() {
 	var status bool
 	var markdownOut bool
 	var githubMilestone string
-	var data []byte
 	var nodes map[string]*Node
 	var puppetReportChan chan puppetutil.PuppetReport
 	var node *Node
@@ -675,120 +776,26 @@ func main() {
 		os.Exit(0)
 	}
 
-	if beginRev == "" || endRev == "" {
+	if beginRev != "" && endRev != "" {
+		commitLogIds, commits, err := commitLogIdList(repo, beginRev, endRev)
+		if err != nil {
+			log.Fatalf("Unable to get commit id list", err)
+		}
+		groupedCommits, err := noopCommitRange(nodes, puppetReportChan, beginRev, endRev, commitLogIds, commits)
+		if err != nil {
+			log.Fatalf("Unable to update lastApply: %v", err)
+		}
+		if markdownOut {
+			markdownOutput(commitLogIds, commits, groupedCommits)
+		}
+		if githubMilestone != "" {
+			githubCreate(githubMilestone, commitLogIds, groupedCommits, commits)
+		}
+		os.Exit(0)
+	} else {
 		fmt.Printf("ERROR: You must supply -beginrev & -endrev or -rev\n")
 		flag.Usage()
 		os.Exit(1)
-	}
-
-	// Make dir structure
-	// e.g. /var/heckler/v1..v2//oid.json
-
-	revdir := fmt.Sprintf("/var/heckler/%s..%s", beginRev, endRev)
-
-	os.MkdirAll(revdir, 077)
-	for host, _ := range nodes {
-		os.Mkdir(revdir+"/"+host, 077)
-	}
-
-	var groupedCommits map[git.Oid][]*groupedResource
-
-	groupedCommits = make(map[git.Oid][]*groupedResource)
-
-	// XXX Should or can this be done in new(Node)?
-	for _, node := range nodes {
-		node.commitReports = make(map[git.Oid]*puppetutil.PuppetReport)
-		node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
-	}
-
-	commitLogIds, commits, err := commitLogIdList(repo, beginRev, endRev)
-	if err != nil {
-		log.Fatalf("Unable to get commit id list", err)
-	}
-
-	var noopRequests int
-	var reportPath string
-	var file *os.File
-	var rprt *puppetutil.PuppetReport
-
-	for i, commitLogId := range commitLogIds {
-		log.Printf("Nooping: %s (%d of %d)", commitLogId.String(), i, len(commitLogIds))
-		par := puppetutil.PuppetApplyRequest{Rev: commitLogId.String(), Noop: true}
-		noopRequests = 0
-		for host, node := range nodes {
-			reportPath = revdir + "/" + host + "/" + commitLogId.String() + ".json"
-			if _, err := os.Stat(reportPath); err == nil {
-				file, err = os.Open(reportPath)
-				if err != nil {
-					log.Fatal(err)
-				}
-				defer file.Close()
-
-				data, err = ioutil.ReadAll(file)
-				if err != nil {
-					log.Fatalf("cannot read report: %v", err)
-				}
-				rprt = new(puppetutil.PuppetReport)
-				err = json.Unmarshal([]byte(data), rprt)
-				if err != nil {
-					log.Fatalf("cannot unmarshal report: %v", err)
-				}
-				if host != rprt.Host {
-					log.Fatalf("Host mismatch %s != %s", host, rprt.Host)
-				}
-				log.Printf("Found serialized noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
-				nodes[rprt.Host].commitReports[commitLogId] = rprt
-			} else {
-				go hecklerApply(node.rizzoClient, puppetReportChan, par)
-				noopRequests++
-			}
-		}
-
-		for j := 0; j < noopRequests; j++ {
-			rprt := <-puppetReportChan
-			log.Printf("Received noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
-			nodes[rprt.Host].commitReports[commitLogId] = &rprt
-			nodes[rprt.Host].commitReports[commitLogId].Logs = normalizeLogs(nodes[rprt.Host].commitReports[commitLogId].Logs)
-
-			reportPath = revdir + "/" + rprt.Host + "/" + commitLogId.String() + ".json"
-			data, err = json.Marshal(rprt)
-			if err != nil {
-				log.Fatalf("Cannot marshal report: %v", err)
-			}
-			err = ioutil.WriteFile(reportPath, data, 0644)
-			if err != nil {
-				log.Fatalf("Cannot write report: %v", err)
-			}
-
-		}
-	}
-
-	for host, node := range nodes {
-		for i, gi := range commitLogIds {
-			if i == 0 {
-				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], []*puppetutil.PuppetReport{new(puppetutil.PuppetReport)})
-			} else {
-				log.Printf("Creating delta resource: %s@%s", host, gi.String())
-				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], commitParentReports(commits[gi], node.commitReports))
-			}
-		}
-	}
-
-	for _, gi := range commitLogIds {
-		log.Printf("Grouping: %s", gi.String())
-		for _, node := range nodes {
-			for _, nodeDeltaRes := range node.commitDeltaResources[gi] {
-				groupedCommits[gi] = append(groupedCommits[gi], groupResources(gi, nodeDeltaRes, nodes))
-			}
-		}
-	}
-
-	if markdownOut {
-		markdownOutput(commitLogIds, commits, groupedCommits)
-	}
-
-	if githubMilestone != "" {
-		githubCreate(githubMilestone, commitLogIds, groupedCommits, commits)
 	}
 
 	// cleanup
