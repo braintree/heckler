@@ -570,11 +570,15 @@ func markdownOutput(commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, gro
 		fmt.Printf("%s", groupedResourcesToMarkdown(groupedCommits[gi]))
 	}
 }
-func commitAlreadyApplied(appliedCommit *git.Oid, commit *git.Oid, repo *git.Repository) bool {
-	if appliedCommit.Equal(commit) {
+
+// Determine if a commit is already applied based on the last appliedCommit.
+// If the potentialCommit is an ancestor of the appliedCommit then we know the
+// potentialCommit has already been applied.
+func commitAlreadyApplied(appliedCommit *git.Oid, potentialCommit *git.Oid, repo *git.Repository) bool {
+	if appliedCommit.Equal(potentialCommit) {
 		return true
 	}
-	descendant, err := repo.DescendantOf(appliedCommit, commit)
+	descendant, err := repo.DescendantOf(appliedCommit, potentialCommit)
 	if err != nil {
 		log.Fatalf("Cannot determine descendant status: %v", err)
 	}
