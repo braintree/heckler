@@ -9,8 +9,8 @@ import (
 	"os"
 	"os/exec"
 
-	"./gitutil"
-	"./puppetutil"
+	"github.braintreeps.com/lollipopman/heckler/gitutil"
+	"github.braintreeps.com/lollipopman/heckler/puppetutil"
 	git "github.com/libgit2/git2go"
 
 	"google.golang.org/grpc"
