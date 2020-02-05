@@ -1,10 +1,11 @@
 version: '3.7'
 services:
-  fozzie:
+  fozzie.example.com:
     build:
       context: ./node
     image: heckler-node:latest
     hostname: fozzie
+    domainname: example.com
     # needed to avoid facter using dns search for fqdn
     dns_search: ""
     volumes:
@@ -23,11 +24,12 @@ services:
     networks:
           heckler:
             ipv4_address: 172.18.0.2
-  statler:
+  statler.example.com:
     build:
       context: ./node
     image: heckler-node:latest
     hostname: statler
+    domainname: example.com
     # needed to avoid facter using dns search for fqdn
     dns_search: ""
     volumes:
@@ -46,11 +48,12 @@ services:
     networks:
           heckler:
             ipv4_address: 172.18.0.3
-  waldorf:
+  waldorf.example.com:
     build:
       context: ./node
     image: heckler-node:latest
     hostname: waldorf
+    domainname: example.com
     # needed to avoid facter using dns search for fqdn
     dns_search: ""
     volumes:
@@ -69,11 +72,12 @@ services:
     networks:
           heckler:
             ipv4_address: 172.18.0.4
-  heckler:
+  heckler.example.com:
     build:
       context: ./node
     image: heckler-node:latest
     hostname: heckler
+    domainname: example.com
     # needed to avoid facter using dns search for fqdn
     dns_search: ""
     volumes:

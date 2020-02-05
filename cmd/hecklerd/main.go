@@ -33,7 +33,7 @@ func fetchRepo() (*git.Repository, error) {
 
 	// Wrap the shared transport for use with the app ID 7 authenticating with
 	// installation ID 11.
-	itr, err := ghinstallation.NewKeyFromFile(tr, 7, 11, "heckler.2019-10-30.private-key.pem")
+	itr, err := ghinstallation.NewKeyFromFile(tr, 7, 11, "/heckler/heckler.2019-10-30.private-key.pem")
 	if err != nil {
 		return nil, err
 	}

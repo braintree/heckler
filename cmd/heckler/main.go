@@ -515,7 +515,11 @@ func updateLastApply(nodes map[string]*Node, puppetReportChan chan puppetutil.Pu
 		if err != nil {
 			return err
 		}
-		nodes[r.Host].lastApply = obj.Id()
+		if node, ok := nodes[r.Host]; ok {
+			node.lastApply = obj.Id()
+		} else {
+			log.Fatalf("No Node struct found for report from: %s\n", r.Host)
+		}
 	}
 
 	return nil
