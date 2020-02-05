@@ -14,7 +14,7 @@ import (
 	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-github/github"
 	git "github.com/libgit2/git2go"
-	gitcgiserver "github.com/pasela/git-cgi-server"
+	gitcgiserver "github.com/lollipopman/git-cgi-server"
 )
 
 const GitHubEnterpriseURL = "https://github.braintreeps.com/api/v3"
