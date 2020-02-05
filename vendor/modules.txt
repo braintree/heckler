@@ -1,0 +1,112 @@
+# github.com/Masterminds/goutils v1.1.0
+github.com/Masterminds/goutils
+# github.com/Masterminds/semver v1.5.0
+github.com/Masterminds/semver
+# github.com/Masterminds/sprig v2.22.0+incompatible
+github.com/Masterminds/sprig
+# github.com/abbot/go-http-auth v0.4.0
+github.com/abbot/go-http-auth
+# github.com/bradleyfalzon/ghinstallation v1.1.1
+github.com/bradleyfalzon/ghinstallation
+# github.com/dgrijalva/jwt-go v3.2.0+incompatible
+github.com/dgrijalva/jwt-go
+# github.com/gogo/protobuf v1.3.1
+github.com/gogo/protobuf/proto
+# github.com/golang/protobuf v1.3.3
+github.com/golang/protobuf/proto
+github.com/golang/protobuf/ptypes
+github.com/golang/protobuf/ptypes/any
+github.com/golang/protobuf/ptypes/duration
+github.com/golang/protobuf/ptypes/timestamp
+# github.com/google/go-cmp v0.4.0
+github.com/google/go-cmp/cmp
+github.com/google/go-cmp/cmp/internal/diff
+github.com/google/go-cmp/cmp/internal/flags
+github.com/google/go-cmp/cmp/internal/function
+github.com/google/go-cmp/cmp/internal/value
+# github.com/google/go-github v17.0.0+incompatible
+github.com/google/go-github/github
+# github.com/google/go-github/v29 v29.0.2
+github.com/google/go-github/v29/github
+# github.com/google/go-querystring v1.0.0
+github.com/google/go-querystring/query
+# github.com/google/uuid v1.1.1
+github.com/google/uuid
+# github.com/huandu/xstrings v1.3.0
+github.com/huandu/xstrings
+# github.com/imdario/mergo v0.3.8
+github.com/imdario/mergo
+# github.com/libgit2/git2go v0.0.0-20191210224138-ba1b5f0c23b3
+github.com/libgit2/git2go
+# github.com/lollipopman/git-cgi-server v1.0.2-0.20200205213042-56a063d18d5b
+github.com/lollipopman/git-cgi-server
+# github.com/mitchellh/copystructure v1.0.0
+github.com/mitchellh/copystructure
+# github.com/mitchellh/reflectwalk v1.0.1
+github.com/mitchellh/reflectwalk
+# golang.org/x/crypto v0.0.0-20200204104054-c9f3fb736b72
+golang.org/x/crypto/bcrypt
+golang.org/x/crypto/blowfish
+golang.org/x/crypto/cast5
+golang.org/x/crypto/openpgp
+golang.org/x/crypto/openpgp/armor
+golang.org/x/crypto/openpgp/elgamal
+golang.org/x/crypto/openpgp/errors
+golang.org/x/crypto/openpgp/packet
+golang.org/x/crypto/openpgp/s2k
+golang.org/x/crypto/pbkdf2
+golang.org/x/crypto/scrypt
+# golang.org/x/net v0.0.0-20200202094626-16171245cfb2
+golang.org/x/net/context
+golang.org/x/net/http/httpguts
+golang.org/x/net/http2
+golang.org/x/net/http2/hpack
+golang.org/x/net/idna
+golang.org/x/net/internal/timeseries
+golang.org/x/net/trace
+# golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5
+golang.org/x/sys/unix
+# golang.org/x/text v0.3.2
+golang.org/x/text/secure/bidirule
+golang.org/x/text/transform
+golang.org/x/text/unicode/bidi
+golang.org/x/text/unicode/norm
+# google.golang.org/genproto v0.0.0-20200205142000-a86caf926a67
+google.golang.org/genproto/googleapis/rpc/status
+# google.golang.org/grpc v1.27.0
+google.golang.org/grpc
+google.golang.org/grpc/attributes
+google.golang.org/grpc/backoff
+google.golang.org/grpc/balancer
+google.golang.org/grpc/balancer/base
+google.golang.org/grpc/balancer/roundrobin
+google.golang.org/grpc/binarylog/grpc_binarylog_v1
+google.golang.org/grpc/codes
+google.golang.org/grpc/connectivity
+google.golang.org/grpc/credentials
+google.golang.org/grpc/credentials/internal
+google.golang.org/grpc/encoding
+google.golang.org/grpc/encoding/proto
+google.golang.org/grpc/grpclog
+google.golang.org/grpc/internal
+google.golang.org/grpc/internal/backoff
+google.golang.org/grpc/internal/balancerload
+google.golang.org/grpc/internal/binarylog
+google.golang.org/grpc/internal/buffer
+google.golang.org/grpc/internal/channelz
+google.golang.org/grpc/internal/envconfig
+google.golang.org/grpc/internal/grpcrand
+google.golang.org/grpc/internal/grpcsync
+google.golang.org/grpc/internal/resolver/dns
+google.golang.org/grpc/internal/resolver/passthrough
+google.golang.org/grpc/internal/syscall
+google.golang.org/grpc/internal/transport
+google.golang.org/grpc/keepalive
+google.golang.org/grpc/metadata
+google.golang.org/grpc/naming
+google.golang.org/grpc/peer
+google.golang.org/grpc/resolver
+google.golang.org/grpc/serviceconfig
+google.golang.org/grpc/stats
+google.golang.org/grpc/status
+google.golang.org/grpc/tap
