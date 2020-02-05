@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,8 +10,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.braintreeps.com/lollipopman/heckler/gitutil"
+	"github.com/bradleyfalzon/ghinstallation"
+	"github.com/google/go-github/github"
+	git "github.com/libgit2/git2go"
 	gitcgiserver "github.com/pasela/git-cgi-server"
 )
+
+const GitHubEnterpriseURL = "https://github.braintreeps.com/api/v3"
 
 const (
 	ApplicationName = "git-cgi-server"
@@ -21,74 +26,58 @@ const (
 	shutdownTimeout = time.Second * 5
 )
 
-type Args struct {
-	ProjectRoot    string
-	ExportAll      bool
-	BackendCGI     string
-	BasicAuthFile  string
-	DigestAuthFile string
-	AuthRealm      string
-	URIPrefix      string
-	Addr           string
-	CertFile       string
-	KeyFile        string
-	PID            string
-}
+func fetchRepo() (*git.Repository, error) {
 
-func parseArgs() (*Args, error) {
-	var args Args
+	// Shared transport to reuse TCP connections.
+	tr := http.DefaultTransport
 
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(),
-			"%s v%s\n\nUsage: %s [REPOS_DIR]\n", ApplicationName, Version, os.Args[0])
-		flag.PrintDefaults()
-	}
-
-	flag.BoolVar(&args.ExportAll, "export-all", false, "export all repositories")
-	flag.StringVar(&args.BackendCGI, "backend-cgi", "", "path to the CGI (git-http-backend)")
-	flag.StringVar(&args.BasicAuthFile, "basic-auth-file", "", "path to the basic auth file (htpasswd)")
-	flag.StringVar(&args.DigestAuthFile, "digest-auth-file", "", "path to the digest auth file (htdigest)")
-	flag.StringVar(&args.AuthRealm, "auth-realm", "Git", "realm name for the auth")
-	flag.StringVar(&args.URIPrefix, "uri-prefix", "/", "URI prefix")
-	flag.StringVar(&args.Addr, "addr", defaultAddr, "server address")
-	flag.StringVar(&args.CertFile, "cert-file", "", "TLS Certificate")
-	flag.StringVar(&args.KeyFile, "key-file", "", "TLS Certificate Key")
-	flag.StringVar(&args.PID, "pid", "", "PID file")
-	flag.Parse()
-
-	if args.CertFile != "" && args.KeyFile == "" {
-		fmt.Println("-key-file is required when -cert-file specified")
-		os.Exit(1)
-	}
-
-	projectRoot, err := getProjectRoot(flag.Args())
+	// Wrap the shared transport for use with the app ID 7 authenticating with
+	// installation ID 11.
+	itr, err := ghinstallation.NewKeyFromFile(tr, 7, 11, "heckler.2019-10-30.private-key.pem")
 	if err != nil {
 		return nil, err
 	}
-	args.ProjectRoot = projectRoot
+	itr.BaseURL = GitHubEnterpriseURL
 
-	return &args, nil
+	// Use installation transport with github.com/google/go-github
+	_, err = github.NewEnterpriseClient(GitHubEnterpriseURL, GitHubEnterpriseURL, &http.Client{Transport: itr})
+	if err != nil {
+		return nil, err
+	}
+	ctx := context.Background()
+	tok, err := itr.Token(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cloneDir := "/var/lib/hecklerd/repos/muppetshow"
+	cloneOptions := &git.CloneOptions{}
+	cloneOptions.Bare = true
+	remoteUrl := fmt.Sprintf("https://x-access-token:%s@github.braintreeps.com/lollipopman/muppetshow", tok)
+	repo, err := gitutil.CloneOrOpen(remoteUrl, cloneDir, cloneOptions)
+	if err != nil {
+		return nil, err
+	}
+	err = gitutil.FastForward(repo, nil)
+	if err != nil {
+		return nil, err
+	}
+	return repo, nil
 }
 
 func main() {
-	args, err := parseArgs()
+	var err error
+
+	_, err = fetchRepo()
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalf("Unable to fetch repo: %v", err)
 	}
 
-	server := &gitcgiserver.GitCGIServer{
-		ProjectRoot:     args.ProjectRoot,
-		ExportAll:       args.ExportAll,
-		BackendCGI:      args.BackendCGI,
-		BasicAuthFile:   args.BasicAuthFile,
-		DigestAuthFile:  args.DigestAuthFile,
-		AuthRealm:       args.AuthRealm,
-		URIPrefix:       args.URIPrefix,
-		Addr:            args.Addr,
-		CertFile:        args.CertFile,
-		KeyFile:         args.KeyFile,
-		ShutdownTimeout: shutdownTimeout,
-	}
+	server := &gitcgiserver.GitCGIServer{}
+	server.ExportAll = true
+	server.ProjectRoot = "/var/lib/hecklerd/repos"
+	server.Addr = defaultAddr
+	server.ShutdownTimeout = shutdownTimeout
 
 	idleConnsClosed := make(chan struct{})
 	go func() {
@@ -102,30 +91,11 @@ func main() {
 		close(idleConnsClosed)
 	}()
 
-	if args.PID != "" {
-		if err := gitcgiserver.WritePIDFile(args.PID); err != nil {
-			log.Fatalln(err)
-		}
-		defer gitcgiserver.RemovePIDFile(args.PID)
-	}
-
-	log.Printf("Starting HTTP server on %s (PID=%d)\n", args.Addr, os.Getpid())
+	log.Printf("Starting HTTP server on %s (PID=%d)\n", server.Addr, os.Getpid())
 	if err := server.Serve(); err != nil && err != http.ErrServerClosed {
 		log.Println("HTTP server error:", err)
 	}
 
 	<-idleConnsClosed
 	log.Println("HTTP server stopped")
-}
-
-func getProjectRoot(args []string) (string, error) {
-	if len(args) > 0 && args[0] != "" {
-		return args[0], nil
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", nil
-	}
-	return cwd, nil
 }

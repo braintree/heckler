@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 
 	git "github.com/libgit2/git2go"
 )
@@ -14,7 +14,8 @@ func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptio
 	var repo *git.Repository
 	var err error
 
-	if _, err = os.Stat(path.Join(cloneDir, ".git")); os.IsNotExist(err) {
+	log.Printf("Cloning %s to %s\n", remoteUrl, cloneDir)
+	if _, err = os.Stat(cloneDir); os.IsNotExist(err) {
 		repo, err = git.Clone(remoteUrl, cloneDir, cloneOptions)
 		if err != nil {
 			return nil, err
@@ -35,6 +36,7 @@ func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptio
 func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 	var err error
 
+	log.Printf("Fast forwarding...\n")
 	remote, err := repo.Remotes.Lookup("origin")
 	if err != nil {
 		return err
@@ -151,4 +153,68 @@ func Walk(repo *git.Repository) error {
 	}
 
 	return nil
+}
+
+func Pull(url string, destDir string) (*git.Repository, error) {
+	cloneOptions := &git.CloneOptions{}
+	err := os.MkdirAll(filepath.Dir(destDir), 0775)
+	if err != nil {
+		return nil, err
+	}
+	repo, err := CloneOrOpen(url, destDir, cloneOptions)
+	if err != nil {
+		return nil, err
+	}
+	err = FastForward(repo, cloneOptions.FetchOptions)
+	if err != nil {
+		return nil, err
+	}
+	return repo, nil
+}
+
+func Checkout(rev string, repo *git.Repository) (string, error) {
+	var err error
+
+	log.Printf("Rev: %v\n", rev)
+	obj, err := repo.RevparseSingle(rev)
+	if err != nil {
+		return "", err
+	}
+
+	commit, err := obj.AsCommit()
+	if err != nil {
+		return "", err
+	}
+
+	tree, err := repo.LookupTree(commit.TreeId())
+	if err != nil {
+		log.Fatal(err)
+		return "", err
+	}
+
+	checkoutOpts := git.CheckoutOpts{
+		Strategy: git.CheckoutSafe,
+	}
+	err = repo.CheckoutTree(tree, &checkoutOpts)
+	if err != nil {
+		return "", err
+	}
+	index, err := repo.Index()
+	if err != nil {
+		return "", err
+	}
+	err = index.ReadTree(tree)
+	if err != nil {
+		return "", err
+	}
+	err = index.Write()
+	if err != nil {
+		return "", err
+	}
+	err = repo.SetHeadDetached(obj.Id())
+	if err != nil {
+		return "", err
+	}
+
+	return (obj.Id()).String(), nil
 }
