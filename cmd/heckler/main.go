@@ -662,30 +662,6 @@ func noopCommitRange(nodes map[string]*Node, puppetReportChan chan puppetutil.Pu
 	return groupedCommits, nil
 }
 
-func makeCredentialsCallback() git.CredentialsCallback {
-	called := false
-	return func(url string, username string, allowedTypes git.CredType) (git.ErrorCode, *git.Cred) {
-		// libssh2 calls the credentials callback in a loop until successful, but
-		// nothing will change by calling this function again, so just return an
-		// error.
-		if called {
-			return git.ErrUser, nil
-		}
-		called = true
-		// homeDir := os.UserHomeDir() need golang 1.12
-		homeDir := "/root"
-		// XXX do we need to check git.CredType? allowedTypes&git.CredTypeSshKey != 0
-		errCode, cred := git.NewCredSshKey(username, homeDir+"/.ssh/id_ecdsa.pub", homeDir+"/.ssh/id_ecdsa", "")
-		return git.ErrorCode(errCode), &cred
-	}
-}
-
-// Made this one just return 0 during troubleshooting...
-func certificateCheckCallback(cert *git.Certificate, valid bool, hostname string) git.ErrorCode {
-	// XXX implement host key checking
-	return git.ErrOk
-}
-
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var hosts hostFlags
