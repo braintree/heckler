@@ -568,7 +568,6 @@ func noopCommitRange(nodes map[string]*Node, puppetReportChan chan puppetutil.Pu
 
 	groupedCommits = make(map[git.Oid][]*groupedResource)
 
-	// XXX Should or can this be done in new(Node)?
 	for _, node := range nodes {
 		node.commitReports = make(map[git.Oid]*puppetutil.PuppetReport)
 		node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
