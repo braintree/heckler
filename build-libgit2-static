@@ -4,7 +4,8 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-REV='ba1b5f0c23b3'
+LIBGIT2_REV='ba1b5f0c23b3'
+
 git2go_rel_dir='vendor/github.com/libgit2/git2go'
 
 if [[ ! -e "${git2go_rel_dir}" ]]; then
@@ -26,7 +27,7 @@ pushd "${TMP}" >/dev/null
 git clone https://github.com/libgit2/git2go
 
 pushd git2go >/dev/null
-git checkout "${REV}"
+git checkout "${LIBGIT2_REV}"
 git submodule update --init
 make build-libgit2
 cp -r static-build "${git2go_dir}"/
