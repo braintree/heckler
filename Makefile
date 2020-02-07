@@ -6,11 +6,11 @@ vendor/github.com/libgit2/git2go/static-build:
 
 .PHONY: deb
 deb:
-	debuild -us -uc -b
+	dpkg-buildpackage -us -uc -b -nc
 
 .PHONY: clean
 clean:
 	rm -rf vendor/github.com/libgit2/git2go/static-build
 	rm -rf vendor/github.com/libgit2/git2go/script
 	rm -rf vendor/github.com/libgit2/git2go/vendor
-	rm -rf _build
+	./debian/rules clean
