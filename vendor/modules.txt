@@ -44,7 +44,7 @@ github.com/lollipopman/git-cgi-server
 github.com/mitchellh/copystructure
 # github.com/mitchellh/reflectwalk v1.0.1
 github.com/mitchellh/reflectwalk
-# golang.org/x/crypto v0.0.0-20200204104054-c9f3fb736b72
+# golang.org/x/crypto v0.0.0-20200206161412-a0c6ece9d31a
 golang.org/x/crypto/bcrypt
 golang.org/x/crypto/blowfish
 golang.org/x/crypto/cast5
@@ -73,7 +73,7 @@ golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 # google.golang.org/genproto v0.0.0-20200205142000-a86caf926a67
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.27.0
+# google.golang.org/grpc v1.27.1
 google.golang.org/grpc
 google.golang.org/grpc/attributes
 google.golang.org/grpc/backoff
