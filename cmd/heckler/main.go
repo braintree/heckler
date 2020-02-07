@@ -432,9 +432,17 @@ func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits
 	// Shared transport to reuse TCP connections.
 	tr := http.DefaultTransport
 
+	var privateKeyPath string
+	if _, err := os.Stat("/etc/heckler/github-private-key.pem"); err == nil {
+		privateKeyPath = "/etc/heckler/github-private-key.pem"
+	} else if _, err := os.Stat("github-private-key.pem"); err == nil {
+		privateKeyPath = "github-private-key.pem"
+	} else {
+		log.Fatal("Unable to load github-private-key.pem in /etc/heckler or .")
+	}
 	// Wrap the shared transport for use with the app ID 7 authenticating with
 	// installation ID 11.
-	itr, err := ghinstallation.NewKeyFromFile(tr, 7, 11, "heckler.2019-10-30.private-key.pem")
+	itr, err := ghinstallation.NewKeyFromFile(tr, 7, 11, privateKeyPath)
 	if err != nil {
 		log.Fatal(err)
 	}
