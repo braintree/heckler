@@ -11,6 +11,6 @@ deb:
 .PHONY: clean
 clean:
 	rm -rf vendor/github.com/libgit2/git2go/static-build
-	rm -rf vendor/github.com/libgit2/git2go/scripts
+	rm -rf vendor/github.com/libgit2/git2go/script
 	rm -rf vendor/github.com/libgit2/git2go/vendor
 	rm -rf _build
