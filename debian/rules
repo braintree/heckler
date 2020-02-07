@@ -1,7 +1,8 @@
 #!/usr/bin/make -f
 
 export DH_VERBOSE := 1
-export DH_GOLANG_INSTALL_EXTRA := vendor/github.com/libgit2/git2go/static-build
+export DH_GOLANG_INSTALL_EXTRA := vendor/github.com/libgit2/git2go/static-build \
+	$(shell find . -name '*.tmpl')
 export DEB_BUILD_OPTIONS := nostrip
 
 %:

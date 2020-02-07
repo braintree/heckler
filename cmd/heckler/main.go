@@ -173,21 +173,18 @@ func normalizeDiff(msg string) string {
 	return newMsg
 }
 
-func commitToMarkdown(c *git.Commit) string {
+func commitToMarkdown(c *git.Commit, templates *template.Template) string {
 	var body strings.Builder
 	var err error
 
-	// XXX better way to not duplicate this code?
-	tpl := template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob("*.tmpl"))
-
-	err = tpl.ExecuteTemplate(&body, "commit.tmpl", c)
+	err = templates.ExecuteTemplate(&body, "commit.tmpl", c)
 	if err != nil {
 		log.Fatal(err)
 	}
 	return body.String()
 }
 
-func groupedResourcesToMarkdown(groupedResources []*groupedResource) string {
+func groupedResourcesToMarkdown(groupedResources []*groupedResource, templates *template.Template) string {
 	var body strings.Builder
 	var err error
 
@@ -202,10 +199,7 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource) string {
 			}
 		})
 
-	// XXX better way to not duplicate this code?
-	tpl := template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob("*.tmpl"))
-
-	err = tpl.ExecuteTemplate(&body, "groupedResource.tmpl", groupedResources)
+	err = templates.ExecuteTemplate(&body, "groupedResource.tmpl", groupedResources)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -434,7 +428,7 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 	return commitLogIds, commits, nil
 }
 
-func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit) {
+func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit, templates *template.Template) {
 	// Shared transport to reuse TCP connections.
 	tr := http.DefaultTransport
 
@@ -469,7 +463,7 @@ func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits
 		githubIssue := &github.IssueRequest{
 			Title:     github.String(fmt.Sprintf("Puppet noop output for commit: '%v'", commits[gi].Summary())),
 			Assignee:  github.String(commits[gi].Author().Name),
-			Body:      github.String(commitToMarkdown(commits[gi]) + groupedResourcesToMarkdown(groupedCommits[gi])),
+			Body:      github.String(commitToMarkdown(commits[gi], templates) + groupedResourcesToMarkdown(groupedCommits[gi], templates)),
 			Milestone: nm.Number,
 		}
 		ni, _, err := client.Issues.Create(ctx, "lollipopman", "muppetshow", githubIssue)
@@ -525,15 +519,15 @@ func updateLastApply(nodes map[string]*Node, puppetReportChan chan puppetutil.Pu
 	return nil
 }
 
-func markdownOutput(commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, groupedCommits map[git.Oid][]*groupedResource) {
+func markdownOutput(commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, groupedCommits map[git.Oid][]*groupedResource, templates *template.Template) {
 	for _, gi := range commitLogIds {
 		if len(groupedCommits[gi]) == 0 {
 			log.Printf("Skipping %s, no noop output\n", gi.String())
 			continue
 		}
 		fmt.Printf("## Puppet noop output for commit: '%v'\n\n", commits[gi].Summary())
-		fmt.Printf("%s", commitToMarkdown(commits[gi]))
-		fmt.Printf("%s", groupedResourcesToMarkdown(groupedCommits[gi]))
+		fmt.Printf("%s", commitToMarkdown(commits[gi], templates))
+		fmt.Printf("%s", groupedResourcesToMarkdown(groupedCommits[gi], templates))
 	}
 }
 
@@ -661,6 +655,16 @@ func noopCommitRange(nodes map[string]*Node, puppetReportChan chan puppetutil.Pu
 	return groupedCommits, nil
 }
 
+func parseTemplates() *template.Template {
+	var templatesPath string
+	if _, err := os.Stat("/usr/share/heckler/templates"); err == nil {
+		templatesPath = "/usr/share/heckler/templates" + "/*.tmpl"
+	} else {
+		templatesPath = "*.tmpl"
+	}
+	return template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob(templatesPath))
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var hosts hostFlags
@@ -676,6 +680,7 @@ func main() {
 	var node *Node
 
 	puppetReportChan = make(chan puppetutil.PuppetReport)
+	templates := parseTemplates()
 
 	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
 	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
@@ -788,10 +793,10 @@ func main() {
 			log.Fatalf("Unable to create groupedCommits: %v", err)
 		}
 		if markdownOut {
-			markdownOutput(commitLogIds, commits, groupedCommits)
+			markdownOutput(commitLogIds, commits, groupedCommits, templates)
 		}
 		if githubMilestone != "" {
-			githubCreate(githubMilestone, commitLogIds, groupedCommits, commits)
+			githubCreate(githubMilestone, commitLogIds, groupedCommits, commits, templates)
 		}
 		os.Exit(0)
 	} else {
