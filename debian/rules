@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE := 1
+export DH_GOLANG_INSTALL_ALL := 1
+
+%:
+	GOFLAGS='-mod=vendor -tags=static' dh $@ --builddirectory=_build --buildsystem=golang --with=golang
+
+override_dh_auto_configure: vendor/github.com/libgit2/git2go/static-build
+	dh_auto_configure
+
+vendor/github.com/libgit2/git2go/static-build:
+	./build-libgit2-static
+
+override_dh_auto_install:
+	dh_auto_install -- --no-source

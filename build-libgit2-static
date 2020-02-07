@@ -4,7 +4,9 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-LIBGIT2_REV='ba1b5f0c23b3'
+# found in git2go: git submodule
+LIBGIT2_REV='6777db8e8343014d57c41b335e0c60af44d4e9f2'
+BUILD_SCRIPT='build-libgit2-static.sh'
 
 git2go_rel_dir='vendor/github.com/libgit2/git2go'
 
@@ -13,23 +15,28 @@ if [[ ! -e "${git2go_rel_dir}" ]]; then
   exit 1
 fi
 
-git2go_dir=$(readlink -f "${git2go_rel_dir}")
-
-if [[ -e "${git2go_dir}"/static-build ]]; then
-  printf 'Deleting existing static-build\n'
-  rm -rf "${git2go_dir}"/static-build
+build_script_path="$PWD"/script/"${BUILD_SCRIPT}"
+if [[ ! -e "${build_script_path}" ]]; then
+  printf 'No libgit2 build script found: %s\n' "${build_script_path}"
+  exit 1
 fi
 
-TMP=$(mktemp -d)
-trap 'rm -rf $TMP' EXIT HUP TERM
+if [[ -e "${git2go_rel_dir}"/static-build ]]; then
+  printf 'Static build already exists! %s\n' "${git2go_rel_dir}"/static-build
+  exit 1
+fi
 
-pushd "${TMP}" >/dev/null
-git clone https://github.com/libgit2/git2go
+pushd "${git2go_rel_dir}" >/dev/null
 
-pushd git2go >/dev/null
+mkdir -p vendor
+git clone https://github.com/libgit2/libgit2 vendor/libgit2
+
+pushd vendor/libgit2 >/dev/null
 git checkout "${LIBGIT2_REV}"
-git submodule update --init
-make build-libgit2
-cp -r static-build "${git2go_dir}"/
 popd >/dev/null
+
+mkdir -p script
+cp "${build_script_path}" script/
+./script/"${BUILD_SCRIPT}"
+
 popd >/dev/null
