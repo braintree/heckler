@@ -9,5 +9,14 @@ XS-Go-Import-Path: github.braintreeps.com/lollipopman/heckler
 
 Package: heckler
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Built-Using: ${misc:Built-Using},
 Description: Puppet noop review automater
+
+Package: rizzo
+Architecture: any
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Built-Using: ${misc:Built-Using},
+Description: Heckler node client for applying Puppet
