@@ -11,6 +11,7 @@ import (
 
 	"github.braintreeps.com/lollipopman/heckler/gitutil"
 	"github.braintreeps.com/lollipopman/heckler/puppetutil"
+	"gopkg.in/yaml.v3"
 
 	"google.golang.org/grpc"
 )
@@ -22,6 +23,7 @@ const (
 // server is used to implement rizzo.RizzoServer.
 type server struct {
 	puppetutil.UnimplementedRizzoServer
+	conf *RizzoConf
 }
 
 // PuppetApply implements rizzo.RizzoServer
@@ -32,7 +34,7 @@ func (s *server) PuppetApply(ctx context.Context, req *puppetutil.PuppetApplyReq
 	log.Printf("Received: %v", req.Rev)
 
 	// pull
-	repo, err := gitutil.Pull("http://heckler:8080/muppetshow", "/var/lib/rizzo/repos/muppetshow")
+	repo, err := gitutil.Pull("http://heckler:8080/puppetcode", "/var/lib/rizzo/repo/puppetcode")
 	if err != nil {
 		log.Printf("Pull error: %v", err)
 		return &puppetutil.PuppetReport{}, err
@@ -49,7 +51,7 @@ func (s *server) PuppetApply(ctx context.Context, req *puppetutil.PuppetApplyReq
 
 	// apply
 	log.Printf("Applying: %v", oid)
-	pr, err := puppetApply(oid, req.Noop)
+	pr, err := puppetApply(oid, req.Noop, s.conf)
 	if err != nil {
 		log.Printf("Apply error: %v", err)
 		return &puppetutil.PuppetReport{}, err
@@ -63,7 +65,7 @@ func (s *server) PuppetLastApply(ctx context.Context, req *puppetutil.PuppetLast
 	var err error
 
 	log.Printf("PuppetLastApply: request received")
-	file, err := os.Open("/var/tmp/reports/heckler/heckler_last_apply.json")
+	file, err := os.Open(s.conf.PuppetReportDir + "/heckler/heckler_last_apply.json")
 	if err != nil {
 		return &puppetutil.PuppetReport{}, err
 	}
@@ -81,30 +83,20 @@ func (s *server) PuppetLastApply(ctx context.Context, req *puppetutil.PuppetLast
 	return pr, nil
 }
 
-func puppetApply(oid string, noop bool) (*puppetutil.PuppetReport, error) {
-	// XXX config?
-	repoDir := "/var/lib/rizzo/repos/muppetshow"
-	puppetArgs := []string{
-		"apply",
-		"--confdir",
-		repoDir,
-		"--vardir",
-		"/var/tmp",
-		"--config_version",
-		"/heckler/git-head-sha",
-		repoDir + "/nodes.pp",
-	}
+func puppetApply(oid string, noop bool, conf *RizzoConf) (*puppetutil.PuppetReport, error) {
+	puppetArgs := make([]string, len(conf.PuppetCmd.Args))
+	copy(puppetArgs, conf.PuppetCmd.Args)
 	if noop {
 		puppetArgs = append(puppetArgs, "--noop")
 	}
 	cmd := exec.Command("puppet", puppetArgs...)
-	cmd.Dir = repoDir
+	// cmd.Dir = repoDir
 	stdoutStderr, err := cmd.CombinedOutput()
 	log.Printf("%s", stdoutStderr)
 	if err != nil {
 		return &puppetutil.PuppetReport{}, err
 	}
-	file, err := os.Open("/var/tmp/reports/heckler/heckler_" + oid + ".json")
+	file, err := os.Open(conf.PuppetReportDir + "/heckler/heckler_" + oid + ".json")
 	if err != nil {
 		return &puppetutil.PuppetReport{}, err
 	}
@@ -121,13 +113,53 @@ func puppetApply(oid string, noop bool) (*puppetutil.PuppetReport, error) {
 	return pr, nil
 }
 
+type PuppetCmd struct {
+	Env  map[string]string `yaml:env`
+	Args []string          `yaml:args`
+}
+
+type RizzoConf struct {
+	PuppetCmd       `yaml:"puppet_cmd"`
+	PuppetReportDir string `yaml:"puppet_reportdir"`
+}
+
 func main() {
+	var err error
+	var rizzoConfPath string
+	var file *os.File
+	var data []byte
+	var rizzoConf *RizzoConf
+
+	if _, err := os.Stat("/etc/rizzo/rizzo_conf.yaml"); err == nil {
+		rizzoConfPath = "/etc/rizzo/rizzo_conf.yaml"
+	} else if _, err := os.Stat("rizzo_conf.yaml"); err == nil {
+		rizzoConfPath = "rizzo_conf.yaml"
+	} else {
+		log.Fatal("Unable to load rizzo_conf.yaml from /etc/rizzo or .")
+	}
+	file, err = os.Open(rizzoConfPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	data, err = ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("Cannot read config: %v", err)
+	}
+	rizzoConf = new(RizzoConf)
+	err = yaml.Unmarshal([]byte(data), rizzoConf)
+	if err != nil {
+		log.Fatalf("Cannot unmarshal config: %v", err)
+	}
+
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
-	puppetutil.RegisterRizzoServer(s, &server{})
+	server := new(server)
+	server.conf = rizzoConf
+	puppetutil.RegisterRizzoServer(s, server)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}

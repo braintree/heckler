@@ -50,6 +50,8 @@ github.com/libgit2/git2go v0.0.0-20191210224138-ba1b5f0c23b3 h1:3po85N78NcPO4mst
 github.com/libgit2/git2go v0.0.0-20191210224138-ba1b5f0c23b3/go.mod h1:hTb4obAjQDTd5qtX3EHWun1t78BEUgXGleuEJL9A0fo=
 github.com/lollipopman/git-cgi-server v1.0.2-0.20200205213042-56a063d18d5b h1:y8dinKXoF3ziWHMJhcmomp8xW5X3w/jZaqY+iyFTDqQ=
 github.com/lollipopman/git-cgi-server v1.0.2-0.20200205213042-56a063d18d5b/go.mod h1:Z10JAW/nvQHhoWaUp51zkT8n8r3epXSusDQbIoV7BRM=
+github.com/miekg/yamlfmt v0.0.0-20190824094130-708bde137ebd h1:Z5nOK0Z1saTmvS5CBXNtta2lUh/W8uCGi98FCSvjVs4=
+github.com/miekg/yamlfmt v0.0.0-20190824094130-708bde137ebd/go.mod h1:RK2QNOuZpxb4UI4S1tHCKWgUaOVXquceyDa8yYbTkXo=
 github.com/mitchellh/copystructure v1.0.0 h1:Laisrj+bAB6b/yJwB5Bt3ITZhGJdqmxquMKeZ+mmkFQ=
 github.com/mitchellh/copystructure v1.0.0/go.mod h1:SNtv71yrdKgLRyLFxmLdkAbkKEFWgYaq1OVrnRcwhnw=
 github.com/mitchellh/reflectwalk v1.0.0 h1:9D+8oIskB4VJBN5SFlmc27fSlIBZaov1Wpk/IfikLNY=
@@ -120,5 +122,7 @@ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/yaml.v2 v2.2.2 h1:ZCJp+EgiOT7lHqUV2J862kp8Qj64Jo6az82+3Td9dZw=
 gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
+gopkg.in/yaml.v3 v3.0.0-20190709130402-674ba3eaed22 h1:0efs3hwEZhFKsCoP8l6dDB1AZWMgnEl3yWXWRZTOaEA=
+gopkg.in/yaml.v3 v3.0.0-20190709130402-674ba3eaed22/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 honnef.co/go/tools v0.0.0-20190102054323-c2f93a96b099/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
 honnef.co/go/tools v0.0.0-20190523083050-ea95bdfd59fc/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
