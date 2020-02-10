@@ -8,4 +8,6 @@ puppet_cmd:
   - "--config_version"
   - "rizzo-rev"
   - "/var/lib/rizzo/repo/puppetcode/nodes.pp"
+  env:
+    BUTTER: "bubbles"
 puppet_reportdir: "/var/tmp/reports"

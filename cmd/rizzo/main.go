@@ -90,6 +90,11 @@ func puppetApply(oid string, noop bool, conf *RizzoConf) (*puppetutil.PuppetRepo
 		puppetArgs = append(puppetArgs, "--noop")
 	}
 	cmd := exec.Command("puppet", puppetArgs...)
+	env := os.Environ()
+	for k, v := range conf.Env {
+		env = append(env, k+"="+v)
+	}
+	cmd.Env = env
 	// cmd.Dir = repoDir
 	stdoutStderr, err := cmd.CombinedOutput()
 	log.Printf("%s", stdoutStderr)
