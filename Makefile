@@ -14,3 +14,8 @@ clean:
 	rm -rf vendor/github.com/libgit2/git2go/script
 	rm -rf vendor/github.com/libgit2/git2go/vendor
 	./debian/rules clean
+
+.PHONY: publish
+publish: ## Upload the deb to package cloud (normally called by Jenkins)
+	package_cloud push "braintree/dev-tools/debian/stretch" ../*.deb
+	package_cloud push "braintree/dev-tools/debian/buster" ../*.deb
