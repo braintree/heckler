@@ -1,12 +1,13 @@
 #!/usr/bin/make -f
 
+HECKLER_VERSION := $(shell git describe --abbrev=0 | sed 's/^v//')
 export DH_VERBOSE := 1
 export DH_GOLANG_INSTALL_EXTRA := vendor/github.com/libgit2/git2go/static-build \
 	$(shell find . -name '*.tmpl')
 export DEB_BUILD_OPTIONS := nostrip
 
 %:
-	GOFLAGS='-mod=vendor -tags=static' dh $@ --builddirectory=_build --buildsystem=golang --with=golang
+	GOFLAGS="-mod=vendor -tags=static -ldflags=-X=main.Version=$(HECKLER_VERSION)" dh $@ --builddirectory=_build --buildsystem=golang --with=golang
 
 override_dh_auto_configure: vendor/github.com/libgit2/git2go/static-build
 	dh_auto_configure

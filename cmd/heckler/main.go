@@ -30,6 +30,7 @@ import (
 )
 
 var Debug = false
+var Version string
 var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 
 const GitHubEnterpriseURL = "https://github.braintreeps.com/api/v3"
@@ -681,6 +682,7 @@ func main() {
 	var rev string
 	var noop bool
 	var status bool
+	var printVersion bool
 	var markdownOut bool
 	var githubMilestone string
 	var nodes map[string]*Node
@@ -701,6 +703,7 @@ func main() {
 	flag.BoolVar(&markdownOut, "md", false, "Generate markdown output")
 	flag.StringVar(&githubMilestone, "github", "", "Github milestone to create")
 	flag.BoolVar(&Debug, "debug", false, "enable debugging")
+	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.Parse()
 
 	if *cpuprofile != "" {
@@ -713,6 +716,11 @@ func main() {
 			log.Fatal("could not start CPU profile: ", err)
 		}
 		defer pprof.StopCPUProfile()
+	}
+
+	if printVersion {
+		fmt.Printf("v%s\n", Version)
+		os.Exit(0)
 	}
 
 	if status && (rev != "" || beginRev != "" || endRev != "") {
