@@ -26,9 +26,9 @@ RUN apt-get update \
    vim-tiny \
    2>&1
 
-# libgit2 depensds on libc & openssl, glibc does not support static linking so
-# build against musl and libreSSL. LibreSSL is used because it builds without
-# any issue against musl, whereas openssl does not.
+# libgit2 depends on libc & OpenSSL, glibc does not support static linking so
+# build against musl and LibreSSL. LibreSSL is used because it builds without
+# any issue against musl, whereas Openssl does not.
 
 WORKDIR /usr/local
 RUN curl -Ls http://musl.libc.org/releases/musl-1.1.24.tar.gz | tar -xz
