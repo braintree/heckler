@@ -26,11 +26,23 @@ RUN apt-get update \
    vim-tiny \
    2>&1
 
-# Delete shard ssl libs so gcc's linker chooses the static `.a` libs We don't
-# want a fully static library, as that will statically link glibc which is
-# considered buggy, there does not appear to be a way to tell gcc to prefer
-# static linking.
-RUN dpkg -L libssl-dev | grep '\.so$' | xargs rm
+# libgit2 depensds on libc & openssl, glibc does not support static linking so
+# build against musl and libreSSL. LibreSSL is used because it builds without
+# any issue against musl, whereas openssl does not.
+
+WORKDIR /usr/local
+RUN curl -Ls http://musl.libc.org/releases/musl-1.1.24.tar.gz | tar -xz
+WORKDIR musl-1.1.24
+RUN ./configure
+RUN make install
+
+ENV CC=/usr/local/musl/bin/musl-gcc
+
+WORKDIR /usr/local
+RUN curl -Ls https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-3.0.2.tar.gz | tar -xz
+WORKDIR libressl-3.0.2
+RUN ./configure
+RUN make install
 
 RUN adduser --disabled-password --gecos "docker build user" $USER \
  && echo "$USER ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers # USER needs sudo to test-install the built .deb

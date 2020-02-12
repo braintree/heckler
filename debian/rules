@@ -5,9 +5,15 @@ export DH_VERBOSE := 1
 export DH_GOLANG_INSTALL_EXTRA := vendor/github.com/libgit2/git2go/static-build \
 	$(shell find . -name '*.tmpl')
 export DEB_BUILD_OPTIONS := nostrip
+export CC := /usr/local/musl/bin/musl-gcc
+GO_LDFLAGS := -X main.Version=$(HECKLER_VERSION) -extldflags=-static -linkmode=external
+export GOFLAGS := -mod=vendor -tags=static
 
 %:
-	GOFLAGS="-mod=vendor -tags=static -ldflags=-X=main.Version=$(HECKLER_VERSION)" dh $@ --builddirectory=_build --buildsystem=golang --with=golang
+	dh $@ --builddirectory=_build --buildsystem=golang --with=golang
+
+override_dh_auto_build:
+	dh_auto_build -O--buildsystem=golang -- -ldflags '$(GO_LDFLAGS)'
 
 override_dh_auto_configure: vendor/github.com/libgit2/git2go/static-build
 	dh_auto_configure
