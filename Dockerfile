@@ -11,14 +11,19 @@ RUN apt-get update \
    build-essential \
    ca-certificates \
    cmake \
+   curl \
    debhelper \
+   devscripts \
    dh-golang \
    fakeroot \
    git \
    golang \
+   less \
    libssl-dev \
    pkg-config \
    sudo \
+   tree \
+   vim-tiny \
    2>&1
 
 # Delete shard ssl libs so gcc's linker chooses the static `.a` libs We don't
