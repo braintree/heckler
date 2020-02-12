@@ -87,12 +87,12 @@ func main() {
 	var file *os.File
 	var data []byte
 
-	if _, err := os.Stat("/etc/hecklerd/hecklerd_conf.yaml"); err == nil {
-		hecklerdConfPath = "/etc/hecklerd/hecklerd_conf.yaml"
+	if _, err := os.Stat("/etc/heckler/hecklerd_conf.yaml"); err == nil {
+		hecklerdConfPath = "/etc/heckler/hecklerd_conf.yaml"
 	} else if _, err := os.Stat("hecklerd_conf.yaml"); err == nil {
 		hecklerdConfPath = "hecklerd_conf.yaml"
 	} else {
-		log.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
+		log.Fatal("Unable to load hecklerd_conf.yaml from /etc/heckler or .")
 	}
 	file, err = os.Open(hecklerdConfPath)
 	if err != nil {
