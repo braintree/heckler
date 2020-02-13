@@ -36,14 +36,15 @@ Puppet::Reports.register_report(:heckler) do
     hash = {
       "host" => @host,
       "time" => @time.iso8601(9),
-      "configuration_version" => @configuration_version,
+      # HACK: Turn into a string, necessary for v4.5.2
+      "configuration_version" => @configuration_version.to_s,
       "transaction_uuid" => @transaction_uuid,
       "report_format" => @report_format,
       "puppet_version" => @puppet_version,
       "status" => @status,
       "transaction_completed" => @transaction_completed,
-      "noop" => @noop,
-      "noop_pending" => @noop_pending,
+      # HACK: For lack of @noop, necessary for v4.5.2
+      "noop" => Puppet[:noop],
       "environment" => @environment,
       "logs" => @logs.map { |log| log.to_data_hash },
       "metrics" => Hash[@metrics.map { |key, metric| [key, metric.to_data_hash] }],
@@ -82,7 +83,6 @@ Puppet::Reports.register_report(:heckler) do
 
     # We expect a git sha as the config version
     if !(report.has_key?("configuration_version") &&
-         report["configuration_version"].class == String &&
          report["configuration_version"].length > 0)
       Puppet.crit("Unable to write report: invalid configuration_version")
       return
