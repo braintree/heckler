@@ -115,4 +115,3 @@ Puppet::Reports.register_report(:heckler) do
     file
   end
 end
-
