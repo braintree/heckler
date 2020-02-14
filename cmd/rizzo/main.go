@@ -100,9 +100,9 @@ func puppetApply(oid string, noop bool, conf *RizzoConf) (*puppetutil.PuppetRepo
 		os.Setenv("PATH", path)
 	}
 	cmd := exec.Command("puppet", puppetArgs...)
-	env := os.Environ()
 	// Change to code dir, so hiera relative paths resolve
 	cmd.Dir = "/var/lib/rizzo/repo/puppetcode"
+	env := os.Environ()
 	for k, v := range conf.Env {
 		env = append(env, k+"="+v)
 	}
