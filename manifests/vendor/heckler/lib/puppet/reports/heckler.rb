@@ -72,7 +72,24 @@ Puppet::Reports.register_report(:heckler) do
       end
     end
 
-    report["resource_statuses"] = Hash[report["resource_statuses"].map { |key, rs| [key, rs.nil? ? nil : rs.to_data_hash] }]
+    report["resource_statuses"] = 
+      Hash[
+        report["resource_statuses"].map { |key, rs|
+		if ! rs.nil?
+				if rs.events.length > 0
+					rs.events.each { |event|
+						if event.previous_value
+							event.previous_value = event.previous_value.to_s
+						end
+						if event.desired_value
+							event.desired_value = event.desired_value.to_s
+						end
+					}
+				end
+		end
+         [key, rs.nil? ? nil : rs.to_data_hash]
+	}
+      ]
 
     dir = File.join(Puppet[:reportdir], 'heckler')
 
