@@ -83,6 +83,8 @@ func (s *server) PuppetLastApply(ctx context.Context, req *puppetutil.PuppetLast
 }
 
 func puppetApply(oid string, noop bool, conf *RizzoConf) (*puppetutil.PuppetReport, error) {
+	var oldPath string
+
 	if noop {
 		log.Printf("Nooping: %v", oid)
 	} else {
@@ -93,8 +95,14 @@ func puppetApply(oid string, noop bool, conf *RizzoConf) (*puppetutil.PuppetRepo
 	if noop {
 		puppetArgs = append(puppetArgs, "--noop")
 	}
+	if path, ok := conf.Env["PATH"]; ok {
+		oldPath = os.Getenv("PATH")
+		os.Setenv("PATH", path)
+	}
 	cmd := exec.Command("puppet", puppetArgs...)
 	env := os.Environ()
+	// Change to code dir, so hiera relative paths resolve
+	cmd.Dir = "/var/lib/rizzo/repo/puppetcode"
 	for k, v := range conf.Env {
 		env = append(env, k+"="+v)
 	}
@@ -103,6 +111,9 @@ func puppetApply(oid string, noop bool, conf *RizzoConf) (*puppetutil.PuppetRepo
 	log.Printf("%s", stdoutStderr)
 	if err != nil {
 		return &puppetutil.PuppetReport{}, err
+	}
+	if oldPath != "" {
+		os.Setenv("PATH", oldPath)
 	}
 	file, err := os.Open(conf.PuppetReportDir + "/heckler/heckler_" + oid + ".json")
 	if err != nil {
