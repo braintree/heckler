@@ -1,12 +1,9 @@
 puppet_cmd:
   args:
   - "apply"
-  - "--confdir"
-  - "/var/lib/rizzo/repo/puppetcode"
-  - "--vardir"
-  - "/var/tmp"
-  - "--config_version"
-  - "rizzo-rev"
+  - "--confdir=/var/lib/rizzo/repo/puppetcode"
+  - "--vardir=/var/tmp"
+  - "--config_version=rizzo-rev"
   - "/var/lib/rizzo/repo/puppetcode/nodes.pp"
   env:
     BUTTER: "bubbles"
