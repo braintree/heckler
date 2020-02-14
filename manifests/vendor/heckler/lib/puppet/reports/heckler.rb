@@ -72,26 +72,26 @@ Puppet::Reports.register_report(:heckler) do
       end
     end
 
-    report["resource_statuses"] = 
+    report["resource_statuses"] =
       Hash[
         report["resource_statuses"].map { |key, rs|
-		if ! rs.nil?
-				if rs.events.length > 0
-					rs.events.each { |event|
-						if event.previous_value
-							event.previous_value = event.previous_value.to_s
-						end
-						if event.desired_value
-							event.desired_value = event.desired_value.to_s
-						end
-					}
-				end
-		end
-         [key, rs.nil? ? nil : rs.to_data_hash]
-	}
+          if !rs.nil?
+            if rs.events.length > 0
+              rs.events.each { |event|
+                if event.previous_value
+                  event.previous_value = event.previous_value.to_s
+                end
+                if event.desired_value
+                  event.desired_value = event.desired_value.to_s
+                end
+              }
+            end
+          end
+          [key, rs.nil? ? nil : rs.to_data_hash]
+        }
       ]
 
-    dir = File.join(Puppet[:reportdir], 'heckler')
+    dir = File.join(Puppet[:reportdir], "heckler")
 
     if !Puppet::FileSystem.exist?(dir)
       FileUtils.mkdir_p(dir)
@@ -117,8 +117,8 @@ Puppet::Reports.register_report(:heckler) do
     end
 
     if report["noop"] == false && report["status"] != "falied"
-        apply_name = "heckler_last_apply.json"
-        apply_file = File.join(dir, apply_name)
+      apply_name = "heckler_last_apply.json"
+      apply_file = File.join(dir, apply_name)
       begin
         Puppet::Util.replace_file(apply_file, 0640) do |fh|
           fh.print report.to_json
