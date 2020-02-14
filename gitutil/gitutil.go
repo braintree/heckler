@@ -84,7 +84,6 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 		return errors.New("Not a fast forward, bailing")
 	}
 
-	log.Printf("Fast forward...")
 	// Fast-forward changes
 	// Get remote tree
 	remoteTree, err := repo.LookupTree(remoteBranchCommit.TreeId())
