@@ -34,7 +34,7 @@ func (s *server) PuppetApply(ctx context.Context, req *puppetutil.PuppetApplyReq
 	log.Printf("Received: %v", req.Rev)
 
 	// pull
-	repo, err := gitutil.Pull("http://heckler:8080/puppetcode", "/var/lib/rizzo/repo/puppetcode")
+	repo, err := gitutil.Pull("http://"+s.conf.HecklerHost+":8080/puppetcode", "/var/lib/rizzo/repo/puppetcode")
 	if err != nil {
 		log.Printf("Pull error: %v", err)
 		return &puppetutil.PuppetReport{}, err
@@ -140,6 +140,7 @@ type PuppetCmd struct {
 type RizzoConf struct {
 	PuppetCmd       `yaml:"puppet_cmd"`
 	PuppetReportDir string `yaml:"puppet_reportdir"`
+	HecklerHost     string `yaml:"heckler_host"`
 }
 
 func main() {

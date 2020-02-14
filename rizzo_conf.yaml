@@ -11,3 +11,4 @@ puppet_cmd:
   env:
     BUTTER: "bubbles"
 puppet_reportdir: "/var/tmp/reports"
+heckler_host: "heckler.example.com"
