@@ -15,8 +15,10 @@ export GOCACHE := $(CURDIR)/.go-build
 help: ## Show the help
 	@printf 'Usage: make <TARGETS>\n\n'
 	@printf 'TARGETS:\n'
-	@grep -E '^[ a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-	awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@awk \
+		'BEGIN {FS = ":.*?## "}; \
+		/^[ a-zA-Z_-]+:.*?## .*$$/ {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' \
+  $(MAKEFILE_LIST)
 
 .PHONY: docker-build
 docker-build: docker-build-image ## Build heckler via the container
