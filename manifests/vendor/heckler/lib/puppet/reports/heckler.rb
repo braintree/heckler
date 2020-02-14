@@ -75,17 +75,17 @@ Puppet::Reports.register_report(:heckler) do
     report["resource_statuses"] =
       Hash[
         report["resource_statuses"].map { |key, rs|
+          # HACK: coerce previous_value & desired_value into strings, necessary
+          # for v4.5.2
           if !rs.nil?
-            if rs.events.length > 0
-              rs.events.each { |event|
-                if event.previous_value
-                  event.previous_value = event.previous_value.to_s
-                end
-                if event.desired_value
-                  event.desired_value = event.desired_value.to_s
-                end
-              }
-            end
+            rs.events.each { |event|
+              if event.previous_value
+                event.previous_value = event.previous_value.to_s
+              end
+              if event.desired_value
+                event.desired_value = event.desired_value.to_s
+              end
+            }
           end
           [key, rs.nil? ? nil : rs.to_data_hash]
         }
