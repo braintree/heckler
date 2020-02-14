@@ -9,6 +9,7 @@ DEB_VERSION := $(HECKLER_VERSION)-$(BT_VERSION)~bt$(DEBIAN_RELEASE)
 export CC := /usr/local/musl/bin/musl-gcc 
 GO_LDFLAGS := -X main.Version=$(HECKLER_VERSION) -extldflags=-static -linkmode=external
 export GOFLAGS := -mod=vendor -tags=static
+export GOCACHE := $(CURDIR)/.go-build
 
 build: vendor/github.com/libgit2/git2go/static-build
 	go build -o . -mod=vendor -tags=static -ldflags '$(GO_LDFLAGS)' ./...
