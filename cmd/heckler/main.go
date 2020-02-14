@@ -793,7 +793,11 @@ func main() {
 			} else if r.Status == "failed" {
 				log.Printf("ERROR: Apply failed, %s@%s", r.Host, r.ConfigurationVersion)
 			} else {
-				log.Printf("Applied: %s@%s", r.Host, r.ConfigurationVersion)
+				if noop {
+					log.Printf("Nooped: %s@%s", r.Host, r.ConfigurationVersion)
+				} else {
+					log.Printf("Applied: %s@%s", r.Host, r.ConfigurationVersion)
+				}
 			}
 		}
 		os.Exit(0)
