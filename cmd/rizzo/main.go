@@ -50,7 +50,6 @@ func (s *server) PuppetApply(ctx context.Context, req *puppetutil.PuppetApplyReq
 	log.Printf("Checkout Complete: %v", oid)
 
 	// apply
-	log.Printf("Applying: %v", oid)
 	pr, err := puppetApply(oid, req.Noop, s.conf)
 	if err != nil {
 		log.Printf("Apply error: %v", err)
@@ -84,6 +83,11 @@ func (s *server) PuppetLastApply(ctx context.Context, req *puppetutil.PuppetLast
 }
 
 func puppetApply(oid string, noop bool, conf *RizzoConf) (*puppetutil.PuppetReport, error) {
+	if noop {
+		log.Printf("Nooping: %v", oid)
+	} else {
+		log.Printf("Applying: %v", oid)
+	}
 	puppetArgs := make([]string, len(conf.PuppetCmd.Args))
 	copy(puppetArgs, conf.PuppetCmd.Args)
 	if noop {
