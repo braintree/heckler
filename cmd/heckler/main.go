@@ -370,6 +370,10 @@ func hecklerApply(rc puppetutil.RizzoClient, c chan<- puppetutil.PuppetReport, p
 	if err != nil {
 		c <- puppetutil.PuppetReport{}
 	}
+	if ctx.Err() != nil {
+		log.Printf("ERROR: Context error: %v", ctx.Err())
+		c <- puppetutil.PuppetReport{}
+	}
 	c <- *r
 }
 
