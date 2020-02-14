@@ -741,7 +741,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	repo, err := gitutil.Pull("http://heckler:8080/puppetcode", "/var/lib/heckler/repo/puppetcode")
+	repo, err := gitutil.Pull("http://localhost:8080/puppetcode", "/var/lib/heckler/repo/puppetcode")
 	if err != nil {
 		log.Fatalf("Unable to fetch repo: %v", err)
 	}
