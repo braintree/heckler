@@ -9,19 +9,19 @@ Puppet::Reports.register_report(:heckler) do
         is serilized as json so that it is compatible with the Go structs generated
         from the protobuf definitions for Heckler."
 
-  def resource_log_map(report)
-    regex_resource_property_tail = %r{/[a-z][a-z0-9_]*$}
-    regex_resource_tail = %r{[^\/]+\[[^\[\]]+\]$}
-    regex_resource = %r{^/Stage}
+  Regex_resource_property_tail = %r{/[a-z][a-z0-9_]*$}
+  Regex_resource_tail = %r{[^\/]+\[[^\[\]]+\]$}
+  Regex_resource = %r{^/Stage}
 
+  def resource_log_map(report)
     log_map = {}
 
     report["logs"].each do |log|
-      if log["source"] !~ regex_resource
+      if log["source"] !~ Regex_resource
         next
       end
-      log_source = log["source"].sub(regex_resource_property_tail, "")
-      log_source = log_source[regex_resource_tail]
+      log_source = log["source"].sub(Regex_resource_property_tail, "")
+      log_source = log_source[Regex_resource_tail]
       if !log_map.has_key?(log_source)
         log_map[log_source] = true
       end
