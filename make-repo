@@ -67,8 +67,6 @@ git add "${MUPPET_SHOW_MOD}"/manifests/episode.pp
 
 cp ../puppet.conf ./
 git add puppet.conf
-cp ../git-head-sha ./
-git add git-head-sha
 
 for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
   if ((commit == 4)); then
