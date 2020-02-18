@@ -3,11 +3,11 @@ require "fileutils"
 require "puppet/util"
 
 Puppet::Reports.register_report(:heckler) do
-  desc "This is identical to the standard puppet yaml report, except resources
-       that have neither events nor logs associated with them are removed, i.e. it
-       only includes resources which are changing, also this report is serilized as
-       json so that it is compatible with the Go structs generated from the protobuf
-       definitions."
+  desc "The Heckler report is identical to the standard puppet yaml report,
+        except resources that have neither events nor logs associated with them are
+        removed, i.e. it only includes resources which are changing. Also, this report
+        is serilized as json so that it is compatible with the Go structs generated
+        from the protobuf definitions for Heckler."
 
   def resource_log_map(report)
     regex_resource_property_tail = %r{/[a-z][a-z0-9_]*$}
