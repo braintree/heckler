@@ -68,11 +68,6 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 	if err != nil {
 		return err
 	}
-	remoteBranchID := remoteBranch.Target()
-	remoteBranchCommit, err := repo.LookupCommit(remoteBranchID)
-	if err != nil {
-		return err
-	}
 
 	if (analysis & git.MergeAnalysisUpToDate) != 0 {
 		log.Println("Already up to date")
@@ -84,45 +79,50 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 		return errors.New("Not a fast forward, bailing")
 	}
 
-	// Fast-forward changes
-	// Get remote tree
-	remoteTree, err := repo.LookupTree(remoteBranchCommit.TreeId())
-	if err != nil {
-		return err
-	}
-
-	// Checkout
-	checkoutOpts := git.CheckoutOpts{
-		Strategy: git.CheckoutSafe,
-	}
-	err = repo.CheckoutTree(remoteTree, &checkoutOpts)
-	if err != nil {
-		return err
-	}
-
 	branchRef, err := repo.References.Lookup("refs/heads/master")
 	if err != nil {
 		return err
 	}
 
+	remoteBranchID := remoteBranch.Target()
 	// Point branch to the same object as the remote branch
 	_, err = branchRef.SetTarget(remoteBranchID, "")
 	if err != nil {
 		return err
 	}
 
-	index, err := repo.Index()
-	if err != nil {
-		return err
+	if repo.IsBare() == false {
+		remoteBranchCommit, err := repo.LookupCommit(remoteBranchID)
+		if err != nil {
+			return err
+		}
+		// Get remote tree to checkout
+		remoteTree, err := repo.LookupTree(remoteBranchCommit.TreeId())
+		if err != nil {
+			return err
+		}
+		// Checkout
+		checkoutOpts := git.CheckoutOpts{
+			Strategy: git.CheckoutSafe,
+		}
+		err = repo.CheckoutTree(remoteTree, &checkoutOpts)
+		if err != nil {
+			return err
+		}
+		index, err := repo.Index()
+		if err != nil {
+			return err
+		}
+		err = index.ReadTree(remoteTree)
+		if err != nil {
+			return err
+		}
+		err = index.Write()
+		if err != nil {
+			return err
+		}
 	}
-	err = index.ReadTree(remoteTree)
-	if err != nil {
-		return err
-	}
-	err = index.Write()
-	if err != nil {
-		return err
-	}
+
 	err = repo.SetHead("refs/heads/master")
 	if err != nil {
 		return err
