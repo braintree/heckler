@@ -1,4 +1,7 @@
 class muppetshow {
+  file { "/data":
+    ensure => directory,
+  }
   file { "/data/puppet_apply":
     ensure => directory,
   }
