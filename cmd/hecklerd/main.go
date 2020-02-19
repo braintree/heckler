@@ -132,6 +132,16 @@ func main() {
 		close(idleConnsClosed)
 	}()
 
+	go func() {
+		for {
+			time.Sleep(5 * time.Second)
+			_, err = fetchRepo(hecklerdConf)
+			if err != nil {
+				log.Fatalf("Unable to fetch repo: %v", err)
+			}
+		}
+	}()
+
 	log.Printf("Starting HTTP server on %s (PID=%d)\n", server.Addr, os.Getpid())
 	if err := server.Serve(); err != nil && err != http.ErrServerClosed {
 		log.Println("HTTP server error:", err)
