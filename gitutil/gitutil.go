@@ -14,8 +14,8 @@ func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptio
 	var repo *git.Repository
 	var err error
 
-	log.Printf("Cloning %s to %s\n", remoteUrl, cloneDir)
 	if _, err = os.Stat(cloneDir); os.IsNotExist(err) {
+		log.Printf("Cloning %s to %s\n", remoteUrl, cloneDir)
 		repo, err = git.Clone(remoteUrl, cloneDir, cloneOptions)
 		if err != nil {
 			return nil, err
@@ -36,13 +36,13 @@ func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptio
 func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 	var err error
 
-	log.Printf("Fast forwarding...\n")
 	remote, err := repo.Remotes.Lookup("origin")
 	if err != nil {
 		return err
 	}
 
 	// XXX only fetch specific branch?
+	log.Printf("Fetching...\n")
 	err = remote.Fetch([]string{}, fetchOptions, "")
 	if err != nil {
 		return err
