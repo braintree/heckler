@@ -31,7 +31,7 @@ class fozzie {
     content => "",
   }
   exec { 'sail':
-    command => '/usr/games/sail -h',
+    command => '/usr/games/sail -s',
     refreshonly => true,
     subscribe => File["/data/puppet_apply/fozzie/styx"],
   }
