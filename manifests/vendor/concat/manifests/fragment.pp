@@ -1,51 +1,39 @@
-# == Define: concat::fragment
+# @summary
+#   Manages a fragment of text to be compiled into a file.
 #
-# Creates a concat_fragment in the catalogue
+# @param content
+#   Supplies the content of the fragment. Note: You must supply either a content parameter or a source parameter.
 #
-# === Options:
+# @param order
+#   Reorders your fragments within the destination file. Fragments that share the same order number are ordered by name. The string
+#   option is recommended.
 #
-# [*target*]
-#   The file that these fragments belong to
-# [*content*]
-#   If present puts the content into the file
-# [*source*]
-#   If content was not specified, use the source
-# [*order*]
-#   By default all files gets a 10_ prefix in the directory you can set it to
-#   anything else using this to influence the order of the content in the file
+# @param source
+#   Specifies a file to read into the content of the fragment. Note: You must supply either a content parameter or a source parameter.
+#   Valid options: a string or an array, containing one or more Puppet URLs.
+#
+# @param target
+#   Specifies the destination file of the fragment. Valid options: a string containing the path or title of the parent concat resource.
 #
 define concat::fragment(
-    $target,
-    $ensure  = undef,
-    $content = undef,
-    $source  = undef,
-    $order   = '10',
+  String                             $target,
+  Optional[String]                   $content = undef,
+  Optional[Variant[String, Array]]   $source  = undef,
+  Variant[String, Integer]           $order   = '10',
 ) {
-  validate_string($target)
   $resource = 'Concat::Fragment'
 
-  if $ensure != undef {
-    warning('The $ensure parameter to concat::fragment is deprecated and has no effect.')
-  }
-
-  validate_string($content)
-  if !(is_string($source) or is_array($source)) {
-    fail("${resource}['${title}']: 'source' is not a String or an Array.")
-  }
-
-  if !(is_string($order) or is_integer($order)) {
-    fail("${resource}['${title}']: 'order' is not a String or an Integer.")
-  } elsif (is_string($order) and $order =~ /[:\n\/]/) {
-    fail("${resource}['${title}']: 'order' cannot contain '/', ':', or '\n'.")
+  if ($order =~ String and $order =~ /[:\n\/]/) {
+    fail(translate("%{_resource}['%{_title}']: 'order' cannot contain '/', ':', or '\\n'.", {'_resource' => $resource, '_title' => $title}))
   }
 
   if ! ($content or $source) {
     crit('No content, source or symlink specified')
   } elsif ($content and $source) {
-    fail("${resource}['${title}']: Can't use 'source' and 'content' at the same time.")
+    fail(translate("%{_resource}['%{_title}']: Can't use 'source' and 'content' at the same time.", {'_resource' => $resource, '_title' => $title}))
   }
 
-  $safe_target_name = regsubst($target, '[/:~\n\s\+\*\(\)@]', '_', 'GM')
+  $safe_target_name = regsubst($target, '[\\\\/:~\n\s\+\*\(\)@]', '_', 'GM')
 
   concat_fragment { $name:
     target  => $target,
