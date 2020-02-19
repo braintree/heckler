@@ -9,8 +9,8 @@ import (
 	"os"
 	"os/exec"
 
-	"github.braintreeps.com/lollipopman/heckler/gitutil"
-	"github.braintreeps.com/lollipopman/heckler/puppetutil"
+	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
+	"github.braintreeps.com/lollipopman/heckler/internal/puppetutil"
 	"gopkg.in/yaml.v3"
 
 	"google.golang.org/grpc"

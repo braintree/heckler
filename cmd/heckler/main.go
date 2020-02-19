@@ -19,8 +19,8 @@ import (
 	"text/template"
 	"time"
 
-	"github.braintreeps.com/lollipopman/heckler/gitutil"
-	"github.braintreeps.com/lollipopman/heckler/puppetutil"
+	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
+	"github.braintreeps.com/lollipopman/heckler/internal/puppetutil"
 	"github.com/Masterminds/sprig"
 	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-cmp/cmp"

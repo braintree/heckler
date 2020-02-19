@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.braintreeps.com/lollipopman/heckler/gitutil"
+	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
 	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-github/github"
 	git "github.com/libgit2/git2go"
