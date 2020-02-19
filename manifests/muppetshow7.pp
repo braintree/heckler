@@ -32,15 +32,20 @@ class muppetshow {
     content => $the_muppet_show,
   }
 
+  group { "kermit":
+    ensure => present,
+    gid    => 9999,
+  }
   user { "kermit":
-    ensure     => present,
-    uid        => 9999,
-    gid        => 9999,
-    groups => ['muppets'],
+    ensure  => present,
+    uid     => 9999,
+    gid     => 9999,
+    groups  => ['muppets'],
+    require => Group['kermit'],
   }
   group { "muppets":
-    ensure     => present,
-    gid        => 9998,
+    ensure => present,
+    gid    => 9998,
   }
   muppetshow::episode { "One":
     base => "/data/puppet_apply",
