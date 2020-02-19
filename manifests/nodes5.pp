@@ -64,7 +64,7 @@ class waldorf {
     ensure => present,
     content => "sour\n",
   }
-  file { "/data/puppet_apply/fozzie/manhattan":
+  file { "/data/puppet_apply/waldorf/manhattan":
     ensure => present,
     content => "Gonzo\n",
   }
