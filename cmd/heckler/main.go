@@ -564,6 +564,7 @@ func noopCommitRange(nodes map[string]*Node, puppetReportChan chan puppetutil.Pu
 	// Make dir structure
 	// e.g. /var/heckler/v1..v2//oid.json
 
+	// XXX /var or /var/lib?
 	revdir := fmt.Sprintf("/var/heckler/%s..%s", beginRev, endRev)
 
 	os.MkdirAll(revdir, 077)
