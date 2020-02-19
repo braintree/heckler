@@ -1,6 +1,6 @@
 ## Puppet noop output for commit: 'stop nginx on fozzie & add episode one'
 
-### Commit [5c31a832dd238407c5d964edea794cdafd81c81f](https://github.braintreeps.com/lollipopman/muppetshow/commit/5c31a832dd238407c5d964edea794cdafd81c81f)
+### Commit [a7fb0042dac5aadca48d4b7f1cdeca3f3a57924b](https://github.braintreeps.com/lollipopman/muppetshow/commit/a7fb0042dac5aadca48d4b7f1cdeca3f3a57924b)
 
 - *Author:* lollipopman (<hathaway@paypal.com>)
 - *Message:*
@@ -76,7 +76,7 @@
 
 ## Puppet noop output for commit: 'finish the muppet show lyrics'
 
-### Commit [5e224ecda620c68036e9dec6fced35d0b56e0444](https://github.braintreeps.com/lollipopman/muppetshow/commit/5e224ecda620c68036e9dec6fced35d0b56e0444)
+### Commit [70762e93aae4103ee5d3d6563615dded42ed7bc4](https://github.braintreeps.com/lollipopman/muppetshow/commit/70762e93aae4103ee5d3d6563615dded42ed7bc4)
 
 - *Author:* lollipopman (<hathaway@paypal.com>)
 - *Message:*
@@ -154,7 +154,7 @@
 
 ## Puppet noop output for commit: 'add some fun diversions'
 
-### Commit [c0f10fde295abfd720b99e1990fa3441790c086c](https://github.braintreeps.com/lollipopman/muppetshow/commit/c0f10fde295abfd720b99e1990fa3441790c086c)
+### Commit [728c6444420c3a8b72ef511c2efebc00645958a7](https://github.braintreeps.com/lollipopman/muppetshow/commit/728c6444420c3a8b72ef511c2efebc00645958a7)
 
 - *Author:* lollipopman (<hathaway@paypal.com>)
 - *Message:*
@@ -180,7 +180,7 @@
 
 ## Puppet noop output for commit: 'add kermit user, modify sail input'
 
-### Commit [d5a20cb8f8bc07a4d646c74612296f7757ea5749](https://github.braintreeps.com/lollipopman/muppetshow/commit/d5a20cb8f8bc07a4d646c74612296f7757ea5749)
+### Commit [26833d4f5a9dec4d4c368ce9c15c374bcd486f55](https://github.braintreeps.com/lollipopman/muppetshow/commit/26833d4f5a9dec4d4c368ce9c15c374bcd486f55)
 
 - *Author:* lollipopman (<hathaway@paypal.com>)
 - *Message:*
@@ -209,19 +209,24 @@
     - *Current State:* {md5}d41d8cd98f00b204e9800998ecf8427e
     - *Desired State:* {md5}d256d47934e09aa4e80b8e6e5b5519c4
 
-3.  **Group[muppets]**
+3.  **Group[kermit]**
     - *Hosts:* fozzie.example.com, statler.example.com, waldorf.example.com
     - *Current State:* absent
     - *Desired State:* present
 
-4.  **User[kermit]**
+4.  **Group[muppets]**
+    - *Hosts:* fozzie.example.com, statler.example.com, waldorf.example.com
+    - *Current State:* absent
+    - *Desired State:* present
+
+5.  **User[kermit]**
     - *Hosts:* fozzie.example.com, statler.example.com, waldorf.example.com
     - *Current State:* absent
     - *Desired State:* present
 
 ## Puppet noop output for commit: 'New Movie'
 
-### Commit [3da5b8e9dbf204096096401923f4781feca89900](https://github.braintreeps.com/lollipopman/muppetshow/commit/3da5b8e9dbf204096096401923f4781feca89900)
+### Commit [21b39de8fc94876ece5b3ae35e5a25aa04fef0f4](https://github.braintreeps.com/lollipopman/muppetshow/commit/21b39de8fc94876ece5b3ae35e5a25aa04fef0f4)
 
 - *Author:* lollipopman (<hathaway@paypal.com>)
 - *Message:*
@@ -239,7 +244,7 @@
 
 ## Puppet noop output for commit: 'Gonzo'
 
-### Commit [12399ce674ff4b4abe4585173ff88360849703b3](https://github.braintreeps.com/lollipopman/muppetshow/commit/12399ce674ff4b4abe4585173ff88360849703b3)
+### Commit [a38f7bf8c20d7d0f56fdb09f009fb55a5f80348b](https://github.braintreeps.com/lollipopman/muppetshow/commit/a38f7bf8c20d7d0f56fdb09f009fb55a5f80348b)
 
 - *Author:* lollipopman (<hathaway@paypal.com>)
 - *Message:*
