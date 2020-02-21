@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -40,6 +41,7 @@ const (
 	defaultAddr     = ":8080"
 	shutdownTimeout = time.Second * 5
 	port            = ":50051"
+	stateDir        = "/var/lib/hecklerd"
 )
 
 var Debug = false
@@ -181,11 +183,7 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 	var data []byte
 	puppetReportChan := make(chan puppetutil.PuppetReport)
 
-	// Make dir structure
-	// e.g. /var/heckler/v1..v2//oid.json
-
-	// XXX /var or /var/lib?
-	revdir := fmt.Sprintf("/var/heckler/%s..%s", beginRev, endRev)
+	revdir := fmt.Sprintf(stateDir+"/noops/%s..%s", beginRev, endRev)
 
 	os.MkdirAll(revdir, 077)
 	for host, _ := range nodes {
@@ -801,7 +799,7 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 		return nil, err
 	}
 
-	cloneDir := "/var/lib/hecklerd/served_repo/puppetcode"
+	cloneDir := stateDir + "/served_repo/puppetcode"
 	cloneOptions := &git.CloneOptions{}
 	cloneOptions.Bare = true
 	remoteUrl := fmt.Sprintf("https://x-access-token:%s@"+conf.PuppetCodeGitURL, tok)
@@ -828,7 +826,11 @@ func main() {
 	var hecklerdConf *HecklerdConf
 	var file *os.File
 	var data []byte
+	var clearState bool
 	templates := parseTemplates()
+
+	flag.BoolVar(&clearState, "clear", false, "Clear local state, e.g. puppet code repo")
+	flag.Parse()
 
 	if _, err := os.Stat("/etc/heckler/hecklerd_conf.yaml"); err == nil {
 		hecklerdConfPath = "/etc/heckler/hecklerd_conf.yaml"
@@ -852,6 +854,11 @@ func main() {
 		log.Fatalf("Cannot unmarshal config: %v", err)
 	}
 
+	if clearState {
+		log.Printf("Remove state directory: %v", stateDir)
+		os.RemoveAll(stateDir)
+	}
+
 	repo, err := fetchRepo(hecklerdConf)
 	if err != nil {
 		log.Fatalf("Unable to fetch repo to serve: %v", err)
@@ -859,7 +866,7 @@ func main() {
 
 	gitServer := &gitcgiserver.GitCGIServer{}
 	gitServer.ExportAll = true
-	gitServer.ProjectRoot = "/var/lib/hecklerd/served_repo"
+	gitServer.ProjectRoot = stateDir + "/served_repo"
 	gitServer.Addr = defaultAddr
 	gitServer.ShutdownTimeout = shutdownTimeout
 

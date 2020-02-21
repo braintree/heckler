@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"io/ioutil"
 	"log"
 	"net"
@@ -17,7 +18,9 @@ import (
 )
 
 const (
-	port = ":50051"
+	port     = ":50051"
+	stateDir = "/var/lib/rizzo"
+	repoDir  = stateDir + "/repo/puppetcode"
 )
 
 // server is used to implement rizzo.RizzoServer.
@@ -34,7 +37,7 @@ func (s *server) PuppetApply(ctx context.Context, req *puppetutil.PuppetApplyReq
 	log.Printf("Received: %v", req.Rev)
 
 	// pull
-	repo, err := gitutil.Pull("http://"+s.conf.HecklerHost+":8080/puppetcode", "/var/lib/rizzo/repo/puppetcode")
+	repo, err := gitutil.Pull("http://"+s.conf.HecklerHost+":8080/puppetcode", repoDir)
 	if err != nil {
 		log.Printf("Pull error: %v", err)
 		return &puppetutil.PuppetReport{}, err
@@ -101,7 +104,7 @@ func puppetApply(oid string, noop bool, conf *RizzoConf) (*puppetutil.PuppetRepo
 	}
 	cmd := exec.Command("puppet", puppetArgs...)
 	// Change to code dir, so hiera relative paths resolve
-	cmd.Dir = "/var/lib/rizzo/repo/puppetcode"
+	cmd.Dir = repoDir
 	env := os.Environ()
 	for k, v := range conf.Env {
 		env = append(env, k+"="+v)
@@ -151,6 +154,10 @@ func main() {
 	var file *os.File
 	var data []byte
 	var rizzoConf *RizzoConf
+	var clearState bool
+
+	flag.BoolVar(&clearState, "clear", false, "Clear local state, e.g. puppet code repo")
+	flag.Parse()
 
 	if _, err := os.Stat("/etc/rizzo/rizzo_conf.yaml"); err == nil {
 		rizzoConfPath = "/etc/rizzo/rizzo_conf.yaml"
@@ -172,6 +179,11 @@ func main() {
 	err = yaml.Unmarshal([]byte(data), rizzoConf)
 	if err != nil {
 		log.Fatalf("Cannot unmarshal config: %v", err)
+	}
+
+	if clearState {
+		log.Printf("Remove state directory: %v", stateDir)
+		os.RemoveAll(stateDir)
 	}
 
 	lis, err := net.Listen("tcp", port)
