@@ -139,7 +139,7 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 
 	commits = make(map[git.Oid]*git.Commit)
 
-	log.Printf("Walk begun: %s..%s\n", beginRev, endRev)
+	log.Printf("Walk begun: %s..%s", beginRev, endRev)
 	rv, err := repo.Walk()
 	if err != nil {
 		return nil, nil, err
@@ -169,9 +169,9 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 			return nil, nil, err
 		}
 		commits[gi] = c
-		log.Printf("commit: %s\n", gi.String())
+		log.Printf("commit: %s", gi.String())
 	}
-	log.Printf("Walk Complete\n")
+	log.Printf("Walk Complete")
 
 	return commitLogIds, commits, nil
 }
@@ -501,19 +501,19 @@ func normalizeLogs(Logs []*puppetutil.Log) []*puppetutil.Log {
 		if regexCurValMsg.MatchString(l.Message) ||
 			regexApplyMsg.MatchString(l.Message) {
 			if Debug {
-				fmt.Fprintf(os.Stderr, "Dropping Log: %v: %v\n", l.Source, l.Message)
+				log.Printf("Dropping Log: %v: %v", l.Source, l.Message)
 			}
 			continue
 		} else if regexClass.MatchString(l.Source) ||
 			regexStage.MatchString(l.Source) ||
 			RegexDefineType.MatchString(l.Source) {
 			if Debug {
-				fmt.Fprintf(os.Stderr, "Dropping Log: %v: %v\n", l.Source, l.Message)
+				log.Printf("Dropping Log: %v: %v", l.Source, l.Message)
 			}
 			continue
 		} else if (!regexResource.MatchString(l.Source)) && regexRefreshMsg.MatchString(l.Message) {
 			if Debug {
-				fmt.Fprintf(os.Stderr, "Dropping Log: %v: %v\n", l.Source, l.Message)
+				log.Printf("Dropping Log: %v: %v", l.Source, l.Message)
 			}
 			continue
 		} else if regexResource.MatchString(l.Source) {
@@ -521,8 +521,8 @@ func normalizeLogs(Logs []*puppetutil.Log) []*puppetutil.Log {
 			newSource = regexResourcePropertyTail.ReplaceAllString(l.Source, "")
 			newSource = regexResourceTail.FindString(newSource)
 			if newSource == "" {
-				fmt.Fprintf(os.Stderr, "newSource is empty!\n")
-				fmt.Fprintf(os.Stderr, "Log: '%v' -> '%v': %v\n", origSource, newSource, l.Message)
+				log.Printf("newSource is empty!")
+				log.Printf("Log: '%v' -> '%v': %v", origSource, newSource, l.Message)
 				os.Exit(1)
 			}
 
@@ -531,11 +531,11 @@ func normalizeLogs(Logs []*puppetutil.Log) []*puppetutil.Log {
 			}
 			l.Source = newSource
 			if Debug {
-				fmt.Fprintf(os.Stderr, "Adding Log: '%v' -> '%v': %v\n", origSource, newSource, l.Message)
+				log.Printf("Adding Log: '%v' -> '%v': %v", origSource, newSource, l.Message)
 			}
 			newLogs = append(newLogs, l)
 		} else {
-			fmt.Fprintf(os.Stderr, "Unaccounted for Log: %v: %v\n", l.Source, l.Message)
+			log.Printf("Unaccounted for Log: %v: %v", l.Source, l.Message)
 			newLogs = append(newLogs, l)
 		}
 	}
@@ -650,11 +650,11 @@ func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Successfully created new milestone: %v\n", *nm.Title)
+	log.Printf("Successfully created new milestone: %v", *nm.Title)
 
 	for _, gi := range commitLogIds {
 		if len(groupedCommits[gi]) == 0 {
-			log.Printf("Skipping %s, no noop output\n", gi.String())
+			log.Printf("Skipping %s, no noop output", gi.String())
 			continue
 		}
 		githubIssue := &github.IssueRequest{
@@ -667,7 +667,7 @@ func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("Successfully created new issue: %v\n", *ni.Title)
+		log.Printf("Successfully created new issue: %v", *ni.Title)
 	}
 }
 
@@ -675,7 +675,7 @@ func markdownOutput(commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, gro
 	var output string
 	for _, gi := range commitLogIds {
 		if len(groupedCommits[gi]) == 0 {
-			log.Printf("Skipping %s, no noop output\n", gi.String())
+			log.Printf("Skipping %s, no noop output", gi.String())
 			continue
 		}
 		output += fmt.Sprintf("## Puppet noop output for commit: '%v'\n\n", commits[gi].Summary())
@@ -761,7 +761,7 @@ func nodeLastApply(nodes map[string]*Node, repo *git.Repository) error {
 		if node, ok := nodes[r.Host]; ok {
 			node.lastApply = obj.Id()
 		} else {
-			log.Fatalf("No Node struct found for report from: %s\n", r.Host)
+			log.Fatalf("No Node struct found for report from: %s", r.Host)
 		}
 	}
 
@@ -821,6 +821,8 @@ type HecklerdConf struct {
 }
 
 func main() {
+	// add filename and linenumber to log output
+	log.SetFlags(log.Lshortfile)
 	var err error
 	var hecklerdConfPath string
 	var hecklerdConf *HecklerdConf
@@ -877,7 +879,7 @@ func main() {
 
 	// git server
 	go func() {
-		log.Printf("Starting Git HTTP server on %s (PID=%d)\n", gitServer.Addr, os.Getpid())
+		log.Printf("Starting Git HTTP server on %s (PID=%d)", gitServer.Addr, os.Getpid())
 		if err := gitServer.Serve(); err != nil && err != http.ErrServerClosed {
 			log.Println("Git HTTP server error:", err)
 		}
@@ -906,7 +908,7 @@ func main() {
 	go func() {
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-		log.Printf("Received %s\n", <-sigs)
+		log.Printf("Received %s", <-sigs)
 		if err := gitServer.Shutdown(context.Background()); err != nil {
 			log.Printf("HTTP server shutdown error: %v", err)
 		}

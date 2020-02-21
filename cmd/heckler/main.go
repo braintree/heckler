@@ -26,6 +26,7 @@ func (i *hostFlags) Set(value string) error {
 }
 
 func main() {
+	// add filename and linenumber to log output
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var hosts hostFlags
 	var beginRev string

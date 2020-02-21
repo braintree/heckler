@@ -144,6 +144,8 @@ type RizzoConf struct {
 }
 
 func main() {
+	// add filename and linenumber to log output
+	log.SetFlags(log.Lshortfile)
 	var err error
 	var rizzoConfPath string
 	var file *os.File
