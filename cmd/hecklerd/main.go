@@ -241,7 +241,7 @@ func main() {
 		log.Fatalf("Cannot unmarshal config: %v", err)
 	}
 
-	_, err = fetchRepo(hecklerdConf)
+	repo, err := fetchRepo(hecklerdConf)
 	if err != nil {
 		log.Fatalf("Unable to fetch repo to serve: %v", err)
 	}
@@ -282,12 +282,6 @@ func main() {
 	grpcServer := grpc.NewServer()
 	hecklerServer := new(hecklerServer)
 	hecklerServer.conf = hecklerdConf
-	// HACK
-	time.Sleep(1 * time.Second)
-	repo, err := gitutil.Pull("http://localhost:8080/puppetcode", "/var/lib/hecklerd/work_repo/puppetcode")
-	if err != nil {
-		log.Fatalf("Unable to fetch repo: %v", err)
-	}
 	hecklerServer.repo = repo
 	hecklerpb.RegisterHecklerServer(grpcServer, hecklerServer)
 
