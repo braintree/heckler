@@ -26,33 +26,33 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-type HecklerNoopRequest_OutputFormat int32
+type OutputFormat int32
 
 const (
-	HecklerNoopRequest_none     HecklerNoopRequest_OutputFormat = 0
-	HecklerNoopRequest_markdown HecklerNoopRequest_OutputFormat = 1
+	OutputFormat_none     OutputFormat = 0
+	OutputFormat_markdown OutputFormat = 1
 	// XXX
-	HecklerNoopRequest_tty HecklerNoopRequest_OutputFormat = 2
+	OutputFormat_tty OutputFormat = 2
 )
 
-var HecklerNoopRequest_OutputFormat_name = map[int32]string{
+var OutputFormat_name = map[int32]string{
 	0: "none",
 	1: "markdown",
 	2: "tty",
 }
 
-var HecklerNoopRequest_OutputFormat_value = map[string]int32{
+var OutputFormat_value = map[string]int32{
 	"none":     0,
 	"markdown": 1,
 	"tty":      2,
 }
 
-func (x HecklerNoopRequest_OutputFormat) String() string {
-	return proto.EnumName(HecklerNoopRequest_OutputFormat_name, int32(x))
+func (x OutputFormat) String() string {
+	return proto.EnumName(OutputFormat_name, int32(x))
 }
 
-func (HecklerNoopRequest_OutputFormat) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_993bd662ef9f4722, []int{2, 0}
+func (OutputFormat) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_993bd662ef9f4722, []int{0}
 }
 
 type HecklerStatusRequest struct {
@@ -143,26 +143,26 @@ func (m *HecklerStatusReport) GetNodeStatuses() map[string]string {
 	return nil
 }
 
-type HecklerNoopRequest struct {
-	BeginRev        string                          `protobuf:"bytes,1,opt,name=begin_rev,json=beginRev,proto3" json:"begin_rev,omitempty"`
-	EndRev          string                          `protobuf:"bytes,2,opt,name=end_rev,json=endRev,proto3" json:"end_rev,omitempty"`
-	GithubMilestone string                          `protobuf:"bytes,3,opt,name=github_milestone,json=githubMilestone,proto3" json:"github_milestone,omitempty"`
-	OutputFormat    HecklerNoopRequest_OutputFormat `protobuf:"varint,4,opt,name=output_format,json=outputFormat,proto3,enum=hecklerpb.HecklerNoopRequest_OutputFormat" json:"output_format,omitempty"`
-	Nodes           []string                        `protobuf:"bytes,5,rep,name=nodes,proto3" json:"nodes,omitempty"`
+type HecklerNoopRangeRequest struct {
+	BeginRev        string       `protobuf:"bytes,1,opt,name=begin_rev,json=beginRev,proto3" json:"begin_rev,omitempty"`
+	EndRev          string       `protobuf:"bytes,2,opt,name=end_rev,json=endRev,proto3" json:"end_rev,omitempty"`
+	GithubMilestone string       `protobuf:"bytes,3,opt,name=github_milestone,json=githubMilestone,proto3" json:"github_milestone,omitempty"`
+	OutputFormat    OutputFormat `protobuf:"varint,4,opt,name=output_format,json=outputFormat,proto3,enum=hecklerpb.OutputFormat" json:"output_format,omitempty"`
+	Nodes           []string     `protobuf:"bytes,5,rep,name=nodes,proto3" json:"nodes,omitempty"`
 }
 
-func (m *HecklerNoopRequest) Reset()         { *m = HecklerNoopRequest{} }
-func (m *HecklerNoopRequest) String() string { return proto.CompactTextString(m) }
-func (*HecklerNoopRequest) ProtoMessage()    {}
-func (*HecklerNoopRequest) Descriptor() ([]byte, []int) {
+func (m *HecklerNoopRangeRequest) Reset()         { *m = HecklerNoopRangeRequest{} }
+func (m *HecklerNoopRangeRequest) String() string { return proto.CompactTextString(m) }
+func (*HecklerNoopRangeRequest) ProtoMessage()    {}
+func (*HecklerNoopRangeRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_993bd662ef9f4722, []int{2}
 }
-func (m *HecklerNoopRequest) XXX_Unmarshal(b []byte) error {
+func (m *HecklerNoopRangeRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *HecklerNoopRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *HecklerNoopRangeRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_HecklerNoopRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_HecklerNoopRangeRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -172,69 +172,69 @@ func (m *HecklerNoopRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return b[:n], nil
 	}
 }
-func (m *HecklerNoopRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_HecklerNoopRequest.Merge(m, src)
+func (m *HecklerNoopRangeRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HecklerNoopRangeRequest.Merge(m, src)
 }
-func (m *HecklerNoopRequest) XXX_Size() int {
+func (m *HecklerNoopRangeRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *HecklerNoopRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_HecklerNoopRequest.DiscardUnknown(m)
+func (m *HecklerNoopRangeRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_HecklerNoopRangeRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_HecklerNoopRequest proto.InternalMessageInfo
+var xxx_messageInfo_HecklerNoopRangeRequest proto.InternalMessageInfo
 
-func (m *HecklerNoopRequest) GetBeginRev() string {
+func (m *HecklerNoopRangeRequest) GetBeginRev() string {
 	if m != nil {
 		return m.BeginRev
 	}
 	return ""
 }
 
-func (m *HecklerNoopRequest) GetEndRev() string {
+func (m *HecklerNoopRangeRequest) GetEndRev() string {
 	if m != nil {
 		return m.EndRev
 	}
 	return ""
 }
 
-func (m *HecklerNoopRequest) GetGithubMilestone() string {
+func (m *HecklerNoopRangeRequest) GetGithubMilestone() string {
 	if m != nil {
 		return m.GithubMilestone
 	}
 	return ""
 }
 
-func (m *HecklerNoopRequest) GetOutputFormat() HecklerNoopRequest_OutputFormat {
+func (m *HecklerNoopRangeRequest) GetOutputFormat() OutputFormat {
 	if m != nil {
 		return m.OutputFormat
 	}
-	return HecklerNoopRequest_none
+	return OutputFormat_none
 }
 
-func (m *HecklerNoopRequest) GetNodes() []string {
+func (m *HecklerNoopRangeRequest) GetNodes() []string {
 	if m != nil {
 		return m.Nodes
 	}
 	return nil
 }
 
-type HecklerNoopReport struct {
+type HecklerNoopRangeReport struct {
 	Output string `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
 }
 
-func (m *HecklerNoopReport) Reset()         { *m = HecklerNoopReport{} }
-func (m *HecklerNoopReport) String() string { return proto.CompactTextString(m) }
-func (*HecklerNoopReport) ProtoMessage()    {}
-func (*HecklerNoopReport) Descriptor() ([]byte, []int) {
+func (m *HecklerNoopRangeReport) Reset()         { *m = HecklerNoopRangeReport{} }
+func (m *HecklerNoopRangeReport) String() string { return proto.CompactTextString(m) }
+func (*HecklerNoopRangeReport) ProtoMessage()    {}
+func (*HecklerNoopRangeReport) Descriptor() ([]byte, []int) {
 	return fileDescriptor_993bd662ef9f4722, []int{3}
 }
-func (m *HecklerNoopReport) XXX_Unmarshal(b []byte) error {
+func (m *HecklerNoopRangeReport) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *HecklerNoopReport) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *HecklerNoopRangeReport) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_HecklerNoopReport.Marshal(b, m, deterministic)
+		return xxx_messageInfo_HecklerNoopRangeReport.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -244,19 +244,131 @@ func (m *HecklerNoopReport) XXX_Marshal(b []byte, deterministic bool) ([]byte, e
 		return b[:n], nil
 	}
 }
-func (m *HecklerNoopReport) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_HecklerNoopReport.Merge(m, src)
+func (m *HecklerNoopRangeReport) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HecklerNoopRangeReport.Merge(m, src)
 }
-func (m *HecklerNoopReport) XXX_Size() int {
+func (m *HecklerNoopRangeReport) XXX_Size() int {
 	return m.Size()
 }
-func (m *HecklerNoopReport) XXX_DiscardUnknown() {
-	xxx_messageInfo_HecklerNoopReport.DiscardUnknown(m)
+func (m *HecklerNoopRangeReport) XXX_DiscardUnknown() {
+	xxx_messageInfo_HecklerNoopRangeReport.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_HecklerNoopReport proto.InternalMessageInfo
+var xxx_messageInfo_HecklerNoopRangeReport proto.InternalMessageInfo
 
-func (m *HecklerNoopReport) GetOutput() string {
+func (m *HecklerNoopRangeReport) GetOutput() string {
+	if m != nil {
+		return m.Output
+	}
+	return ""
+}
+
+type HecklerApplyRequest struct {
+	Rev          string       `protobuf:"bytes,1,opt,name=rev,proto3" json:"rev,omitempty"`
+	Noop         bool         `protobuf:"varint,2,opt,name=noop,proto3" json:"noop,omitempty"`
+	OutputFormat OutputFormat `protobuf:"varint,3,opt,name=output_format,json=outputFormat,proto3,enum=hecklerpb.OutputFormat" json:"output_format,omitempty"`
+	Nodes        []string     `protobuf:"bytes,4,rep,name=nodes,proto3" json:"nodes,omitempty"`
+}
+
+func (m *HecklerApplyRequest) Reset()         { *m = HecklerApplyRequest{} }
+func (m *HecklerApplyRequest) String() string { return proto.CompactTextString(m) }
+func (*HecklerApplyRequest) ProtoMessage()    {}
+func (*HecklerApplyRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_993bd662ef9f4722, []int{4}
+}
+func (m *HecklerApplyRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HecklerApplyRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_HecklerApplyRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *HecklerApplyRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HecklerApplyRequest.Merge(m, src)
+}
+func (m *HecklerApplyRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *HecklerApplyRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_HecklerApplyRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HecklerApplyRequest proto.InternalMessageInfo
+
+func (m *HecklerApplyRequest) GetRev() string {
+	if m != nil {
+		return m.Rev
+	}
+	return ""
+}
+
+func (m *HecklerApplyRequest) GetNoop() bool {
+	if m != nil {
+		return m.Noop
+	}
+	return false
+}
+
+func (m *HecklerApplyRequest) GetOutputFormat() OutputFormat {
+	if m != nil {
+		return m.OutputFormat
+	}
+	return OutputFormat_none
+}
+
+func (m *HecklerApplyRequest) GetNodes() []string {
+	if m != nil {
+		return m.Nodes
+	}
+	return nil
+}
+
+type HecklerApplyReport struct {
+	Output string `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+}
+
+func (m *HecklerApplyReport) Reset()         { *m = HecklerApplyReport{} }
+func (m *HecklerApplyReport) String() string { return proto.CompactTextString(m) }
+func (*HecklerApplyReport) ProtoMessage()    {}
+func (*HecklerApplyReport) Descriptor() ([]byte, []int) {
+	return fileDescriptor_993bd662ef9f4722, []int{5}
+}
+func (m *HecklerApplyReport) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HecklerApplyReport) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_HecklerApplyReport.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *HecklerApplyReport) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HecklerApplyReport.Merge(m, src)
+}
+func (m *HecklerApplyReport) XXX_Size() int {
+	return m.Size()
+}
+func (m *HecklerApplyReport) XXX_DiscardUnknown() {
+	xxx_messageInfo_HecklerApplyReport.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HecklerApplyReport proto.InternalMessageInfo
+
+func (m *HecklerApplyReport) GetOutput() string {
 	if m != nil {
 		return m.Output
 	}
@@ -264,44 +376,50 @@ func (m *HecklerNoopReport) GetOutput() string {
 }
 
 func init() {
-	proto.RegisterEnum("hecklerpb.HecklerNoopRequest_OutputFormat", HecklerNoopRequest_OutputFormat_name, HecklerNoopRequest_OutputFormat_value)
+	proto.RegisterEnum("hecklerpb.OutputFormat", OutputFormat_name, OutputFormat_value)
 	proto.RegisterType((*HecklerStatusRequest)(nil), "hecklerpb.HecklerStatusRequest")
 	proto.RegisterType((*HecklerStatusReport)(nil), "hecklerpb.HecklerStatusReport")
 	proto.RegisterMapType((map[string]string)(nil), "hecklerpb.HecklerStatusReport.NodeStatusesEntry")
-	proto.RegisterType((*HecklerNoopRequest)(nil), "hecklerpb.HecklerNoopRequest")
-	proto.RegisterType((*HecklerNoopReport)(nil), "hecklerpb.HecklerNoopReport")
+	proto.RegisterType((*HecklerNoopRangeRequest)(nil), "hecklerpb.HecklerNoopRangeRequest")
+	proto.RegisterType((*HecklerNoopRangeReport)(nil), "hecklerpb.HecklerNoopRangeReport")
+	proto.RegisterType((*HecklerApplyRequest)(nil), "hecklerpb.HecklerApplyRequest")
+	proto.RegisterType((*HecklerApplyReport)(nil), "hecklerpb.HecklerApplyReport")
 }
 
 func init() { proto.RegisterFile("hecklerpb.proto", fileDescriptor_993bd662ef9f4722) }
 
 var fileDescriptor_993bd662ef9f4722 = []byte{
-	// 417 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x52, 0xc1, 0x8e, 0xd2, 0x50,
-	0x14, 0xed, 0x6b, 0x67, 0x80, 0xde, 0xa1, 0x4e, 0xe7, 0x39, 0xd1, 0x06, 0xb5, 0x92, 0xae, 0x30,
-	0x63, 0x9a, 0x09, 0x6e, 0x8c, 0x1b, 0x13, 0x13, 0x8d, 0x0b, 0x1d, 0x4d, 0x89, 0xeb, 0xa6, 0xb5,
-	0x57, 0x20, 0xc0, 0x7b, 0xb5, 0x7d, 0xc5, 0xf0, 0x15, 0xfa, 0x1f, 0xc6, 0xff, 0x70, 0xc9, 0xd2,
-	0xa5, 0x81, 0x1f, 0x31, 0x7d, 0xaf, 0x48, 0x11, 0x61, 0xd7, 0x73, 0xee, 0x39, 0xf7, 0xde, 0x77,
-	0x4f, 0xe1, 0x7c, 0x84, 0x1f, 0x27, 0x53, 0xcc, 0xd2, 0xd8, 0x4f, 0x33, 0x2e, 0x38, 0x35, 0xff,
-	0x12, 0xde, 0x63, 0xb8, 0x7c, 0xad, 0xc0, 0x40, 0x44, 0xa2, 0xc8, 0x03, 0xfc, 0x5c, 0x60, 0x2e,
-	0xe8, 0x25, 0x9c, 0x32, 0x9e, 0x60, 0xee, 0x90, 0xae, 0xd1, 0x33, 0x03, 0x05, 0xbc, 0x1f, 0x04,
-	0x6e, 0xff, 0x23, 0x4f, 0x79, 0x26, 0xe8, 0x07, 0xb0, 0x4a, 0x41, 0x98, 0x4b, 0xb2, 0x72, 0x9d,
-	0xf5, 0xaf, 0xfd, 0xed, 0xe4, 0xff, 0xd8, 0xfc, 0x1b, 0x9e, 0xe0, 0xa0, 0xb2, 0xbc, 0x64, 0x22,
-	0x5b, 0x04, 0x6d, 0x56, 0xa3, 0x3a, 0xcf, 0xe1, 0x62, 0x4f, 0x42, 0x6d, 0x30, 0x26, 0xb8, 0x70,
-	0x48, 0x97, 0xf4, 0xcc, 0xa0, 0xfc, 0x2c, 0x77, 0x9d, 0x47, 0xd3, 0x02, 0x1d, 0x5d, 0x72, 0x0a,
-	0x3c, 0xd3, 0x9f, 0x12, 0xef, 0xab, 0x0e, 0xb4, 0x1a, 0x7c, 0xc3, 0x79, 0xba, 0x79, 0xdc, 0x3d,
-	0x30, 0x63, 0x1c, 0x8e, 0x59, 0x98, 0xe1, 0xbc, 0x6a, 0xd4, 0x92, 0x44, 0x80, 0x73, 0x7a, 0x17,
-	0x9a, 0xc8, 0x12, 0x59, 0x52, 0xfd, 0x1a, 0xc8, 0x92, 0xb2, 0xf0, 0x08, 0xec, 0xe1, 0x58, 0x8c,
-	0x8a, 0x38, 0x9c, 0x8d, 0xa7, 0x98, 0x0b, 0xce, 0xd0, 0x31, 0xa4, 0xe2, 0x5c, 0xf1, 0x6f, 0x37,
-	0x34, 0x7d, 0x0f, 0x16, 0x2f, 0x44, 0x5a, 0x88, 0xf0, 0x13, 0xcf, 0x66, 0x91, 0x70, 0x4e, 0xba,
-	0xa4, 0x77, 0xab, 0x7f, 0xb5, 0x7f, 0x8f, 0xda, 0x5a, 0xfe, 0xbb, 0xba, 0x25, 0x68, 0xab, 0x0e,
-	0xaf, 0x24, 0xda, 0xe6, 0x71, 0x5a, 0xcf, 0xe3, 0x1a, 0xac, 0x1d, 0x13, 0x6d, 0xc1, 0x09, 0xe3,
-	0x0c, 0x6d, 0x8d, 0xb6, 0xa1, 0x35, 0x8b, 0xb2, 0x49, 0xc2, 0xbf, 0x30, 0x9b, 0xd0, 0x26, 0x18,
-	0x42, 0x2c, 0x6c, 0xdd, 0xbb, 0x82, 0x8b, 0x9d, 0xc9, 0x32, 0xbe, 0x3b, 0xd0, 0x50, 0xc3, 0xaa,
-	0x63, 0x54, 0xa8, 0xff, 0x9d, 0x40, 0xb3, 0x52, 0xd3, 0x00, 0xac, 0x9d, 0x08, 0xe9, 0xc3, 0xc3,
-	0xe1, 0xca, 0xe7, 0x74, 0xdc, 0xe3, 0xe9, 0x7b, 0x1a, 0x7d, 0x03, 0x67, 0xb5, 0x65, 0xe8, 0x83,
-	0xa3, 0xe7, 0xe9, 0xdc, 0x3f, 0x54, 0x56, 0xdd, 0x5e, 0x38, 0x3f, 0x57, 0x2e, 0x59, 0xae, 0x5c,
-	0xf2, 0x7b, 0xe5, 0x92, 0x6f, 0x6b, 0x57, 0x5b, 0xae, 0x5d, 0xed, 0xd7, 0xda, 0xd5, 0xe2, 0x86,
-	0xfc, 0xed, 0x9f, 0xfc, 0x09, 0x00, 0x00, 0xff, 0xff, 0xee, 0x2d, 0x5c, 0x74, 0x09, 0x03, 0x00,
+	// 481 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x54, 0xcd, 0x6e, 0xd3, 0x40,
+	0x10, 0xf6, 0xc6, 0x69, 0x7e, 0x86, 0x84, 0x9a, 0xa1, 0x6a, 0xad, 0x20, 0x4c, 0xf0, 0x29, 0xa0,
+	0x2a, 0x8a, 0xc2, 0x05, 0x21, 0x21, 0x04, 0x12, 0x88, 0x0b, 0xad, 0xb4, 0x15, 0x27, 0x0e, 0x91,
+	0x83, 0x87, 0x34, 0x4a, 0xb2, 0x6b, 0xec, 0x75, 0x50, 0x9e, 0x81, 0x4b, 0x5f, 0x84, 0xf7, 0xe0,
+	0x46, 0x8f, 0x1c, 0x51, 0xf2, 0x22, 0xc8, 0x6b, 0x87, 0x38, 0x71, 0x9b, 0x03, 0xb7, 0x9d, 0x6f,
+	0x7e, 0xbf, 0xf9, 0x46, 0x0b, 0x87, 0x97, 0xf4, 0x79, 0x32, 0xa5, 0x30, 0x18, 0x76, 0x83, 0x50,
+	0x2a, 0x89, 0xf5, 0x7f, 0x80, 0x7b, 0x0a, 0x47, 0xef, 0x53, 0xe3, 0x42, 0x79, 0x2a, 0x8e, 0x38,
+	0x7d, 0x8d, 0x29, 0x52, 0x78, 0x04, 0x07, 0x42, 0xfa, 0x14, 0xd9, 0xac, 0x6d, 0x76, 0xea, 0x3c,
+	0x35, 0xdc, 0x1f, 0x0c, 0xee, 0xef, 0x84, 0x07, 0x32, 0x54, 0xf8, 0x11, 0x9a, 0x49, 0xc0, 0x20,
+	0xd2, 0x60, 0x96, 0x75, 0xa7, 0xdf, 0xeb, 0x6e, 0x3a, 0xdf, 0x90, 0xd6, 0x3d, 0x93, 0x3e, 0x5d,
+	0x64, 0x29, 0x6f, 0x85, 0x0a, 0x17, 0xbc, 0x21, 0x72, 0x50, 0xeb, 0x15, 0xdc, 0x2b, 0x84, 0xa0,
+	0x05, 0xe6, 0x84, 0x16, 0x36, 0x6b, 0xb3, 0x4e, 0x9d, 0x27, 0xcf, 0x64, 0xd6, 0xb9, 0x37, 0x8d,
+	0xc9, 0x2e, 0x69, 0x2c, 0x35, 0x5e, 0x94, 0x9e, 0x33, 0xf7, 0x17, 0x83, 0x93, 0xac, 0xf1, 0x99,
+	0x94, 0x01, 0xf7, 0xc4, 0x88, 0xd6, 0x0c, 0x1f, 0x40, 0x7d, 0x48, 0xa3, 0xb1, 0x18, 0x84, 0x34,
+	0xcf, 0xaa, 0xd5, 0x34, 0xc0, 0x69, 0x8e, 0x27, 0x50, 0x25, 0xe1, 0x6b, 0x57, 0x5a, 0xb4, 0x42,
+	0xc2, 0x4f, 0x1c, 0x4f, 0xc0, 0x1a, 0x8d, 0xd5, 0x65, 0x3c, 0x1c, 0xcc, 0xc6, 0x53, 0x8a, 0x94,
+	0x14, 0x64, 0x9b, 0x3a, 0xe2, 0x30, 0xc5, 0x3f, 0xac, 0x61, 0x7c, 0x09, 0x4d, 0x19, 0xab, 0x20,
+	0x56, 0x83, 0x2f, 0x32, 0x9c, 0x79, 0xca, 0x2e, 0xb7, 0x59, 0xe7, 0x6e, 0xdf, 0xce, 0x2d, 0xe5,
+	0x3c, 0xef, 0xe7, 0x8d, 0x34, 0xfc, 0x9d, 0xb6, 0x36, 0x0a, 0x1c, 0xe4, 0x15, 0xe8, 0xc1, 0x71,
+	0x91, 0x90, 0xd6, 0xe0, 0x18, 0x2a, 0x69, 0x7e, 0x46, 0x26, 0xb3, 0xdc, 0xab, 0x8d, 0x66, 0xaf,
+	0x83, 0x60, 0xba, 0x58, 0xf3, 0xb7, 0xc0, 0xdc, 0x30, 0x4f, 0x9e, 0x88, 0x50, 0x16, 0x52, 0x06,
+	0x9a, 0x71, 0x8d, 0xeb, 0x77, 0x91, 0x84, 0xf9, 0x7f, 0x24, 0xca, 0x79, 0x12, 0xa7, 0x80, 0xdb,
+	0x13, 0xed, 0x23, 0xf0, 0xb4, 0x07, 0xcd, 0xad, 0x16, 0x58, 0x4b, 0xe6, 0x14, 0x64, 0x19, 0xd8,
+	0x80, 0xda, 0xcc, 0x0b, 0x27, 0xbe, 0xfc, 0x26, 0x2c, 0x86, 0x55, 0x30, 0x95, 0x5a, 0x58, 0xa5,
+	0xfe, 0xf7, 0x12, 0x54, 0xb3, 0x06, 0xc8, 0xa1, 0xb9, 0x75, 0x7a, 0xf8, 0xe8, 0xf6, 0xa3, 0xd4,
+	0x8b, 0x69, 0x39, 0xfb, 0xaf, 0xd6, 0x35, 0xf0, 0x13, 0x58, 0xbb, 0x22, 0xa0, 0x5b, 0xcc, 0xda,
+	0x3d, 0xb9, 0xd6, 0xe3, 0xbd, 0x31, 0x59, 0xf1, 0x73, 0x68, 0xe4, 0x97, 0x83, 0x37, 0x8c, 0x93,
+	0xd7, 0xb1, 0xf5, 0xf0, 0x56, 0x7f, 0x5a, 0xf0, 0x8d, 0xfd, 0x73, 0xe9, 0xb0, 0xeb, 0xa5, 0xc3,
+	0xfe, 0x2c, 0x1d, 0x76, 0xb5, 0x72, 0x8c, 0xeb, 0x95, 0x63, 0xfc, 0x5e, 0x39, 0xc6, 0xb0, 0xa2,
+	0xbf, 0x83, 0x67, 0x7f, 0x03, 0x00, 0x00, 0xff, 0xff, 0x4d, 0xed, 0x36, 0x16, 0x21, 0x04, 0x00,
 	0x00,
 }
 
@@ -318,7 +436,8 @@ const _ = grpc.SupportPackageIsVersion4
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type HecklerClient interface {
 	HecklerStatus(ctx context.Context, in *HecklerStatusRequest, opts ...grpc.CallOption) (*HecklerStatusReport, error)
-	HecklerNoop(ctx context.Context, in *HecklerNoopRequest, opts ...grpc.CallOption) (*HecklerNoopReport, error)
+	HecklerNoopRange(ctx context.Context, in *HecklerNoopRangeRequest, opts ...grpc.CallOption) (*HecklerNoopRangeReport, error)
+	HecklerApply(ctx context.Context, in *HecklerApplyRequest, opts ...grpc.CallOption) (*HecklerApplyReport, error)
 }
 
 type hecklerClient struct {
@@ -338,9 +457,18 @@ func (c *hecklerClient) HecklerStatus(ctx context.Context, in *HecklerStatusRequ
 	return out, nil
 }
 
-func (c *hecklerClient) HecklerNoop(ctx context.Context, in *HecklerNoopRequest, opts ...grpc.CallOption) (*HecklerNoopReport, error) {
-	out := new(HecklerNoopReport)
-	err := c.cc.Invoke(ctx, "/hecklerpb.Heckler/HecklerNoop", in, out, opts...)
+func (c *hecklerClient) HecklerNoopRange(ctx context.Context, in *HecklerNoopRangeRequest, opts ...grpc.CallOption) (*HecklerNoopRangeReport, error) {
+	out := new(HecklerNoopRangeReport)
+	err := c.cc.Invoke(ctx, "/hecklerpb.Heckler/HecklerNoopRange", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hecklerClient) HecklerApply(ctx context.Context, in *HecklerApplyRequest, opts ...grpc.CallOption) (*HecklerApplyReport, error) {
+	out := new(HecklerApplyReport)
+	err := c.cc.Invoke(ctx, "/hecklerpb.Heckler/HecklerApply", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +478,8 @@ func (c *hecklerClient) HecklerNoop(ctx context.Context, in *HecklerNoopRequest,
 // HecklerServer is the server API for Heckler service.
 type HecklerServer interface {
 	HecklerStatus(context.Context, *HecklerStatusRequest) (*HecklerStatusReport, error)
-	HecklerNoop(context.Context, *HecklerNoopRequest) (*HecklerNoopReport, error)
+	HecklerNoopRange(context.Context, *HecklerNoopRangeRequest) (*HecklerNoopRangeReport, error)
+	HecklerApply(context.Context, *HecklerApplyRequest) (*HecklerApplyReport, error)
 }
 
 // UnimplementedHecklerServer can be embedded to have forward compatible implementations.
@@ -360,8 +489,11 @@ type UnimplementedHecklerServer struct {
 func (*UnimplementedHecklerServer) HecklerStatus(ctx context.Context, req *HecklerStatusRequest) (*HecklerStatusReport, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HecklerStatus not implemented")
 }
-func (*UnimplementedHecklerServer) HecklerNoop(ctx context.Context, req *HecklerNoopRequest) (*HecklerNoopReport, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method HecklerNoop not implemented")
+func (*UnimplementedHecklerServer) HecklerNoopRange(ctx context.Context, req *HecklerNoopRangeRequest) (*HecklerNoopRangeReport, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HecklerNoopRange not implemented")
+}
+func (*UnimplementedHecklerServer) HecklerApply(ctx context.Context, req *HecklerApplyRequest) (*HecklerApplyReport, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HecklerApply not implemented")
 }
 
 func RegisterHecklerServer(s *grpc.Server, srv HecklerServer) {
@@ -386,20 +518,38 @@ func _Heckler_HecklerStatus_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Heckler_HecklerNoop_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(HecklerNoopRequest)
+func _Heckler_HecklerNoopRange_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HecklerNoopRangeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HecklerServer).HecklerNoop(ctx, in)
+		return srv.(HecklerServer).HecklerNoopRange(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/hecklerpb.Heckler/HecklerNoop",
+		FullMethod: "/hecklerpb.Heckler/HecklerNoopRange",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HecklerServer).HecklerNoop(ctx, req.(*HecklerNoopRequest))
+		return srv.(HecklerServer).HecklerNoopRange(ctx, req.(*HecklerNoopRangeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Heckler_HecklerApply_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HecklerApplyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HecklerServer).HecklerApply(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/hecklerpb.Heckler/HecklerApply",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HecklerServer).HecklerApply(ctx, req.(*HecklerApplyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -413,8 +563,12 @@ var _Heckler_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Heckler_HecklerStatus_Handler,
 		},
 		{
-			MethodName: "HecklerNoop",
-			Handler:    _Heckler_HecklerNoop_Handler,
+			MethodName: "HecklerNoopRange",
+			Handler:    _Heckler_HecklerNoopRange_Handler,
+		},
+		{
+			MethodName: "HecklerApply",
+			Handler:    _Heckler_HecklerApply_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -495,7 +649,7 @@ func (m *HecklerStatusReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *HecklerNoopRequest) Marshal() (dAtA []byte, err error) {
+func (m *HecklerNoopRangeRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -505,12 +659,12 @@ func (m *HecklerNoopRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *HecklerNoopRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *HecklerNoopRangeRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *HecklerNoopRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *HecklerNoopRangeRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -553,7 +707,7 @@ func (m *HecklerNoopRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *HecklerNoopReport) Marshal() (dAtA []byte, err error) {
+func (m *HecklerNoopRangeReport) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -563,12 +717,96 @@ func (m *HecklerNoopReport) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *HecklerNoopReport) MarshalTo(dAtA []byte) (int, error) {
+func (m *HecklerNoopRangeReport) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *HecklerNoopReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *HecklerNoopRangeReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Output) > 0 {
+		i -= len(m.Output)
+		copy(dAtA[i:], m.Output)
+		i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.Output)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *HecklerApplyRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *HecklerApplyRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *HecklerApplyRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Nodes) > 0 {
+		for iNdEx := len(m.Nodes) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Nodes[iNdEx])
+			copy(dAtA[i:], m.Nodes[iNdEx])
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.Nodes[iNdEx])))
+			i--
+			dAtA[i] = 0x22
+		}
+	}
+	if m.OutputFormat != 0 {
+		i = encodeVarintHecklerpb(dAtA, i, uint64(m.OutputFormat))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.Noop {
+		i--
+		if m.Noop {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Rev) > 0 {
+		i -= len(m.Rev)
+		copy(dAtA[i:], m.Rev)
+		i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.Rev)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *HecklerApplyReport) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *HecklerApplyReport) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *HecklerApplyReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -626,7 +864,7 @@ func (m *HecklerStatusReport) Size() (n int) {
 	return n
 }
 
-func (m *HecklerNoopRequest) Size() (n int) {
+func (m *HecklerNoopRangeRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -656,7 +894,45 @@ func (m *HecklerNoopRequest) Size() (n int) {
 	return n
 }
 
-func (m *HecklerNoopReport) Size() (n int) {
+func (m *HecklerNoopRangeReport) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Output)
+	if l > 0 {
+		n += 1 + l + sovHecklerpb(uint64(l))
+	}
+	return n
+}
+
+func (m *HecklerApplyRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Rev)
+	if l > 0 {
+		n += 1 + l + sovHecklerpb(uint64(l))
+	}
+	if m.Noop {
+		n += 2
+	}
+	if m.OutputFormat != 0 {
+		n += 1 + sovHecklerpb(uint64(m.OutputFormat))
+	}
+	if len(m.Nodes) > 0 {
+		for _, s := range m.Nodes {
+			l = len(s)
+			n += 1 + l + sovHecklerpb(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *HecklerApplyReport) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -940,7 +1216,7 @@ func (m *HecklerStatusReport) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *HecklerNoopRequest) Unmarshal(dAtA []byte) error {
+func (m *HecklerNoopRangeRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -963,10 +1239,10 @@ func (m *HecklerNoopRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: HecklerNoopRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: HecklerNoopRangeRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: HecklerNoopRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: HecklerNoopRangeRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1079,7 +1355,7 @@ func (m *HecklerNoopRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.OutputFormat |= HecklerNoopRequest_OutputFormat(b&0x7F) << shift
+				m.OutputFormat |= OutputFormat(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1140,7 +1416,7 @@ func (m *HecklerNoopRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *HecklerNoopReport) Unmarshal(dAtA []byte) error {
+func (m *HecklerNoopRangeReport) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1163,10 +1439,251 @@ func (m *HecklerNoopReport) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: HecklerNoopReport: wiretype end group for non-group")
+			return fmt.Errorf("proto: HecklerNoopRangeReport: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: HecklerNoopReport: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: HecklerNoopRangeReport: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Output", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Output = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipHecklerpb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *HecklerApplyRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowHecklerpb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: HecklerApplyRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: HecklerApplyRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Rev", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Rev = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Noop", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Noop = bool(v != 0)
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OutputFormat", wireType)
+			}
+			m.OutputFormat = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.OutputFormat |= OutputFormat(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nodes", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Nodes = append(m.Nodes, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipHecklerpb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *HecklerApplyReport) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowHecklerpb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: HecklerApplyReport: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: HecklerApplyReport: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:

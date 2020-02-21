@@ -690,11 +690,6 @@ func main() {
 	var printVersion bool
 	var markdownOut bool
 	var githubMilestone string
-	var nodes map[string]*Node
-	var puppetReportChan chan puppetutil.PuppetReport
-	var node *Node
-
-	puppetReportChan = make(chan puppetutil.PuppetReport)
 
 	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
 	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
@@ -745,25 +740,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	var clientConnChan chan *Node
-	clientConnChan = make(chan *Node)
-
-	nodes = make(map[string]*Node)
-	for _, host := range hosts {
-		nodes[host] = new(Node)
-		nodes[host].host = host
-	}
-
-	for _, node := range nodes {
-		go grpcConnect(node, clientConnChan)
-	}
-
-	for range nodes {
-		node = <-clientConnChan
-		log.Printf("Conn %s\n", node.host)
-		nodes[node.host] = node
-	}
-
 	hecklerdConn, err := grpc.Dial("localhost:50051", grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		// XXX support running heckler client remotely
@@ -786,30 +762,23 @@ func main() {
 	}
 
 	if rev != "" {
-		par := puppetutil.PuppetApplyRequest{Rev: rev, Noop: noop}
-		for _, node := range nodes {
-			go hecklerApply(node.rizzoClient, puppetReportChan, par)
+		har := hecklerpb.HecklerApplyRequest{
+			Rev:   rev,
+			Noop:  noop,
+			Nodes: hosts,
 		}
-
-		for range nodes {
-			r := <-puppetReportChan
-			if cmp.Equal(r, puppetutil.PuppetReport{}) {
-				log.Fatalf("Received an empty report")
-			} else if r.Status == "failed" {
-				log.Printf("ERROR: Apply failed, %s@%s", r.Host, r.ConfigurationVersion)
-			} else {
-				if noop {
-					log.Printf("Nooped: %s@%s", r.Host, r.ConfigurationVersion)
-				} else {
-					log.Printf("Applied: %s@%s", r.Host, r.ConfigurationVersion)
-				}
-			}
+		haRprt, err := hc.HecklerApply(ctx, &har)
+		if err != nil {
+			log.Fatalf("Unable to retreive heckler apply report: %v", err)
+		}
+		if haRprt.Output != "" {
+			fmt.Printf("%s", haRprt.Output)
 		}
 		os.Exit(0)
 	}
 
 	if beginRev != "" && endRev != "" {
-		hnr := hecklerpb.HecklerNoopRequest{
+		hnr := hecklerpb.HecklerNoopRangeRequest{
 			BeginRev: beginRev,
 			EndRev:   endRev,
 			Nodes:    hosts,
@@ -818,9 +787,9 @@ func main() {
 			hnr.GithubMilestone = githubMilestone
 		}
 		if markdownOut {
-			hnr.OutputFormat = hecklerpb.HecklerNoopRequest_markdown
+			hnr.OutputFormat = hecklerpb.OutputFormat_markdown
 		}
-		hnRprt, err := hc.HecklerNoop(ctx, &hnr)
+		hnRprt, err := hc.HecklerNoopRange(ctx, &hnr)
 		if err != nil {
 			log.Fatalf("Unable to retreive heckler noop report: %v", err)
 		}

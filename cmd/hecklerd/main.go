@@ -567,7 +567,33 @@ func parseTemplates() *template.Template {
 	return template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob(templatesPath))
 }
 
-func (hs *hecklerServer) HecklerNoop(ctx context.Context, req *hecklerpb.HecklerNoopRequest) (*hecklerpb.HecklerNoopReport, error) {
+func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.HecklerApplyRequest) (*hecklerpb.HecklerApplyReport, error) {
+	nodes := dialNodes(req.Nodes)
+	par := puppetutil.PuppetApplyRequest{Rev: req.Rev, Noop: req.Noop}
+	puppetReportChan := make(chan puppetutil.PuppetReport)
+	for _, node := range nodes {
+		go hecklerApply(node.rizzoClient, puppetReportChan, par)
+	}
+
+	for range nodes {
+		r := <-puppetReportChan
+		if cmp.Equal(r, puppetutil.PuppetReport{}) {
+			log.Fatalf("Received an empty report")
+		} else if r.Status == "failed" {
+			log.Printf("ERROR: Apply failed, %s@%s", r.Host, r.ConfigurationVersion)
+		} else {
+			if req.Noop {
+				log.Printf("Nooped: %s@%s", r.Host, r.ConfigurationVersion)
+			} else {
+				log.Printf("Applied: %s@%s", r.Host, r.ConfigurationVersion)
+			}
+		}
+	}
+	har := new(hecklerpb.HecklerApplyReport)
+	return har, nil
+}
+
+func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.HecklerNoopRangeRequest) (*hecklerpb.HecklerNoopRangeReport, error) {
 	nodes := dialNodes(req.Nodes)
 	err := nodeLastApply(nodes, hs.repo)
 	if err != nil {
@@ -584,11 +610,11 @@ func (hs *hecklerServer) HecklerNoop(ctx context.Context, req *hecklerpb.Heckler
 	if req.GithubMilestone != "" {
 		githubCreate(req.GithubMilestone, commitLogIds, groupedCommits, commits, hs.templates)
 	}
-	hnr := new(hecklerpb.HecklerNoopReport)
-	if req.OutputFormat == hecklerpb.HecklerNoopRequest_markdown {
-		hnr.Output = markdownOutput(commitLogIds, commits, groupedCommits, hs.templates)
+	hnrr := new(hecklerpb.HecklerNoopRangeReport)
+	if req.OutputFormat == hecklerpb.OutputFormat_markdown {
+		hnrr.Output = markdownOutput(commitLogIds, commits, groupedCommits, hs.templates)
 	}
-	return hnr, nil
+	return hnrr, nil
 }
 
 func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit, templates *template.Template) {

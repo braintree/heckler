@@ -1,9 +1,17 @@
 syntax = "proto3";
 package hecklerpb;
 
+enum Output_format {
+  none = 0;
+  markdown = 1;
+  // XXX 
+  tty = 2;
+}
+
 service Heckler {
   rpc HecklerStatus (HecklerStatusRequest) returns (HecklerStatusReport) {}
-  rpc HecklerNoop (HecklerNoopRequest) returns (HecklerNoopReport) {}
+  rpc HecklerNoopRange (HecklerNoopRangeRequest) returns (HecklerNoopRangeReport) {}
+  rpc HecklerApply (HecklerApplyRequest) returns (HecklerApplyReport) {}
 }
 
 message HecklerStatusRequest {
@@ -14,20 +22,25 @@ message HecklerStatusReport {
   map<string,string> node_statuses = 1;
 }
 
-message HecklerNoopRequest {
+message HecklerNoopRangeRequest {
   string begin_rev = 1;
   string end_rev = 2;
   string github_milestone = 3;
-  enum Output_format {
-    none = 0;
-    markdown = 1;
-    // XXX 
-    tty = 2;
-  }
   Output_format output_format = 4;
   repeated string nodes = 5;
 }
 
-message HecklerNoopReport {
+message HecklerNoopRangeReport {
+  string output = 1;
+}
+
+message HecklerApplyRequest {
+  string rev = 1;
+  bool noop = 2;
+  Output_format output_format = 3;
+  repeated string nodes = 4;
+}
+
+message HecklerApplyReport {
   string output = 1;
 }
