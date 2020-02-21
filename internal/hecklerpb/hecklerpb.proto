@@ -1,11 +1,9 @@
 syntax = "proto3";
 package hecklerpb;
 
-// The Rizzo service definition.
 service Heckler {
-  // applies a ref
-  // rpc PuppetApply (PuppetApplyRequest) returns (PuppetReport) {}
   rpc HecklerStatus (HecklerStatusRequest) returns (HecklerStatusReport) {}
+  rpc HecklerNoop (HecklerNoopRequest) returns (HecklerNoopReport) {}
 }
 
 message HecklerStatusRequest {
@@ -14,4 +12,22 @@ message HecklerStatusRequest {
 
 message HecklerStatusReport {
   map<string,string> node_statuses = 1;
+}
+
+message HecklerNoopRequest {
+  string begin_rev = 1;
+  string end_rev = 2;
+  string github_milestone = 3;
+  enum Output_format {
+    none = 0;
+    markdown = 1;
+    // XXX 
+    tty = 2;
+  }
+  Output_format output_format = 4;
+  repeated string nodes = 5;
+}
+
+message HecklerNoopReport {
+  string output = 1;
 }

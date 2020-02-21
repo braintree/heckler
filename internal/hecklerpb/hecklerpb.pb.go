@@ -26,6 +26,35 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+type HecklerNoopRequest_OutputFormat int32
+
+const (
+	HecklerNoopRequest_none     HecklerNoopRequest_OutputFormat = 0
+	HecklerNoopRequest_markdown HecklerNoopRequest_OutputFormat = 1
+	// XXX
+	HecklerNoopRequest_tty HecklerNoopRequest_OutputFormat = 2
+)
+
+var HecklerNoopRequest_OutputFormat_name = map[int32]string{
+	0: "none",
+	1: "markdown",
+	2: "tty",
+}
+
+var HecklerNoopRequest_OutputFormat_value = map[string]int32{
+	"none":     0,
+	"markdown": 1,
+	"tty":      2,
+}
+
+func (x HecklerNoopRequest_OutputFormat) String() string {
+	return proto.EnumName(HecklerNoopRequest_OutputFormat_name, int32(x))
+}
+
+func (HecklerNoopRequest_OutputFormat) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_993bd662ef9f4722, []int{2, 0}
+}
+
 type HecklerStatusRequest struct {
 	Nodes []string `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
 }
@@ -114,31 +143,166 @@ func (m *HecklerStatusReport) GetNodeStatuses() map[string]string {
 	return nil
 }
 
+type HecklerNoopRequest struct {
+	BeginRev        string                          `protobuf:"bytes,1,opt,name=begin_rev,json=beginRev,proto3" json:"begin_rev,omitempty"`
+	EndRev          string                          `protobuf:"bytes,2,opt,name=end_rev,json=endRev,proto3" json:"end_rev,omitempty"`
+	GithubMilestone string                          `protobuf:"bytes,3,opt,name=github_milestone,json=githubMilestone,proto3" json:"github_milestone,omitempty"`
+	OutputFormat    HecklerNoopRequest_OutputFormat `protobuf:"varint,4,opt,name=output_format,json=outputFormat,proto3,enum=hecklerpb.HecklerNoopRequest_OutputFormat" json:"output_format,omitempty"`
+	Nodes           []string                        `protobuf:"bytes,5,rep,name=nodes,proto3" json:"nodes,omitempty"`
+}
+
+func (m *HecklerNoopRequest) Reset()         { *m = HecklerNoopRequest{} }
+func (m *HecklerNoopRequest) String() string { return proto.CompactTextString(m) }
+func (*HecklerNoopRequest) ProtoMessage()    {}
+func (*HecklerNoopRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_993bd662ef9f4722, []int{2}
+}
+func (m *HecklerNoopRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HecklerNoopRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_HecklerNoopRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *HecklerNoopRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HecklerNoopRequest.Merge(m, src)
+}
+func (m *HecklerNoopRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *HecklerNoopRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_HecklerNoopRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HecklerNoopRequest proto.InternalMessageInfo
+
+func (m *HecklerNoopRequest) GetBeginRev() string {
+	if m != nil {
+		return m.BeginRev
+	}
+	return ""
+}
+
+func (m *HecklerNoopRequest) GetEndRev() string {
+	if m != nil {
+		return m.EndRev
+	}
+	return ""
+}
+
+func (m *HecklerNoopRequest) GetGithubMilestone() string {
+	if m != nil {
+		return m.GithubMilestone
+	}
+	return ""
+}
+
+func (m *HecklerNoopRequest) GetOutputFormat() HecklerNoopRequest_OutputFormat {
+	if m != nil {
+		return m.OutputFormat
+	}
+	return HecklerNoopRequest_none
+}
+
+func (m *HecklerNoopRequest) GetNodes() []string {
+	if m != nil {
+		return m.Nodes
+	}
+	return nil
+}
+
+type HecklerNoopReport struct {
+	Output string `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+}
+
+func (m *HecklerNoopReport) Reset()         { *m = HecklerNoopReport{} }
+func (m *HecklerNoopReport) String() string { return proto.CompactTextString(m) }
+func (*HecklerNoopReport) ProtoMessage()    {}
+func (*HecklerNoopReport) Descriptor() ([]byte, []int) {
+	return fileDescriptor_993bd662ef9f4722, []int{3}
+}
+func (m *HecklerNoopReport) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HecklerNoopReport) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_HecklerNoopReport.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *HecklerNoopReport) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HecklerNoopReport.Merge(m, src)
+}
+func (m *HecklerNoopReport) XXX_Size() int {
+	return m.Size()
+}
+func (m *HecklerNoopReport) XXX_DiscardUnknown() {
+	xxx_messageInfo_HecklerNoopReport.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HecklerNoopReport proto.InternalMessageInfo
+
+func (m *HecklerNoopReport) GetOutput() string {
+	if m != nil {
+		return m.Output
+	}
+	return ""
+}
+
 func init() {
+	proto.RegisterEnum("hecklerpb.HecklerNoopRequest_OutputFormat", HecklerNoopRequest_OutputFormat_name, HecklerNoopRequest_OutputFormat_value)
 	proto.RegisterType((*HecklerStatusRequest)(nil), "hecklerpb.HecklerStatusRequest")
 	proto.RegisterType((*HecklerStatusReport)(nil), "hecklerpb.HecklerStatusReport")
 	proto.RegisterMapType((map[string]string)(nil), "hecklerpb.HecklerStatusReport.NodeStatusesEntry")
+	proto.RegisterType((*HecklerNoopRequest)(nil), "hecklerpb.HecklerNoopRequest")
+	proto.RegisterType((*HecklerNoopReport)(nil), "hecklerpb.HecklerNoopReport")
 }
 
 func init() { proto.RegisterFile("hecklerpb.proto", fileDescriptor_993bd662ef9f4722) }
 
 var fileDescriptor_993bd662ef9f4722 = []byte{
-	// 229 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0xcf, 0x48, 0x4d, 0xce,
-	0xce, 0x49, 0x2d, 0x2a, 0x48, 0xd2, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0xe2, 0x84, 0x0b, 0x28,
-	0xe9, 0x70, 0x89, 0x78, 0x40, 0x38, 0xc1, 0x25, 0x89, 0x25, 0xa5, 0xc5, 0x41, 0xa9, 0x85, 0xa5,
-	0xa9, 0xc5, 0x25, 0x42, 0x22, 0x5c, 0xac, 0x79, 0xf9, 0x29, 0xa9, 0xc5, 0x12, 0x8c, 0x0a, 0xcc,
-	0x1a, 0x9c, 0x41, 0x10, 0x8e, 0xd2, 0x5a, 0x46, 0x2e, 0x61, 0x34, 0xe5, 0x05, 0xf9, 0x45, 0x25,
-	0x42, 0xa1, 0x5c, 0xbc, 0x20, 0x05, 0xf1, 0xc5, 0x60, 0x41, 0xa8, 0x2e, 0x6e, 0x23, 0x03, 0x3d,
-	0x84, 0xcd, 0x58, 0xb4, 0xe9, 0xf9, 0xe5, 0xa7, 0xa4, 0x06, 0x43, 0xb5, 0xb8, 0xe6, 0x95, 0x14,
-	0x55, 0x06, 0xf1, 0xe4, 0x21, 0x09, 0x49, 0xd9, 0x73, 0x09, 0x62, 0x28, 0x11, 0x12, 0xe0, 0x62,
-	0xce, 0x4e, 0xad, 0x94, 0x60, 0x54, 0x60, 0xd4, 0xe0, 0x0c, 0x02, 0x31, 0x41, 0x6e, 0x2d, 0x4b,
-	0xcc, 0x29, 0x4d, 0x95, 0x60, 0x02, 0x8b, 0x41, 0x38, 0x56, 0x4c, 0x16, 0x8c, 0x46, 0xb1, 0x5c,
-	0xec, 0x50, 0x7b, 0x85, 0x82, 0xb8, 0x78, 0x51, 0x9c, 0x20, 0x24, 0x8f, 0xdb, 0x71, 0xe0, 0x20,
-	0x90, 0x92, 0xc3, 0xef, 0x7a, 0x25, 0x06, 0x27, 0x89, 0x13, 0x8f, 0xe4, 0x18, 0x2f, 0x3c, 0x92,
-	0x63, 0x7c, 0xf0, 0x48, 0x8e, 0x71, 0xc2, 0x63, 0x39, 0x86, 0x0b, 0x8f, 0xe5, 0x18, 0x6e, 0x3c,
-	0x96, 0x63, 0x48, 0x62, 0x03, 0x07, 0xb4, 0x31, 0x20, 0x00, 0x00, 0xff, 0xff, 0x18, 0x6b, 0x96,
-	0x90, 0x7b, 0x01, 0x00, 0x00,
+	// 417 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x52, 0xc1, 0x8e, 0xd2, 0x50,
+	0x14, 0xed, 0x6b, 0x67, 0x80, 0xde, 0xa1, 0x4e, 0xe7, 0x39, 0xd1, 0x06, 0xb5, 0x92, 0xae, 0x30,
+	0x63, 0x9a, 0x09, 0x6e, 0x8c, 0x1b, 0x13, 0x13, 0x8d, 0x0b, 0x1d, 0x4d, 0x89, 0xeb, 0xa6, 0xb5,
+	0x57, 0x20, 0xc0, 0x7b, 0xb5, 0x7d, 0xc5, 0xf0, 0x15, 0xfa, 0x1f, 0xc6, 0xff, 0x70, 0xc9, 0xd2,
+	0xa5, 0x81, 0x1f, 0x31, 0x7d, 0xaf, 0x48, 0x11, 0x61, 0xd7, 0x73, 0xee, 0x39, 0xf7, 0xde, 0x77,
+	0x4f, 0xe1, 0x7c, 0x84, 0x1f, 0x27, 0x53, 0xcc, 0xd2, 0xd8, 0x4f, 0x33, 0x2e, 0x38, 0x35, 0xff,
+	0x12, 0xde, 0x63, 0xb8, 0x7c, 0xad, 0xc0, 0x40, 0x44, 0xa2, 0xc8, 0x03, 0xfc, 0x5c, 0x60, 0x2e,
+	0xe8, 0x25, 0x9c, 0x32, 0x9e, 0x60, 0xee, 0x90, 0xae, 0xd1, 0x33, 0x03, 0x05, 0xbc, 0x1f, 0x04,
+	0x6e, 0xff, 0x23, 0x4f, 0x79, 0x26, 0xe8, 0x07, 0xb0, 0x4a, 0x41, 0x98, 0x4b, 0xb2, 0x72, 0x9d,
+	0xf5, 0xaf, 0xfd, 0xed, 0xe4, 0xff, 0xd8, 0xfc, 0x1b, 0x9e, 0xe0, 0xa0, 0xb2, 0xbc, 0x64, 0x22,
+	0x5b, 0x04, 0x6d, 0x56, 0xa3, 0x3a, 0xcf, 0xe1, 0x62, 0x4f, 0x42, 0x6d, 0x30, 0x26, 0xb8, 0x70,
+	0x48, 0x97, 0xf4, 0xcc, 0xa0, 0xfc, 0x2c, 0x77, 0x9d, 0x47, 0xd3, 0x02, 0x1d, 0x5d, 0x72, 0x0a,
+	0x3c, 0xd3, 0x9f, 0x12, 0xef, 0xab, 0x0e, 0xb4, 0x1a, 0x7c, 0xc3, 0x79, 0xba, 0x79, 0xdc, 0x3d,
+	0x30, 0x63, 0x1c, 0x8e, 0x59, 0x98, 0xe1, 0xbc, 0x6a, 0xd4, 0x92, 0x44, 0x80, 0x73, 0x7a, 0x17,
+	0x9a, 0xc8, 0x12, 0x59, 0x52, 0xfd, 0x1a, 0xc8, 0x92, 0xb2, 0xf0, 0x08, 0xec, 0xe1, 0x58, 0x8c,
+	0x8a, 0x38, 0x9c, 0x8d, 0xa7, 0x98, 0x0b, 0xce, 0xd0, 0x31, 0xa4, 0xe2, 0x5c, 0xf1, 0x6f, 0x37,
+	0x34, 0x7d, 0x0f, 0x16, 0x2f, 0x44, 0x5a, 0x88, 0xf0, 0x13, 0xcf, 0x66, 0x91, 0x70, 0x4e, 0xba,
+	0xa4, 0x77, 0xab, 0x7f, 0xb5, 0x7f, 0x8f, 0xda, 0x5a, 0xfe, 0xbb, 0xba, 0x25, 0x68, 0xab, 0x0e,
+	0xaf, 0x24, 0xda, 0xe6, 0x71, 0x5a, 0xcf, 0xe3, 0x1a, 0xac, 0x1d, 0x13, 0x6d, 0xc1, 0x09, 0xe3,
+	0x0c, 0x6d, 0x8d, 0xb6, 0xa1, 0x35, 0x8b, 0xb2, 0x49, 0xc2, 0xbf, 0x30, 0x9b, 0xd0, 0x26, 0x18,
+	0x42, 0x2c, 0x6c, 0xdd, 0xbb, 0x82, 0x8b, 0x9d, 0xc9, 0x32, 0xbe, 0x3b, 0xd0, 0x50, 0xc3, 0xaa,
+	0x63, 0x54, 0xa8, 0xff, 0x9d, 0x40, 0xb3, 0x52, 0xd3, 0x00, 0xac, 0x9d, 0x08, 0xe9, 0xc3, 0xc3,
+	0xe1, 0xca, 0xe7, 0x74, 0xdc, 0xe3, 0xe9, 0x7b, 0x1a, 0x7d, 0x03, 0x67, 0xb5, 0x65, 0xe8, 0x83,
+	0xa3, 0xe7, 0xe9, 0xdc, 0x3f, 0x54, 0x56, 0xdd, 0x5e, 0x38, 0x3f, 0x57, 0x2e, 0x59, 0xae, 0x5c,
+	0xf2, 0x7b, 0xe5, 0x92, 0x6f, 0x6b, 0x57, 0x5b, 0xae, 0x5d, 0xed, 0xd7, 0xda, 0xd5, 0xe2, 0x86,
+	0xfc, 0xed, 0x9f, 0xfc, 0x09, 0x00, 0x00, 0xff, 0xff, 0xee, 0x2d, 0x5c, 0x74, 0x09, 0x03, 0x00,
+	0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -153,9 +317,8 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type HecklerClient interface {
-	// applies a ref
-	// rpc PuppetApply (PuppetApplyRequest) returns (PuppetReport) {}
 	HecklerStatus(ctx context.Context, in *HecklerStatusRequest, opts ...grpc.CallOption) (*HecklerStatusReport, error)
+	HecklerNoop(ctx context.Context, in *HecklerNoopRequest, opts ...grpc.CallOption) (*HecklerNoopReport, error)
 }
 
 type hecklerClient struct {
@@ -175,11 +338,19 @@ func (c *hecklerClient) HecklerStatus(ctx context.Context, in *HecklerStatusRequ
 	return out, nil
 }
 
+func (c *hecklerClient) HecklerNoop(ctx context.Context, in *HecklerNoopRequest, opts ...grpc.CallOption) (*HecklerNoopReport, error) {
+	out := new(HecklerNoopReport)
+	err := c.cc.Invoke(ctx, "/hecklerpb.Heckler/HecklerNoop", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HecklerServer is the server API for Heckler service.
 type HecklerServer interface {
-	// applies a ref
-	// rpc PuppetApply (PuppetApplyRequest) returns (PuppetReport) {}
 	HecklerStatus(context.Context, *HecklerStatusRequest) (*HecklerStatusReport, error)
+	HecklerNoop(context.Context, *HecklerNoopRequest) (*HecklerNoopReport, error)
 }
 
 // UnimplementedHecklerServer can be embedded to have forward compatible implementations.
@@ -188,6 +359,9 @@ type UnimplementedHecklerServer struct {
 
 func (*UnimplementedHecklerServer) HecklerStatus(ctx context.Context, req *HecklerStatusRequest) (*HecklerStatusReport, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HecklerStatus not implemented")
+}
+func (*UnimplementedHecklerServer) HecklerNoop(ctx context.Context, req *HecklerNoopRequest) (*HecklerNoopReport, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HecklerNoop not implemented")
 }
 
 func RegisterHecklerServer(s *grpc.Server, srv HecklerServer) {
@@ -212,6 +386,24 @@ func _Heckler_HecklerStatus_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Heckler_HecklerNoop_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HecklerNoopRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HecklerServer).HecklerNoop(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/hecklerpb.Heckler/HecklerNoop",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HecklerServer).HecklerNoop(ctx, req.(*HecklerNoopRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Heckler_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "hecklerpb.Heckler",
 	HandlerType: (*HecklerServer)(nil),
@@ -219,6 +411,10 @@ var _Heckler_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "HecklerStatus",
 			Handler:    _Heckler_HecklerStatus_Handler,
+		},
+		{
+			MethodName: "HecklerNoop",
+			Handler:    _Heckler_HecklerNoop_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -299,6 +495,94 @@ func (m *HecklerStatusReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *HecklerNoopRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *HecklerNoopRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *HecklerNoopRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Nodes) > 0 {
+		for iNdEx := len(m.Nodes) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Nodes[iNdEx])
+			copy(dAtA[i:], m.Nodes[iNdEx])
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.Nodes[iNdEx])))
+			i--
+			dAtA[i] = 0x2a
+		}
+	}
+	if m.OutputFormat != 0 {
+		i = encodeVarintHecklerpb(dAtA, i, uint64(m.OutputFormat))
+		i--
+		dAtA[i] = 0x20
+	}
+	if len(m.GithubMilestone) > 0 {
+		i -= len(m.GithubMilestone)
+		copy(dAtA[i:], m.GithubMilestone)
+		i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.GithubMilestone)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.EndRev) > 0 {
+		i -= len(m.EndRev)
+		copy(dAtA[i:], m.EndRev)
+		i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.EndRev)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.BeginRev) > 0 {
+		i -= len(m.BeginRev)
+		copy(dAtA[i:], m.BeginRev)
+		i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.BeginRev)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *HecklerNoopReport) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *HecklerNoopReport) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *HecklerNoopReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Output) > 0 {
+		i -= len(m.Output)
+		copy(dAtA[i:], m.Output)
+		i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.Output)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintHecklerpb(dAtA []byte, offset int, v uint64) int {
 	offset -= sovHecklerpb(v)
 	base := offset
@@ -338,6 +622,49 @@ func (m *HecklerStatusReport) Size() (n int) {
 			mapEntrySize := 1 + len(k) + sovHecklerpb(uint64(len(k))) + 1 + len(v) + sovHecklerpb(uint64(len(v)))
 			n += mapEntrySize + 1 + sovHecklerpb(uint64(mapEntrySize))
 		}
+	}
+	return n
+}
+
+func (m *HecklerNoopRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.BeginRev)
+	if l > 0 {
+		n += 1 + l + sovHecklerpb(uint64(l))
+	}
+	l = len(m.EndRev)
+	if l > 0 {
+		n += 1 + l + sovHecklerpb(uint64(l))
+	}
+	l = len(m.GithubMilestone)
+	if l > 0 {
+		n += 1 + l + sovHecklerpb(uint64(l))
+	}
+	if m.OutputFormat != 0 {
+		n += 1 + sovHecklerpb(uint64(m.OutputFormat))
+	}
+	if len(m.Nodes) > 0 {
+		for _, s := range m.Nodes {
+			l = len(s)
+			n += 1 + l + sovHecklerpb(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *HecklerNoopReport) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Output)
+	if l > 0 {
+		n += 1 + l + sovHecklerpb(uint64(l))
 	}
 	return n
 }
@@ -588,6 +915,291 @@ func (m *HecklerStatusReport) Unmarshal(dAtA []byte) error {
 				}
 			}
 			m.NodeStatuses[mapkey] = mapvalue
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipHecklerpb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *HecklerNoopRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowHecklerpb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: HecklerNoopRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: HecklerNoopRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BeginRev", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.BeginRev = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EndRev", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.EndRev = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GithubMilestone", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.GithubMilestone = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OutputFormat", wireType)
+			}
+			m.OutputFormat = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.OutputFormat |= HecklerNoopRequest_OutputFormat(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nodes", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Nodes = append(m.Nodes, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipHecklerpb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *HecklerNoopReport) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowHecklerpb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: HecklerNoopReport: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: HecklerNoopReport: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Output", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Output = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

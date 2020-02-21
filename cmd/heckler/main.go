@@ -19,7 +19,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
 	"github.braintreeps.com/lollipopman/heckler/internal/hecklerpb"
 	"github.braintreeps.com/lollipopman/heckler/internal/puppetutil"
 	"github.com/Masterminds/sprig"
@@ -696,7 +695,6 @@ func main() {
 	var node *Node
 
 	puppetReportChan = make(chan puppetutil.PuppetReport)
-	templates := parseTemplates()
 
 	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
 	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
@@ -747,11 +745,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	repo, err := gitutil.Pull("http://localhost:8080/puppetcode", "/var/lib/heckler/repo/puppetcode")
-	if err != nil {
-		log.Fatalf("Unable to fetch repo: %v", err)
-	}
-
 	var clientConnChan chan *Node
 	clientConnChan = make(chan *Node)
 
@@ -771,15 +764,16 @@ func main() {
 		nodes[node.host] = node
 	}
 
+	hecklerdConn, err := grpc.Dial("localhost:50051", grpc.WithInsecure(), grpc.WithBlock())
+	if err != nil {
+		// XXX support running heckler client remotely
+		log.Fatalf("Unable to connect to: %v, %v", "localhost:50051", err)
+	}
+	hc := hecklerpb.NewHecklerClient(hecklerdConn)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
+	defer cancel()
+
 	if status {
-		hecklerdConn, err := grpc.Dial("localhost:50051", grpc.WithInsecure(), grpc.WithBlock())
-		if err != nil {
-			// XXX support running heckler client remotely
-			log.Fatalf("Unable to connect to: %v, %v", "localhost:50051", err)
-		}
-		hc := hecklerpb.NewHecklerClient(hecklerdConn)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
-		defer cancel()
 		hsr := hecklerpb.HecklerStatusRequest{Nodes: hosts}
 		hsRprt, err := hc.HecklerStatus(ctx, &hsr)
 		if err != nil {
@@ -815,30 +809,28 @@ func main() {
 	}
 
 	if beginRev != "" && endRev != "" {
-		commitLogIds, commits, err := commitLogIdList(repo, beginRev, endRev)
-		if err != nil {
-			log.Fatalf("Unable to get commit id list", err)
-		}
-		err = updateLastApply(nodes, puppetReportChan, repo)
-		if err != nil {
-			log.Fatalf("Unable to update lastApply: %v", err)
-		}
-		groupedCommits, err := noopCommitRange(nodes, puppetReportChan, beginRev, endRev, commitLogIds, commits, repo)
-		if err != nil {
-			log.Fatalf("Unable to create groupedCommits: %v", err)
-		}
-		if markdownOut {
-			markdownOutput(commitLogIds, commits, groupedCommits, templates)
+		hnr := hecklerpb.HecklerNoopRequest{
+			BeginRev: beginRev,
+			EndRev:   endRev,
+			Nodes:    hosts,
 		}
 		if githubMilestone != "" {
-			githubCreate(githubMilestone, commitLogIds, groupedCommits, commits, templates)
+			hnr.GithubMilestone = githubMilestone
+		}
+		if markdownOut {
+			hnr.OutputFormat = hecklerpb.HecklerNoopRequest_markdown
+		}
+		hnRprt, err := hc.HecklerNoop(ctx, &hnr)
+		if err != nil {
+			log.Fatalf("Unable to retreive heckler noop report: %v", err)
+		}
+		if hnRprt.Output != "" {
+			fmt.Printf("%s", hnRprt.Output)
 		}
 		os.Exit(0)
-	} else {
-		fmt.Printf("ERROR: You must supply -beginrev & -endrev or -rev\n")
-		flag.Usage()
-		os.Exit(1)
 	}
+
+	flag.Usage()
 
 	// cleanup
 	if *memprofile != "" {
