@@ -1,0 +1,17 @@
+syntax = "proto3";
+package hecklerpb;
+
+// The Rizzo service definition.
+service Heckler {
+  // applies a ref
+  // rpc PuppetApply (PuppetApplyRequest) returns (PuppetReport) {}
+  rpc HecklerStatus (HecklerStatusRequest) returns (HecklerStatusReport) {}
+}
+
+message HecklerStatusRequest {
+  repeated string nodes = 1;
+}
+
+message HecklerStatusReport {
+  map<string,string> node_statuses = 1;
+}

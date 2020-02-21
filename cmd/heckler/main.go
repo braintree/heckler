@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
+	"github.braintreeps.com/lollipopman/heckler/internal/hecklerpb"
 	"github.braintreeps.com/lollipopman/heckler/internal/puppetutil"
 	"github.com/Masterminds/sprig"
 	"github.com/bradleyfalzon/ghinstallation"
@@ -771,12 +772,21 @@ func main() {
 	}
 
 	if status {
-		err = updateLastApply(nodes, puppetReportChan, repo)
+		hecklerdConn, err := grpc.Dial("localhost:50051", grpc.WithInsecure(), grpc.WithBlock())
 		if err != nil {
-			log.Fatalf("Unable to update lastApply: %v", err)
+			// XXX support running heckler client remotely
+			log.Fatalf("Unable to connect to: %v, %v", "localhost:50051", err)
 		}
-		for _, node := range nodes {
-			fmt.Printf("Status: %s@%s\n", node.host, node.lastApply.String())
+		hc := hecklerpb.NewHecklerClient(hecklerdConn)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
+		defer cancel()
+		hsr := hecklerpb.HecklerStatusRequest{Nodes: hosts}
+		hsRprt, err := hc.HecklerStatus(ctx, &hsr)
+		if err != nil {
+			log.Fatalf("Unable to retreive heckler statuses: %v", err)
+		}
+		for node, nodeStatus := range hsRprt.NodeStatuses {
+			fmt.Printf("Status: %s@%s\n", node, nodeStatus)
 		}
 		os.Exit(0)
 	}
