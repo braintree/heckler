@@ -182,8 +182,9 @@ func main() {
 	}
 
 	if clearState {
-		log.Printf("Remove state directory: %v", stateDir)
+		log.Printf("Removing state directory: %v", stateDir)
 		os.RemoveAll(stateDir)
+		os.Exit(0)
 	}
 
 	lis, err := net.Listen("tcp", port)
