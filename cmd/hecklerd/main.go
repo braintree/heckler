@@ -877,6 +877,9 @@ func main() {
 	go func() {
 		for {
 			time.Sleep(5 * time.Second)
+			if Debug {
+				log.Println("Updating repo..")
+			}
 			_, err = fetchRepo(hecklerdConf)
 			if err != nil {
 				log.Fatalf("Unable to fetch repo: %v", err)
@@ -886,7 +889,7 @@ func main() {
 
 	// git server
 	go func() {
-		log.Printf("Starting Git HTTP server on %s (PID=%d)", gitServer.Addr, os.Getpid())
+		log.Printf("Starting Git HTTP server on %s", gitServer.Addr)
 		if err := gitServer.Serve(); err != nil && err != http.ErrServerClosed {
 			log.Println("Git HTTP server error:", err)
 		}
@@ -906,6 +909,7 @@ func main() {
 
 	// grpc server
 	go func() {
+		log.Printf("Starting GRPC HTTP server on %v", port)
 		if err := grpcServer.Serve(lis); err != nil {
 			log.Fatalf("failed to serve: %v", err)
 		}

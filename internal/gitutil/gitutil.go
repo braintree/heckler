@@ -42,7 +42,6 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 	}
 
 	// XXX only fetch specific branch?
-	log.Printf("Fetching...\n")
 	err = remote.Fetch([]string{}, fetchOptions, "")
 	if err != nil {
 		return err
@@ -70,7 +69,6 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 	}
 
 	if (analysis & git.MergeAnalysisUpToDate) != 0 {
-		log.Println("Already up to date")
 		return nil
 	}
 
