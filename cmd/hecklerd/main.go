@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -63,6 +64,11 @@ type Node struct {
 	lastApply            *git.Oid
 }
 
+type nodeResult struct {
+	node *Node
+	err  error
+}
+
 type deltaResource struct {
 	Title      ResourceTitle
 	Type       string
@@ -103,36 +109,43 @@ func commitParentReports(commit *git.Commit, commitReports map[git.Oid]*puppetut
 	return parentReports
 }
 
-func grpcConnect(node *Node, clientConnChan chan *Node) {
+func grpcConnect(ctx context.Context, node *Node, clientConnChan chan nodeResult) {
 	address := node.host + ":50051"
 	log.Printf("Dialing: %v", node.host)
-	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
-	if err != nil {
-		log.Fatalf("Unable to connect to: %v, %v", address, err)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, address, grpc.WithInsecure(), grpc.WithBlock(), grpc.FailOnNonTempDialError(true))
+	if errors.Is(err, context.DeadlineExceeded) {
+		clientConnChan <- nodeResult{node, errors.New(fmt.Sprintf("Timeout connecting to %s", address))}
+	} else if err != nil {
+		clientConnChan <- nodeResult{node, err}
+	} else {
+		node.rizzoClient = puppetutil.NewRizzoClient(conn)
+		clientConnChan <- nodeResult{node, nil}
 	}
-	log.Printf("Connected: %v", node.host)
-	node.rizzoClient = puppetutil.NewRizzoClient(conn)
-	clientConnChan <- node
 }
 
-func dialNodes(hosts []string) map[string]*Node {
-	nodes := make(map[string]*Node)
-	clientConnChan := make(chan *Node)
-	for _, host := range hosts {
-		nodes[host] = new(Node)
-		nodes[host].host = host
-	}
-
-	for _, node := range nodes {
-		go grpcConnect(node, clientConnChan)
-	}
-
+func dialNodes(ctx context.Context, hosts []string) (map[string]*Node, map[string]error) {
 	var node *Node
-	for range nodes {
-		node = <-clientConnChan
-		nodes[node.host] = node
+	clientConnChan := make(chan nodeResult)
+	for _, host := range hosts {
+		node = new(Node)
+		node.host = host
+		go grpcConnect(ctx, node, clientConnChan)
 	}
-	return nodes
+
+	nodes := make(map[string]*Node)
+	errNodes := make(map[string]error)
+	var nr nodeResult
+	for i := 0; i < len(hosts); i++ {
+		nr = <-clientConnChan
+		if nr.err != nil {
+			errNodes[nr.node.host] = nr.err
+		} else {
+			nodes[nr.node.host] = nr.node
+		}
+	}
+	return nodes, errNodes
 }
 
 func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]git.Oid, map[git.Oid]*git.Commit, error) {
@@ -566,7 +579,7 @@ func parseTemplates() *template.Template {
 }
 
 func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.HecklerApplyRequest) (*hecklerpb.HecklerApplyReport, error) {
-	nodes := dialNodes(req.Nodes)
+	nodes, errNodes := dialNodes(ctx, req.Nodes)
 	par := puppetutil.PuppetApplyRequest{Rev: req.Rev, Noop: req.Noop}
 	puppetReportChan := make(chan puppetutil.PuppetReport)
 	for _, node := range nodes {
@@ -588,11 +601,15 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 		}
 	}
 	har := new(hecklerpb.HecklerApplyReport)
+	har.NodeErrors = make(map[string]string)
+	for host, err := range errNodes {
+		har.NodeErrors[host] = err.Error()
+	}
 	return har, nil
 }
 
 func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.HecklerNoopRangeRequest) (*hecklerpb.HecklerNoopRangeReport, error) {
-	nodes := dialNodes(req.Nodes)
+	nodes, errNodes := dialNodes(ctx, req.Nodes)
 	err := nodeLastApply(nodes, hs.repo)
 	if err != nil {
 		return nil, err
@@ -611,6 +628,10 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	hnrr := new(hecklerpb.HecklerNoopRangeReport)
 	if req.OutputFormat == hecklerpb.OutputFormat_markdown {
 		hnrr.Output = markdownOutput(commitLogIds, commits, groupedCommits, hs.templates)
+	}
+	hnrr.NodeErrors = make(map[string]string)
+	for host, err := range errNodes {
+		hnrr.NodeErrors[host] = err.Error()
 	}
 	return hnrr, nil
 }
@@ -717,7 +738,7 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource, templates *
 }
 
 func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.HecklerStatusRequest) (*hecklerpb.HecklerStatusReport, error) {
-	nodes := dialNodes(req.Nodes)
+	nodes, errNodes := dialNodes(ctx, req.Nodes)
 	err := nodeLastApply(nodes, hs.repo)
 	if err != nil {
 		return nil, err
@@ -727,12 +748,16 @@ func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.Heckl
 	for _, node := range nodes {
 		hsr.NodeStatuses[node.host] = node.lastApply.String()
 	}
+	hsr.NodeErrors = make(map[string]string)
+	for host, err := range errNodes {
+		hsr.NodeErrors[host] = err.Error()
+	}
 	return hsr, nil
 }
 
 func hecklerLastApply(rc puppetutil.RizzoClient, c chan<- puppetutil.PuppetReport) {
 	plar := puppetutil.PuppetLastApplyRequest{}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	r, err := rc.PuppetLastApply(ctx, &plar)
 	if err != nil {

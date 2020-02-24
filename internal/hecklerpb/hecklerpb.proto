@@ -20,6 +20,7 @@ message HecklerStatusRequest {
 
 message HecklerStatusReport {
   map<string,string> node_statuses = 1;
+  map<string,string> node_errors = 2;
 }
 
 message HecklerNoopRangeRequest {
@@ -32,6 +33,7 @@ message HecklerNoopRangeRequest {
 
 message HecklerNoopRangeReport {
   string output = 1;
+  map<string,string> node_errors = 2;
 }
 
 message HecklerApplyRequest {
@@ -43,4 +45,5 @@ message HecklerApplyRequest {
 
 message HecklerApplyReport {
   string output = 1;
+  map<string,string> node_errors = 2;
 }

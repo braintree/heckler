@@ -83,12 +83,15 @@ func main() {
 
 	if status {
 		hsr := hecklerpb.HecklerStatusRequest{Nodes: hosts}
-		hsRprt, err := hc.HecklerStatus(ctx, &hsr)
+		rprt, err := hc.HecklerStatus(ctx, &hsr)
 		if err != nil {
 			log.Fatalf("Unable to retreive heckler statuses: %v", err)
 		}
-		for node, nodeStatus := range hsRprt.NodeStatuses {
+		for node, nodeStatus := range rprt.NodeStatuses {
 			fmt.Printf("Status: %s@%s\n", node, nodeStatus)
+		}
+		for node, nodeError := range rprt.NodeErrors {
+			fmt.Printf("Error: %s, %s\n", node, nodeError)
 		}
 		os.Exit(0)
 	}
@@ -99,12 +102,15 @@ func main() {
 			Noop:  noop,
 			Nodes: hosts,
 		}
-		haRprt, err := hc.HecklerApply(ctx, &har)
+		rprt, err := hc.HecklerApply(ctx, &har)
 		if err != nil {
 			log.Fatalf("Unable to retreive heckler apply report: %v", err)
 		}
-		if haRprt.Output != "" {
-			fmt.Printf("%s", haRprt.Output)
+		if rprt.Output != "" {
+			fmt.Printf("%s", rprt.Output)
+		}
+		for node, nodeError := range rprt.NodeErrors {
+			fmt.Printf("Error: %s, %s\n", node, nodeError)
 		}
 		os.Exit(0)
 	}
@@ -121,12 +127,15 @@ func main() {
 		if markdownOut {
 			hnr.OutputFormat = hecklerpb.OutputFormat_markdown
 		}
-		hnRprt, err := hc.HecklerNoopRange(ctx, &hnr)
+		rprt, err := hc.HecklerNoopRange(ctx, &hnr)
 		if err != nil {
 			log.Fatalf("Unable to retreive heckler noop report: %v", err)
 		}
-		if hnRprt.Output != "" {
-			fmt.Printf("%s", hnRprt.Output)
+		if rprt.Output != "" {
+			fmt.Printf("%s", rprt.Output)
+		}
+		for node, nodeError := range rprt.NodeErrors {
+			fmt.Printf("Error: %s, %s\n", node, nodeError)
 		}
 		os.Exit(0)
 	}

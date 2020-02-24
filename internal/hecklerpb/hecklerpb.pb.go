@@ -101,6 +101,7 @@ func (m *HecklerStatusRequest) GetNodes() []string {
 
 type HecklerStatusReport struct {
 	NodeStatuses map[string]string `protobuf:"bytes,1,rep,name=node_statuses,json=nodeStatuses,proto3" json:"node_statuses,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	NodeErrors   map[string]string `protobuf:"bytes,2,rep,name=node_errors,json=nodeErrors,proto3" json:"node_errors,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (m *HecklerStatusReport) Reset()         { *m = HecklerStatusReport{} }
@@ -139,6 +140,13 @@ var xxx_messageInfo_HecklerStatusReport proto.InternalMessageInfo
 func (m *HecklerStatusReport) GetNodeStatuses() map[string]string {
 	if m != nil {
 		return m.NodeStatuses
+	}
+	return nil
+}
+
+func (m *HecklerStatusReport) GetNodeErrors() map[string]string {
+	if m != nil {
+		return m.NodeErrors
 	}
 	return nil
 }
@@ -220,7 +228,8 @@ func (m *HecklerNoopRangeRequest) GetNodes() []string {
 }
 
 type HecklerNoopRangeReport struct {
-	Output string `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+	Output     string            `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+	NodeErrors map[string]string `protobuf:"bytes,2,rep,name=node_errors,json=nodeErrors,proto3" json:"node_errors,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (m *HecklerNoopRangeReport) Reset()         { *m = HecklerNoopRangeReport{} }
@@ -261,6 +270,13 @@ func (m *HecklerNoopRangeReport) GetOutput() string {
 		return m.Output
 	}
 	return ""
+}
+
+func (m *HecklerNoopRangeReport) GetNodeErrors() map[string]string {
+	if m != nil {
+		return m.NodeErrors
+	}
+	return nil
 }
 
 type HecklerApplyRequest struct {
@@ -332,7 +348,8 @@ func (m *HecklerApplyRequest) GetNodes() []string {
 }
 
 type HecklerApplyReport struct {
-	Output string `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+	Output     string            `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+	NodeErrors map[string]string `protobuf:"bytes,2,rep,name=node_errors,json=nodeErrors,proto3" json:"node_errors,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (m *HecklerApplyReport) Reset()         { *m = HecklerApplyReport{} }
@@ -375,52 +392,66 @@ func (m *HecklerApplyReport) GetOutput() string {
 	return ""
 }
 
+func (m *HecklerApplyReport) GetNodeErrors() map[string]string {
+	if m != nil {
+		return m.NodeErrors
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterEnum("hecklerpb.OutputFormat", OutputFormat_name, OutputFormat_value)
 	proto.RegisterType((*HecklerStatusRequest)(nil), "hecklerpb.HecklerStatusRequest")
 	proto.RegisterType((*HecklerStatusReport)(nil), "hecklerpb.HecklerStatusReport")
+	proto.RegisterMapType((map[string]string)(nil), "hecklerpb.HecklerStatusReport.NodeErrorsEntry")
 	proto.RegisterMapType((map[string]string)(nil), "hecklerpb.HecklerStatusReport.NodeStatusesEntry")
 	proto.RegisterType((*HecklerNoopRangeRequest)(nil), "hecklerpb.HecklerNoopRangeRequest")
 	proto.RegisterType((*HecklerNoopRangeReport)(nil), "hecklerpb.HecklerNoopRangeReport")
+	proto.RegisterMapType((map[string]string)(nil), "hecklerpb.HecklerNoopRangeReport.NodeErrorsEntry")
 	proto.RegisterType((*HecklerApplyRequest)(nil), "hecklerpb.HecklerApplyRequest")
 	proto.RegisterType((*HecklerApplyReport)(nil), "hecklerpb.HecklerApplyReport")
+	proto.RegisterMapType((map[string]string)(nil), "hecklerpb.HecklerApplyReport.NodeErrorsEntry")
 }
 
 func init() { proto.RegisterFile("hecklerpb.proto", fileDescriptor_993bd662ef9f4722) }
 
 var fileDescriptor_993bd662ef9f4722 = []byte{
-	// 481 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x54, 0xcd, 0x6e, 0xd3, 0x40,
-	0x10, 0xf6, 0xc6, 0x69, 0x7e, 0x86, 0x84, 0x9a, 0xa1, 0x6a, 0xad, 0x20, 0x4c, 0xf0, 0x29, 0xa0,
-	0x2a, 0x8a, 0xc2, 0x05, 0x21, 0x21, 0x04, 0x12, 0x88, 0x0b, 0xad, 0xb4, 0x15, 0x27, 0x0e, 0x91,
-	0x83, 0x87, 0x34, 0x4a, 0xb2, 0x6b, 0xec, 0x75, 0x50, 0x9e, 0x81, 0x4b, 0x5f, 0x84, 0xf7, 0xe0,
-	0x46, 0x8f, 0x1c, 0x51, 0xf2, 0x22, 0xc8, 0x6b, 0x87, 0x38, 0x71, 0x9b, 0x03, 0xb7, 0x9d, 0x6f,
-	0x7e, 0xbf, 0xf9, 0x46, 0x0b, 0x87, 0x97, 0xf4, 0x79, 0x32, 0xa5, 0x30, 0x18, 0x76, 0x83, 0x50,
-	0x2a, 0x89, 0xf5, 0x7f, 0x80, 0x7b, 0x0a, 0x47, 0xef, 0x53, 0xe3, 0x42, 0x79, 0x2a, 0x8e, 0x38,
-	0x7d, 0x8d, 0x29, 0x52, 0x78, 0x04, 0x07, 0x42, 0xfa, 0x14, 0xd9, 0xac, 0x6d, 0x76, 0xea, 0x3c,
-	0x35, 0xdc, 0x1f, 0x0c, 0xee, 0xef, 0x84, 0x07, 0x32, 0x54, 0xf8, 0x11, 0x9a, 0x49, 0xc0, 0x20,
-	0xd2, 0x60, 0x96, 0x75, 0xa7, 0xdf, 0xeb, 0x6e, 0x3a, 0xdf, 0x90, 0xd6, 0x3d, 0x93, 0x3e, 0x5d,
-	0x64, 0x29, 0x6f, 0x85, 0x0a, 0x17, 0xbc, 0x21, 0x72, 0x50, 0xeb, 0x15, 0xdc, 0x2b, 0x84, 0xa0,
-	0x05, 0xe6, 0x84, 0x16, 0x36, 0x6b, 0xb3, 0x4e, 0x9d, 0x27, 0xcf, 0x64, 0xd6, 0xb9, 0x37, 0x8d,
-	0xc9, 0x2e, 0x69, 0x2c, 0x35, 0x5e, 0x94, 0x9e, 0x33, 0xf7, 0x17, 0x83, 0x93, 0xac, 0xf1, 0x99,
-	0x94, 0x01, 0xf7, 0xc4, 0x88, 0xd6, 0x0c, 0x1f, 0x40, 0x7d, 0x48, 0xa3, 0xb1, 0x18, 0x84, 0x34,
-	0xcf, 0xaa, 0xd5, 0x34, 0xc0, 0x69, 0x8e, 0x27, 0x50, 0x25, 0xe1, 0x6b, 0x57, 0x5a, 0xb4, 0x42,
-	0xc2, 0x4f, 0x1c, 0x4f, 0xc0, 0x1a, 0x8d, 0xd5, 0x65, 0x3c, 0x1c, 0xcc, 0xc6, 0x53, 0x8a, 0x94,
-	0x14, 0x64, 0x9b, 0x3a, 0xe2, 0x30, 0xc5, 0x3f, 0xac, 0x61, 0x7c, 0x09, 0x4d, 0x19, 0xab, 0x20,
-	0x56, 0x83, 0x2f, 0x32, 0x9c, 0x79, 0xca, 0x2e, 0xb7, 0x59, 0xe7, 0x6e, 0xdf, 0xce, 0x2d, 0xe5,
-	0x3c, 0xef, 0xe7, 0x8d, 0x34, 0xfc, 0x9d, 0xb6, 0x36, 0x0a, 0x1c, 0xe4, 0x15, 0xe8, 0xc1, 0x71,
-	0x91, 0x90, 0xd6, 0xe0, 0x18, 0x2a, 0x69, 0x7e, 0x46, 0x26, 0xb3, 0xdc, 0xab, 0x8d, 0x66, 0xaf,
-	0x83, 0x60, 0xba, 0x58, 0xf3, 0xb7, 0xc0, 0xdc, 0x30, 0x4f, 0x9e, 0x88, 0x50, 0x16, 0x52, 0x06,
-	0x9a, 0x71, 0x8d, 0xeb, 0x77, 0x91, 0x84, 0xf9, 0x7f, 0x24, 0xca, 0x79, 0x12, 0xa7, 0x80, 0xdb,
-	0x13, 0xed, 0x23, 0xf0, 0xb4, 0x07, 0xcd, 0xad, 0x16, 0x58, 0x4b, 0xe6, 0x14, 0x64, 0x19, 0xd8,
-	0x80, 0xda, 0xcc, 0x0b, 0x27, 0xbe, 0xfc, 0x26, 0x2c, 0x86, 0x55, 0x30, 0x95, 0x5a, 0x58, 0xa5,
-	0xfe, 0xf7, 0x12, 0x54, 0xb3, 0x06, 0xc8, 0xa1, 0xb9, 0x75, 0x7a, 0xf8, 0xe8, 0xf6, 0xa3, 0xd4,
-	0x8b, 0x69, 0x39, 0xfb, 0xaf, 0xd6, 0x35, 0xf0, 0x13, 0x58, 0xbb, 0x22, 0xa0, 0x5b, 0xcc, 0xda,
-	0x3d, 0xb9, 0xd6, 0xe3, 0xbd, 0x31, 0x59, 0xf1, 0x73, 0x68, 0xe4, 0x97, 0x83, 0x37, 0x8c, 0x93,
-	0xd7, 0xb1, 0xf5, 0xf0, 0x56, 0x7f, 0x5a, 0xf0, 0x8d, 0xfd, 0x73, 0xe9, 0xb0, 0xeb, 0xa5, 0xc3,
-	0xfe, 0x2c, 0x1d, 0x76, 0xb5, 0x72, 0x8c, 0xeb, 0x95, 0x63, 0xfc, 0x5e, 0x39, 0xc6, 0xb0, 0xa2,
-	0xbf, 0x83, 0x67, 0x7f, 0x03, 0x00, 0x00, 0xff, 0xff, 0x4d, 0xed, 0x36, 0x16, 0x21, 0x04, 0x00,
-	0x00,
+	// 546 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x54, 0x4d, 0x8f, 0x12, 0x41,
+	0x10, 0x9d, 0x9e, 0x61, 0xf9, 0xa8, 0x05, 0x19, 0xcb, 0xcd, 0xee, 0x04, 0xe3, 0x88, 0x73, 0x42,
+	0xa3, 0x64, 0xc5, 0x8b, 0x31, 0xd9, 0x18, 0x4d, 0xd6, 0x78, 0x11, 0x92, 0xd9, 0x78, 0xf2, 0x40,
+	0x40, 0x5a, 0x96, 0x00, 0xdd, 0xe3, 0x4c, 0x0f, 0x86, 0xdf, 0xe0, 0x65, 0xff, 0x8f, 0xf1, 0xe4,
+	0xc5, 0x9b, 0x7b, 0xf4, 0x68, 0xe0, 0x8f, 0x98, 0xe9, 0x1e, 0x60, 0xf8, 0xd8, 0xf1, 0x2b, 0xde,
+	0xba, 0x5e, 0x57, 0xbd, 0xee, 0x7a, 0xaf, 0xba, 0xa1, 0x7c, 0x4e, 0xdf, 0x0e, 0x47, 0xd4, 0xf7,
+	0xba, 0x75, 0xcf, 0xe7, 0x82, 0x63, 0x61, 0x09, 0x38, 0xf7, 0xe1, 0xe0, 0xa5, 0x0a, 0xce, 0x44,
+	0x47, 0x84, 0x81, 0x4b, 0xdf, 0x87, 0x34, 0x10, 0x78, 0x00, 0x7b, 0x8c, 0xf7, 0x68, 0x60, 0x91,
+	0xaa, 0x51, 0x2b, 0xb8, 0x2a, 0x70, 0x3e, 0xeb, 0x70, 0x63, 0x23, 0xdd, 0xe3, 0xbe, 0xc0, 0xd7,
+	0x50, 0x8a, 0x12, 0xda, 0x81, 0x04, 0xe3, 0xaa, 0xfd, 0xc6, 0x71, 0x7d, 0x75, 0xf2, 0x8e, 0xb2,
+	0x7a, 0x93, 0xf7, 0xe8, 0x59, 0x5c, 0x72, 0xca, 0x84, 0x3f, 0x75, 0x8b, 0x2c, 0x01, 0x61, 0x0b,
+	0xf6, 0x25, 0x2d, 0xf5, 0x7d, 0xee, 0x07, 0x96, 0x2e, 0x49, 0xeb, 0xbf, 0x41, 0x7a, 0x2a, 0x0b,
+	0x14, 0x25, 0xb0, 0x25, 0x50, 0x79, 0x0a, 0xd7, 0xb7, 0xce, 0x44, 0x13, 0x8c, 0x21, 0x9d, 0x5a,
+	0xa4, 0x4a, 0x6a, 0x05, 0x37, 0x5a, 0x46, 0xcd, 0x4f, 0x3a, 0xa3, 0x90, 0x5a, 0xba, 0xc4, 0x54,
+	0xf0, 0x44, 0x7f, 0x4c, 0x2a, 0x27, 0x50, 0xde, 0xe0, 0xff, 0x93, 0x72, 0xe7, 0x1b, 0x81, 0xa3,
+	0xf8, 0xce, 0x4d, 0xce, 0x3d, 0xb7, 0xc3, 0xfa, 0x74, 0xa1, 0xf8, 0x4d, 0x28, 0x74, 0x69, 0x7f,
+	0xc0, 0xda, 0x3e, 0x9d, 0xc4, 0x6c, 0x79, 0x09, 0xb8, 0x74, 0x82, 0x47, 0x90, 0xa3, 0xac, 0x27,
+	0xb7, 0x14, 0x69, 0x96, 0xb2, 0x5e, 0xb4, 0x71, 0x17, 0xcc, 0xfe, 0x40, 0x9c, 0x87, 0xdd, 0xf6,
+	0x78, 0x30, 0xa2, 0x81, 0xe0, 0x8c, 0x5a, 0x86, 0xcc, 0x28, 0x2b, 0xfc, 0xd5, 0x02, 0xc6, 0x13,
+	0x28, 0xf1, 0x50, 0x78, 0xa1, 0x68, 0xbf, 0xe3, 0xfe, 0xb8, 0x23, 0xac, 0x4c, 0x95, 0xd4, 0xae,
+	0x35, 0xac, 0x84, 0x9e, 0xad, 0xe4, 0xbe, 0x5b, 0x54, 0xe9, 0x2f, 0x64, 0xb4, 0x9a, 0x88, 0xbd,
+	0xe4, 0x44, 0x7c, 0x21, 0x70, 0xb8, 0xdd, 0x91, 0x1c, 0x8a, 0x43, 0xc8, 0x2a, 0x82, 0xb8, 0x9b,
+	0x38, 0x42, 0x77, 0x97, 0xab, 0x0f, 0xb7, 0x5d, 0xdd, 0xe0, 0x4b, 0x35, 0xf6, 0x1f, 0x7d, 0xb9,
+	0x20, 0xcb, 0xb9, 0x7e, 0xe6, 0x79, 0xa3, 0xe9, 0xc2, 0x13, 0x13, 0x8c, 0x95, 0x1b, 0xd1, 0x12,
+	0x11, 0x32, 0x8c, 0x73, 0x4f, 0x52, 0xe4, 0x5d, 0xb9, 0xde, 0x16, 0xd6, 0xf8, 0x3b, 0x61, 0x33,
+	0x49, 0x61, 0x3f, 0x11, 0xc0, 0xf5, 0x2b, 0xa5, 0x8a, 0xda, 0xdc, 0x25, 0xea, 0x83, 0x6d, 0x51,
+	0x13, 0x5c, 0xff, 0x51, 0xd0, 0x7b, 0xc7, 0x50, 0x5a, 0x6b, 0x19, 0xf3, 0x91, 0x6e, 0x8c, 0x9a,
+	0x1a, 0x16, 0x21, 0x3f, 0xee, 0xf8, 0xc3, 0x1e, 0xff, 0xc0, 0x4c, 0x82, 0x39, 0x30, 0x84, 0x98,
+	0x9a, 0x7a, 0xe3, 0xa3, 0x0e, 0xb9, 0xf8, 0x8e, 0xe8, 0x42, 0x69, 0xed, 0x65, 0xe3, 0xed, 0xab,
+	0xdf, 0xbc, 0x34, 0xaa, 0x62, 0xa7, 0x7f, 0x0a, 0x8e, 0x86, 0x6f, 0xc0, 0xdc, 0x9c, 0x2b, 0x74,
+	0x52, 0x87, 0x4e, 0x31, 0xdf, 0xf9, 0xe5, 0x60, 0x3a, 0x1a, 0xb6, 0xa0, 0x98, 0xd4, 0x17, 0xed,
+	0x2b, 0x85, 0x57, 0xa4, 0xb7, 0x52, 0x8d, 0x71, 0xb4, 0xe7, 0xd6, 0xd7, 0x99, 0x4d, 0x2e, 0x67,
+	0x36, 0xf9, 0x31, 0xb3, 0xc9, 0xc5, 0xdc, 0xd6, 0x2e, 0xe7, 0xb6, 0xf6, 0x7d, 0x6e, 0x6b, 0xdd,
+	0xac, 0xfc, 0xc2, 0x1f, 0xfd, 0x0c, 0x00, 0x00, 0xff, 0xff, 0xfb, 0x1f, 0x83, 0x0c, 0xd5, 0x05,
+	0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -627,6 +658,25 @@ func (m *HecklerStatusReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.NodeErrors) > 0 {
+		for k := range m.NodeErrors {
+			v := m.NodeErrors[k]
+			baseI := i
+			i -= len(v)
+			copy(dAtA[i:], v)
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(v)))
+			i--
+			dAtA[i] = 0x12
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintHecklerpb(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
 	if len(m.NodeStatuses) > 0 {
 		for k := range m.NodeStatuses {
 			v := m.NodeStatuses[k]
@@ -727,6 +777,25 @@ func (m *HecklerNoopRangeReport) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	_ = i
 	var l int
 	_ = l
+	if len(m.NodeErrors) > 0 {
+		for k := range m.NodeErrors {
+			v := m.NodeErrors[k]
+			baseI := i
+			i -= len(v)
+			copy(dAtA[i:], v)
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(v)))
+			i--
+			dAtA[i] = 0x12
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintHecklerpb(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
 	if len(m.Output) > 0 {
 		i -= len(m.Output)
 		copy(dAtA[i:], m.Output)
@@ -811,6 +880,25 @@ func (m *HecklerApplyReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.NodeErrors) > 0 {
+		for k := range m.NodeErrors {
+			v := m.NodeErrors[k]
+			baseI := i
+			i -= len(v)
+			copy(dAtA[i:], v)
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(v)))
+			i--
+			dAtA[i] = 0x12
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintHecklerpb(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
 	if len(m.Output) > 0 {
 		i -= len(m.Output)
 		copy(dAtA[i:], m.Output)
@@ -861,6 +949,14 @@ func (m *HecklerStatusReport) Size() (n int) {
 			n += mapEntrySize + 1 + sovHecklerpb(uint64(mapEntrySize))
 		}
 	}
+	if len(m.NodeErrors) > 0 {
+		for k, v := range m.NodeErrors {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovHecklerpb(uint64(len(k))) + 1 + len(v) + sovHecklerpb(uint64(len(v)))
+			n += mapEntrySize + 1 + sovHecklerpb(uint64(mapEntrySize))
+		}
+	}
 	return n
 }
 
@@ -904,6 +1000,14 @@ func (m *HecklerNoopRangeReport) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovHecklerpb(uint64(l))
 	}
+	if len(m.NodeErrors) > 0 {
+		for k, v := range m.NodeErrors {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovHecklerpb(uint64(len(k))) + 1 + len(v) + sovHecklerpb(uint64(len(v)))
+			n += mapEntrySize + 1 + sovHecklerpb(uint64(mapEntrySize))
+		}
+	}
 	return n
 }
 
@@ -941,6 +1045,14 @@ func (m *HecklerApplyReport) Size() (n int) {
 	l = len(m.Output)
 	if l > 0 {
 		n += 1 + l + sovHecklerpb(uint64(l))
+	}
+	if len(m.NodeErrors) > 0 {
+		for k, v := range m.NodeErrors {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovHecklerpb(uint64(len(k))) + 1 + len(v) + sovHecklerpb(uint64(len(v)))
+			n += mapEntrySize + 1 + sovHecklerpb(uint64(mapEntrySize))
+		}
 	}
 	return n
 }
@@ -1191,6 +1303,133 @@ func (m *HecklerStatusReport) Unmarshal(dAtA []byte) error {
 				}
 			}
 			m.NodeStatuses[mapkey] = mapvalue
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NodeErrors", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.NodeErrors == nil {
+				m.NodeErrors = make(map[string]string)
+			}
+			var mapkey string
+			var mapvalue string
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowHecklerpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowHecklerpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var stringLenmapvalue uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowHecklerpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapvalue |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapvalue := int(stringLenmapvalue)
+					if intStringLenmapvalue < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					postStringIndexmapvalue := iNdEx + intStringLenmapvalue
+					if postStringIndexmapvalue < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if postStringIndexmapvalue > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = string(dAtA[iNdEx:postStringIndexmapvalue])
+					iNdEx = postStringIndexmapvalue
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipHecklerpb(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.NodeErrors[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -1477,6 +1716,133 @@ func (m *HecklerNoopRangeReport) Unmarshal(dAtA []byte) error {
 			}
 			m.Output = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NodeErrors", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.NodeErrors == nil {
+				m.NodeErrors = make(map[string]string)
+			}
+			var mapkey string
+			var mapvalue string
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowHecklerpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowHecklerpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var stringLenmapvalue uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowHecklerpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapvalue |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapvalue := int(stringLenmapvalue)
+					if intStringLenmapvalue < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					postStringIndexmapvalue := iNdEx + intStringLenmapvalue
+					if postStringIndexmapvalue < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if postStringIndexmapvalue > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = string(dAtA[iNdEx:postStringIndexmapvalue])
+					iNdEx = postStringIndexmapvalue
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipHecklerpb(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.NodeErrors[mapkey] = mapvalue
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipHecklerpb(dAtA[iNdEx:])
@@ -1717,6 +2083,133 @@ func (m *HecklerApplyReport) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Output = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NodeErrors", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.NodeErrors == nil {
+				m.NodeErrors = make(map[string]string)
+			}
+			var mapkey string
+			var mapvalue string
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowHecklerpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowHecklerpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var stringLenmapvalue uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowHecklerpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapvalue |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapvalue := int(stringLenmapvalue)
+					if intStringLenmapvalue < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					postStringIndexmapvalue := iNdEx + intStringLenmapvalue
+					if postStringIndexmapvalue < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if postStringIndexmapvalue > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = string(dAtA[iNdEx:postStringIndexmapvalue])
+					iNdEx = postStringIndexmapvalue
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipHecklerpb(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.NodeErrors[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
