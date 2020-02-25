@@ -1,6 +1,8 @@
 syntax = "proto3";
 package hecklerpb;
 
+// XXX node_errors -> better name?
+
 enum Output_format {
   none = 0;
   markdown = 1;
@@ -12,6 +14,8 @@ service Heckler {
   rpc HecklerStatus (HecklerStatusRequest) returns (HecklerStatusReport) {}
   rpc HecklerNoopRange (HecklerNoopRangeRequest) returns (HecklerNoopRangeReport) {}
   rpc HecklerApply (HecklerApplyRequest) returns (HecklerApplyReport) {}
+  rpc HecklerLock (HecklerLockRequest) returns (HecklerLockReport) {}
+  rpc HecklerUnlock (HecklerUnlockRequest) returns (HecklerUnlockReport) {}
 }
 
 message HecklerStatusRequest {
@@ -45,5 +49,25 @@ message HecklerApplyRequest {
 
 message HecklerApplyReport {
   string output = 1;
+  map<string,string> node_errors = 2;
+}
+
+message HecklerLockRequest {
+  string user = 1;
+  string comment = 2;
+  repeated string nodes = 3;
+}
+
+message HecklerLockReport {
+  repeated string locked_nodes = 1;
+  map<string,string> node_errors = 2;
+}
+
+message HecklerUnlockRequest {
+  repeated string nodes = 1;
+}
+
+message HecklerUnlockReport {
+  repeated string unlocked_nodes = 1;
   map<string,string> node_errors = 2;
 }

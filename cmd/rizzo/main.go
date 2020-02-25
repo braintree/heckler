@@ -3,12 +3,18 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
 	"os"
 	"os/exec"
+	"os/user"
+	"strconv"
+	"strings"
+	"syscall"
 
 	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
 	"github.braintreeps.com/lollipopman/heckler/internal/puppetutil"
@@ -21,6 +27,7 @@ const (
 	port     = ":50051"
 	stateDir = "/var/lib/rizzo"
 	repoDir  = stateDir + "/repo/puppetcode"
+	lockPath = "/var/tmp/puppet.lock"
 )
 
 // server is used to implement rizzo.RizzoServer.
@@ -85,6 +92,75 @@ func (s *server) PuppetLastApply(ctx context.Context, req *puppetutil.PuppetLast
 	return pr, nil
 }
 
+func (s *server) PuppetLock(ctx context.Context, req *puppetutil.PuppetLockRequest) (*puppetutil.PuppetLockReport, error) {
+	log.Printf("PuppetLock: request received, %v", req)
+	var res *puppetutil.PuppetLockReport
+	res = new(puppetutil.PuppetLockReport)
+	err := puppetLock(req.User, req.Comment)
+	if err != nil {
+		res.Locked = false
+		res.Error = err.Error()
+	} else {
+		res.Locked = true
+	}
+	log.Printf("PuppetLock: reply, %v", res)
+	return res, nil
+}
+
+func puppetLock(username string, comment string) error {
+	tmpfile, err := ioutil.TempFile("/var/tmp", "rizzoPuppetLockTmpFile.*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpfile.Name())
+
+	if _, err := tmpfile.WriteString(comment); err != nil {
+		return err
+	}
+	if err := tmpfile.Close(); err != nil {
+		return err
+	}
+
+	err = renameAndCheck(tmpfile.Name(), lockPath)
+	if errors.Is(err, os.ErrExist) {
+		buf, err := ioutil.ReadFile(lockPath)
+		if err != nil {
+			return err
+		}
+		comment := strings.TrimRight(string(buf), "\n")
+		username, err := lockUser()
+		if err != nil {
+			return err
+		}
+		return errors.New(fmt.Sprintf("Already locked by %s, '%s'", username, comment))
+	}
+	return err
+}
+
+// XXX will this fail when using musl against sssd?
+// if so just shell out, `id -nu <UID>`?
+func lockUser() (string, error) {
+	var stat syscall.Stat_t
+	if err := syscall.Stat(lockPath, &stat); err != nil {
+		return "", err
+	}
+	lu, err := user.LookupId(strconv.Itoa(int(stat.Uid)))
+	if err != nil {
+		return "", err
+	}
+	return lu.Username, nil
+}
+
+// os.Rename overwrites, which we do not want to do, but hard linking returns
+// the correct error.
+func renameAndCheck(src, dst string) error {
+	err := os.Link(src, dst)
+	if err != nil {
+		return err
+	}
+
+	return os.Remove(src)
+}
 func puppetApply(oid string, noop bool, conf *RizzoConf) (*puppetutil.PuppetReport, error) {
 	var oldPath string
 

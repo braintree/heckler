@@ -564,6 +564,214 @@ func (m *PuppetLastApplyRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_PuppetLastApplyRequest proto.InternalMessageInfo
 
+type PuppetLockRequest struct {
+	User    string `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	Comment string `protobuf:"bytes,2,opt,name=comment,proto3" json:"comment,omitempty"`
+}
+
+func (m *PuppetLockRequest) Reset()         { *m = PuppetLockRequest{} }
+func (m *PuppetLockRequest) String() string { return proto.CompactTextString(m) }
+func (*PuppetLockRequest) ProtoMessage()    {}
+func (*PuppetLockRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_3eedb623aa6ca98c, []int{6}
+}
+func (m *PuppetLockRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PuppetLockRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PuppetLockRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PuppetLockRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PuppetLockRequest.Merge(m, src)
+}
+func (m *PuppetLockRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *PuppetLockRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PuppetLockRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PuppetLockRequest proto.InternalMessageInfo
+
+func (m *PuppetLockRequest) GetUser() string {
+	if m != nil {
+		return m.User
+	}
+	return ""
+}
+
+func (m *PuppetLockRequest) GetComment() string {
+	if m != nil {
+		return m.Comment
+	}
+	return ""
+}
+
+type PuppetLockReport struct {
+	Host   string `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Locked bool   `protobuf:"varint,2,opt,name=locked,proto3" json:"locked,omitempty"`
+	Error  string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+}
+
+func (m *PuppetLockReport) Reset()         { *m = PuppetLockReport{} }
+func (m *PuppetLockReport) String() string { return proto.CompactTextString(m) }
+func (*PuppetLockReport) ProtoMessage()    {}
+func (*PuppetLockReport) Descriptor() ([]byte, []int) {
+	return fileDescriptor_3eedb623aa6ca98c, []int{7}
+}
+func (m *PuppetLockReport) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PuppetLockReport) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PuppetLockReport.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PuppetLockReport) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PuppetLockReport.Merge(m, src)
+}
+func (m *PuppetLockReport) XXX_Size() int {
+	return m.Size()
+}
+func (m *PuppetLockReport) XXX_DiscardUnknown() {
+	xxx_messageInfo_PuppetLockReport.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PuppetLockReport proto.InternalMessageInfo
+
+func (m *PuppetLockReport) GetHost() string {
+	if m != nil {
+		return m.Host
+	}
+	return ""
+}
+
+func (m *PuppetLockReport) GetLocked() bool {
+	if m != nil {
+		return m.Locked
+	}
+	return false
+}
+
+func (m *PuppetLockReport) GetError() string {
+	if m != nil {
+		return m.Error
+	}
+	return ""
+}
+
+type PuppetUnlockRequest struct {
+}
+
+func (m *PuppetUnlockRequest) Reset()         { *m = PuppetUnlockRequest{} }
+func (m *PuppetUnlockRequest) String() string { return proto.CompactTextString(m) }
+func (*PuppetUnlockRequest) ProtoMessage()    {}
+func (*PuppetUnlockRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_3eedb623aa6ca98c, []int{8}
+}
+func (m *PuppetUnlockRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PuppetUnlockRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PuppetUnlockRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PuppetUnlockRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PuppetUnlockRequest.Merge(m, src)
+}
+func (m *PuppetUnlockRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *PuppetUnlockRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PuppetUnlockRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PuppetUnlockRequest proto.InternalMessageInfo
+
+type PuppetUnlockReport struct {
+	Host     string `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Unlocked bool   `protobuf:"varint,2,opt,name=unlocked,proto3" json:"unlocked,omitempty"`
+	Error    string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+}
+
+func (m *PuppetUnlockReport) Reset()         { *m = PuppetUnlockReport{} }
+func (m *PuppetUnlockReport) String() string { return proto.CompactTextString(m) }
+func (*PuppetUnlockReport) ProtoMessage()    {}
+func (*PuppetUnlockReport) Descriptor() ([]byte, []int) {
+	return fileDescriptor_3eedb623aa6ca98c, []int{9}
+}
+func (m *PuppetUnlockReport) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PuppetUnlockReport) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PuppetUnlockReport.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PuppetUnlockReport) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PuppetUnlockReport.Merge(m, src)
+}
+func (m *PuppetUnlockReport) XXX_Size() int {
+	return m.Size()
+}
+func (m *PuppetUnlockReport) XXX_DiscardUnknown() {
+	xxx_messageInfo_PuppetUnlockReport.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PuppetUnlockReport proto.InternalMessageInfo
+
+func (m *PuppetUnlockReport) GetHost() string {
+	if m != nil {
+		return m.Host
+	}
+	return ""
+}
+
+func (m *PuppetUnlockReport) GetUnlocked() bool {
+	if m != nil {
+		return m.Unlocked
+	}
+	return false
+}
+
+func (m *PuppetUnlockReport) GetError() string {
+	if m != nil {
+		return m.Error
+	}
+	return ""
+}
+
 func init() {
 	proto.RegisterType((*Event)(nil), "puppetutil.Event")
 	proto.RegisterType((*Log)(nil), "puppetutil.Log")
@@ -572,65 +780,77 @@ func init() {
 	proto.RegisterType((*ResourceStatus)(nil), "puppetutil.ResourceStatus")
 	proto.RegisterType((*PuppetApplyRequest)(nil), "puppetutil.PuppetApplyRequest")
 	proto.RegisterType((*PuppetLastApplyRequest)(nil), "puppetutil.PuppetLastApplyRequest")
+	proto.RegisterType((*PuppetLockRequest)(nil), "puppetutil.PuppetLockRequest")
+	proto.RegisterType((*PuppetLockReport)(nil), "puppetutil.PuppetLockReport")
+	proto.RegisterType((*PuppetUnlockRequest)(nil), "puppetutil.PuppetUnlockRequest")
+	proto.RegisterType((*PuppetUnlockReport)(nil), "puppetutil.PuppetUnlockReport")
 }
 
 func init() { proto.RegisterFile("report.proto", fileDescriptor_3eedb623aa6ca98c) }
 
 var fileDescriptor_3eedb623aa6ca98c = []byte{
-	// 845 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x55, 0xcd, 0x6e, 0xe3, 0x36,
-	0x10, 0x8e, 0x22, 0xdb, 0xeb, 0x8c, 0x9c, 0x1f, 0xb3, 0x49, 0x40, 0xe4, 0x60, 0xb8, 0x0e, 0x0a,
-	0x24, 0x2d, 0x60, 0x14, 0xc9, 0xa5, 0xd8, 0x5b, 0x1b, 0x6c, 0x81, 0x02, 0x29, 0x9a, 0x6a, 0xb7,
-	0x7b, 0xe9, 0x41, 0x60, 0xa5, 0xb1, 0x2d, 0xac, 0x4c, 0xb2, 0x24, 0x25, 0xc0, 0xfb, 0x0e, 0x05,
-	0xfa, 0x12, 0x7d, 0x97, 0x1e, 0xf7, 0xd8, 0x63, 0x91, 0x3c, 0x43, 0xef, 0x85, 0x48, 0x2a, 0x96,
-	0xb3, 0xce, 0x9e, 0xac, 0xf9, 0xe6, 0x7f, 0xe6, 0x1b, 0x1a, 0x06, 0x0a, 0xa5, 0x50, 0x66, 0x2a,
-	0x95, 0x30, 0x82, 0x80, 0x2c, 0xa5, 0x44, 0x53, 0x9a, 0xbc, 0x98, 0xdc, 0x07, 0xd0, 0x7d, 0x55,
-	0x21, 0x37, 0xe4, 0x0c, 0xfa, 0x52, 0x09, 0x89, 0xca, 0xac, 0x68, 0x30, 0x0e, 0x2e, 0xf6, 0xe2,
-	0x47, 0x99, 0x7c, 0x01, 0x07, 0x52, 0x61, 0x95, 0x8b, 0x52, 0x27, 0x15, 0x2b, 0x4a, 0xa4, 0xbb,
-	0xd6, 0x62, 0xbf, 0x41, 0xdf, 0xd6, 0x20, 0x39, 0x87, 0xfd, 0x0c, 0x75, 0xae, 0x30, 0xf3, 0x56,
-	0xa1, 0xb5, 0x1a, 0x78, 0xd0, 0x19, 0x51, 0x78, 0xb1, 0x44, 0xad, 0xd9, 0x1c, 0x69, 0xc7, 0xaa,
-	0x1b, 0x91, 0x10, 0xe8, 0x70, 0xb6, 0x44, 0xda, 0xb5, 0xb0, 0xfd, 0x26, 0xa7, 0xd0, 0xd3, 0x86,
-	0x99, 0x52, 0xd3, 0x9e, 0x45, 0xbd, 0x44, 0xbe, 0x82, 0x61, 0x2a, 0x94, 0xc2, 0xd4, 0xe4, 0x15,
-	0x26, 0xe9, 0x82, 0xf1, 0x39, 0xd2, 0x17, 0xe3, 0xe0, 0xa2, 0x1f, 0x1f, 0xad, 0x15, 0x37, 0x16,
-	0x9f, 0xfc, 0x08, 0xe1, 0xad, 0x98, 0x93, 0x63, 0xe8, 0x16, 0x58, 0x61, 0xe1, 0xdb, 0x73, 0x42,
-	0xbb, 0x9e, 0xdd, 0xcd, 0x7a, 0xea, 0xdc, 0xa2, 0x54, 0x69, 0xd3, 0x87, 0x97, 0x26, 0x7f, 0x74,
-	0x61, 0x70, 0x67, 0x47, 0x18, 0xdb, 0xb1, 0xd6, 0x85, 0x2f, 0x84, 0x36, 0x3e, 0xae, 0xfd, 0x26,
-	0xd7, 0x70, 0x92, 0x0a, 0x3e, 0xcb, 0xe7, 0xa5, 0x62, 0x26, 0x17, 0x3c, 0xa9, 0x50, 0xe9, 0x5c,
-	0x70, 0x9f, 0xe4, 0x78, 0x43, 0xf9, 0xd6, 0xe9, 0xea, 0x01, 0xba, 0x4d, 0x25, 0x33, 0xa1, 0x96,
-	0xcc, 0xd8, 0xc4, 0x61, 0xec, 0xd7, 0xf7, 0xbd, 0xc5, 0xec, 0x32, 0x6c, 0xf6, 0xc7, 0x90, 0x1d,
-	0xbf, 0x0c, 0x8b, 0x36, 0xb1, 0xd6, 0x93, 0xeb, 0x6e, 0x4c, 0xee, 0x1a, 0x4e, 0x8c, 0x62, 0x5c,
-	0xb3, 0xd4, 0x96, 0x95, 0x8a, 0xa5, 0x2c, 0xd0, 0x60, 0x66, 0x07, 0xdc, 0x8f, 0x8f, 0x5b, 0xca,
-	0x9b, 0x46, 0x67, 0x57, 0x23, 0x84, 0xf4, 0x13, 0xb6, 0xdf, 0xe4, 0x73, 0x18, 0xd4, 0xbf, 0x89,
-	0x44, 0x9e, 0xe5, 0x7c, 0x4e, 0xfb, 0x56, 0x17, 0xd5, 0xd8, 0x9d, 0x83, 0xc8, 0x18, 0x22, 0xe4,
-	0x55, 0xae, 0x04, 0x5f, 0x22, 0x37, 0x74, 0xcf, 0x16, 0xd2, 0x86, 0xc8, 0x39, 0x74, 0x0a, 0x31,
-	0xd7, 0x14, 0xc6, 0xe1, 0x45, 0x74, 0x75, 0x38, 0x5d, 0x53, 0x73, 0x7a, 0x2b, 0xe6, 0xb1, 0x55,
-	0x92, 0x5f, 0x61, 0xa8, 0xd0, 0x0d, 0x3f, 0x71, 0x5d, 0xa0, 0xa6, 0x91, 0xf5, 0x98, 0xb6, 0x3d,
-	0xda, 0x4b, 0x99, 0xc6, 0xde, 0xe3, 0xb5, 0x77, 0x78, 0xc5, 0x8d, 0x5a, 0xc5, 0x47, 0xea, 0x09,
-	0xbc, 0x9d, 0x49, 0x83, 0xed, 0x4c, 0x22, 0x57, 0x70, 0x92, 0xb2, 0x74, 0x81, 0x59, 0x92, 0x32,
-	0xc3, 0x0a, 0x31, 0xf7, 0xf5, 0xd0, 0x7d, 0xdb, 0xda, 0x67, 0x4e, 0x79, 0xe3, 0x74, 0x2e, 0xc5,
-	0x59, 0x02, 0x27, 0x5b, 0x6b, 0x21, 0x47, 0x10, 0xbe, 0xc3, 0xe6, 0xd8, 0xea, 0x4f, 0xf2, 0x35,
-	0x74, 0xd7, 0xe7, 0x15, 0x5d, 0x9d, 0xb5, 0x9b, 0xdb, 0x8c, 0x11, 0x3b, 0xc3, 0x97, 0xbb, 0xdf,
-	0x04, 0x93, 0xff, 0x42, 0x38, 0xd8, 0xd4, 0xd6, 0xbb, 0x71, 0x9d, 0x24, 0xa9, 0x28, 0xb9, 0x63,
-	0x66, 0x18, 0x47, 0x0e, 0xbb, 0xa9, 0xa1, 0x9a, 0xf7, 0x4e, 0xcc, 0x6c, 0xb6, 0x7e, 0xdc, 0x88,
-	0xe4, 0x12, 0x8e, 0x52, 0xc1, 0x0d, 0xcb, 0xed, 0x8a, 0x12, 0xc9, 0xcc, 0x82, 0x86, 0xe3, 0xf0,
-	0x62, 0x2f, 0x3e, 0x6c, 0xe1, 0x77, 0xcc, 0x2c, 0xb6, 0x0f, 0xaf, 0xf3, 0xcc, 0xf0, 0x4e, 0xa1,
-	0x37, 0x63, 0x79, 0x81, 0x99, 0x65, 0x64, 0x3f, 0xf6, 0x12, 0xf9, 0x12, 0x86, 0xee, 0x2b, 0x31,
-	0x22, 0x51, 0xa8, 0x0d, 0x53, 0xc6, 0xb3, 0xf1, 0xd0, 0x29, 0xde, 0x88, 0xd8, 0xc1, 0x64, 0x04,
-	0x91, 0x28, 0x4d, 0x22, 0x66, 0x89, 0x5e, 0xf1, 0xd4, 0xf3, 0x71, 0x4f, 0x94, 0xe6, 0xa7, 0xd9,
-	0xeb, 0x15, 0x4f, 0xc9, 0x25, 0x0c, 0x5b, 0x7a, 0xdf, 0x7d, 0xdf, 0x76, 0x7f, 0xf0, 0x68, 0xe5,
-	0x06, 0x70, 0x0e, 0xfb, 0x52, 0x89, 0x2a, 0xcf, 0x50, 0x25, 0xa5, 0xc6, 0xcc, 0xd3, 0x73, 0xd0,
-	0x80, 0xbf, 0x68, 0xcc, 0xea, 0x57, 0xb1, 0x61, 0x0c, 0x05, 0xf7, 0x2a, 0x36, 0xb2, 0xbb, 0x56,
-	0x4f, 0x4b, 0xb3, 0x92, 0x48, 0x23, 0x17, 0xa0, 0x01, 0xdf, 0xac, 0xa4, 0x7d, 0xee, 0xf4, 0xbb,
-	0x5c, 0x4a, 0xcc, 0x3c, 0xa9, 0x1a, 0xb1, 0x7e, 0x8e, 0x4c, 0x6e, 0x0a, 0xf4, 0xdc, 0x71, 0x02,
-	0xb9, 0x84, 0x1e, 0xd6, 0xef, 0xb1, 0xa6, 0x07, 0x96, 0xe0, 0xc3, 0x36, 0x07, 0xec, 0x4b, 0x1d,
-	0x7b, 0x83, 0xc9, 0x4b, 0x20, 0x8e, 0xf1, 0xdf, 0x4a, 0x59, 0xac, 0x62, 0xfc, 0xbd, 0x44, 0x6d,
-	0x6a, 0x56, 0x29, 0xac, 0x1a, 0x56, 0x29, 0xac, 0x1e, 0x8f, 0x77, 0x77, 0x7d, 0xbc, 0x13, 0x0a,
-	0xa7, 0xce, 0xf7, 0x96, 0xe9, 0x0d, 0xff, 0xab, 0xbf, 0x02, 0xe8, 0xc6, 0xf9, 0xfb, 0xf7, 0x82,
-	0xfc, 0x00, 0x51, 0x2b, 0x3e, 0x19, 0x7d, 0x7c, 0x6a, 0x6d, 0xc7, 0x33, 0xfa, 0xdc, 0x29, 0x4e,
-	0x76, 0xc8, 0xcf, 0x70, 0xf8, 0x24, 0x1d, 0x99, 0x7c, 0x6c, 0xfe, 0xb4, 0x96, 0x4f, 0x85, 0xfc,
-	0x8e, 0xfe, 0x7d, 0x3f, 0x0a, 0x3e, 0xdc, 0x8f, 0x82, 0x7f, 0xef, 0x47, 0xc1, 0x9f, 0x0f, 0xa3,
-	0x9d, 0x0f, 0x0f, 0xa3, 0x9d, 0x7f, 0x1e, 0x46, 0x3b, 0xbf, 0xf5, 0xec, 0xdf, 0xdc, 0xf5, 0xff,
-	0x01, 0x00, 0x00, 0xff, 0xff, 0x4a, 0xec, 0x7c, 0xb2, 0xf6, 0x06, 0x00, 0x00,
+	// 963 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x56, 0xcf, 0x6e, 0xe3, 0xb6,
+	0x13, 0x8e, 0xe3, 0x3f, 0xeb, 0x8c, 0x9d, 0xc4, 0xe6, 0xc6, 0x01, 0x61, 0xfc, 0x7e, 0xae, 0xab,
+	0xa0, 0x40, 0xd2, 0x02, 0x46, 0x91, 0x5c, 0x8a, 0xbd, 0x6d, 0x83, 0x2d, 0x50, 0x34, 0x45, 0x53,
+	0x6d, 0x76, 0x0f, 0xed, 0x41, 0x50, 0xa5, 0xb1, 0x2d, 0x44, 0x26, 0x59, 0x92, 0x12, 0xe0, 0x7d,
+	0x87, 0x02, 0x7d, 0xa9, 0x02, 0x3d, 0xee, 0xb1, 0xc7, 0x22, 0x79, 0x86, 0xde, 0x0b, 0x91, 0x94,
+	0x2d, 0x27, 0x76, 0x4f, 0xd6, 0x7c, 0x33, 0x9c, 0x19, 0x7e, 0xf3, 0x71, 0x60, 0xe8, 0x4a, 0x14,
+	0x5c, 0xea, 0x89, 0x90, 0x5c, 0x73, 0x02, 0x22, 0x13, 0x02, 0x75, 0xa6, 0x93, 0xd4, 0x7b, 0xa8,
+	0x41, 0xf3, 0x4d, 0x8e, 0x4c, 0x93, 0x21, 0xb4, 0x85, 0xe4, 0x02, 0xa5, 0x5e, 0xd2, 0xda, 0xb8,
+	0x76, 0x7e, 0xe0, 0xaf, 0x6c, 0xf2, 0x19, 0x1c, 0x09, 0x89, 0x79, 0xc2, 0x33, 0x15, 0xe4, 0x61,
+	0x9a, 0x21, 0xdd, 0x37, 0x11, 0x87, 0x25, 0xfa, 0xbe, 0x00, 0xc9, 0x19, 0x1c, 0xc6, 0xa8, 0x12,
+	0x89, 0xb1, 0x8b, 0xaa, 0x9b, 0xa8, 0xae, 0x03, 0x6d, 0x10, 0x85, 0x17, 0x0b, 0x54, 0x2a, 0x9c,
+	0x21, 0x6d, 0x18, 0x77, 0x69, 0x12, 0x02, 0x0d, 0x16, 0x2e, 0x90, 0x36, 0x0d, 0x6c, 0xbe, 0xc9,
+	0x29, 0xb4, 0x94, 0x0e, 0x75, 0xa6, 0x68, 0xcb, 0xa0, 0xce, 0x22, 0x5f, 0x40, 0x3f, 0xe2, 0x52,
+	0x62, 0xa4, 0x93, 0x1c, 0x83, 0x68, 0x1e, 0xb2, 0x19, 0xd2, 0x17, 0xe3, 0xda, 0x79, 0xdb, 0xef,
+	0xad, 0x1d, 0xd7, 0x06, 0xf7, 0xbe, 0x87, 0xfa, 0x0d, 0x9f, 0x91, 0x13, 0x68, 0xa6, 0x98, 0x63,
+	0xea, 0xae, 0x67, 0x8d, 0x6a, 0x3f, 0xfb, 0x9b, 0xfd, 0x14, 0xb5, 0x79, 0x26, 0xa3, 0xf2, 0x1e,
+	0xce, 0xf2, 0x7e, 0x6b, 0x42, 0xf7, 0xd6, 0x50, 0xe8, 0x1b, 0x5a, 0x8b, 0xc6, 0xe7, 0x5c, 0x69,
+	0x97, 0xd7, 0x7c, 0x93, 0x2b, 0x18, 0x44, 0x9c, 0x4d, 0x93, 0x59, 0x26, 0x43, 0x9d, 0x70, 0x16,
+	0xe4, 0x28, 0x55, 0xc2, 0x99, 0x2b, 0x72, 0xb2, 0xe1, 0x7c, 0x6f, 0x7d, 0x05, 0x81, 0x76, 0x52,
+	0xc1, 0x94, 0xcb, 0x45, 0xa8, 0x4d, 0xe1, 0xba, 0xef, 0xc6, 0xf7, 0x8d, 0xc1, 0xcc, 0x30, 0x4c,
+	0xf5, 0x55, 0xca, 0x86, 0x1b, 0x86, 0x41, 0xcb, 0x5c, 0x6b, 0xe6, 0x9a, 0x1b, 0xcc, 0x5d, 0xc1,
+	0x40, 0xcb, 0x90, 0xa9, 0x30, 0x32, 0x6d, 0x45, 0x7c, 0x21, 0x52, 0xd4, 0x18, 0x1b, 0x82, 0xdb,
+	0xfe, 0x49, 0xc5, 0x79, 0x5d, 0xfa, 0xcc, 0x68, 0x38, 0x17, 0x8e, 0x61, 0xf3, 0x4d, 0x3e, 0x85,
+	0x6e, 0xf1, 0x1b, 0x08, 0x64, 0x71, 0xc2, 0x66, 0xb4, 0x6d, 0x7c, 0x9d, 0x02, 0xbb, 0xb5, 0x10,
+	0x19, 0x43, 0x07, 0x59, 0x9e, 0x48, 0xce, 0x16, 0xc8, 0x34, 0x3d, 0x30, 0x8d, 0x54, 0x21, 0x72,
+	0x06, 0x8d, 0x94, 0xcf, 0x14, 0x85, 0x71, 0xfd, 0xbc, 0x73, 0x79, 0x3c, 0x59, 0x4b, 0x73, 0x72,
+	0xc3, 0x67, 0xbe, 0x71, 0x92, 0x9f, 0xa1, 0x2f, 0xd1, 0x92, 0x1f, 0xd8, 0x5b, 0xa0, 0xa2, 0x1d,
+	0x73, 0x62, 0x52, 0x3d, 0x51, 0x1d, 0xca, 0xc4, 0x77, 0x27, 0xde, 0xba, 0x03, 0x6f, 0x98, 0x96,
+	0x4b, 0xbf, 0x27, 0x9f, 0xc0, 0xdb, 0x95, 0xd4, 0xdd, 0xae, 0x24, 0x72, 0x09, 0x83, 0x28, 0x8c,
+	0xe6, 0x18, 0x07, 0x51, 0xa8, 0xc3, 0x94, 0xcf, 0x5c, 0x3f, 0xf4, 0xd0, 0x5c, 0xed, 0xa5, 0x75,
+	0x5e, 0x5b, 0x9f, 0x2d, 0x31, 0x0c, 0x60, 0xb0, 0xb5, 0x17, 0xd2, 0x83, 0xfa, 0x3d, 0x96, 0x8f,
+	0xad, 0xf8, 0x24, 0x5f, 0x42, 0x73, 0xfd, 0xbc, 0x3a, 0x97, 0xc3, 0xea, 0xe5, 0x36, 0x73, 0xf8,
+	0x36, 0xf0, 0xd5, 0xfe, 0x57, 0x35, 0xef, 0x9f, 0x3a, 0x1c, 0x6d, 0x7a, 0x8b, 0xd9, 0xd8, 0x9b,
+	0x04, 0x11, 0xcf, 0x98, 0x55, 0x66, 0xdd, 0xef, 0x58, 0xec, 0xba, 0x80, 0x0a, 0xdd, 0x5b, 0x33,
+	0x36, 0xd5, 0xda, 0x7e, 0x69, 0x92, 0x0b, 0xe8, 0x45, 0x9c, 0xe9, 0x30, 0x31, 0x23, 0x0a, 0x44,
+	0xa8, 0xe7, 0xb4, 0x3e, 0xae, 0x9f, 0x1f, 0xf8, 0xc7, 0x15, 0xfc, 0x36, 0xd4, 0xf3, 0xed, 0xe4,
+	0x35, 0x76, 0x90, 0x77, 0x0a, 0xad, 0x69, 0x98, 0xa4, 0x18, 0x1b, 0x45, 0xb6, 0x7d, 0x67, 0x91,
+	0xcf, 0xa1, 0x6f, 0xbf, 0x02, 0xcd, 0x03, 0x89, 0x4a, 0x87, 0x52, 0x3b, 0x35, 0x1e, 0x5b, 0xc7,
+	0x1d, 0xf7, 0x2d, 0x4c, 0x46, 0xd0, 0xe1, 0x99, 0x0e, 0xf8, 0x34, 0x50, 0x4b, 0x16, 0x39, 0x3d,
+	0x1e, 0xf0, 0x4c, 0xff, 0x30, 0x7d, 0xbb, 0x64, 0x11, 0xb9, 0x80, 0x7e, 0xc5, 0xef, 0x6e, 0xdf,
+	0x36, 0xb7, 0x3f, 0x5a, 0x45, 0x59, 0x02, 0xce, 0xe0, 0x50, 0x48, 0x9e, 0x27, 0x31, 0xca, 0x20,
+	0x53, 0x18, 0x3b, 0x79, 0x76, 0x4b, 0xf0, 0x9d, 0xc2, 0xb8, 0xd8, 0x8a, 0xa5, 0x62, 0x28, 0xd8,
+	0xad, 0x58, 0xda, 0xf6, 0xb5, 0x3a, 0x59, 0xea, 0xa5, 0x40, 0xda, 0xb1, 0x09, 0x4a, 0xf0, 0x6e,
+	0x29, 0xcc, 0xba, 0x53, 0xf7, 0x89, 0x10, 0x18, 0x3b, 0x51, 0x95, 0x66, 0xb1, 0x8e, 0x74, 0xa2,
+	0x53, 0x74, 0xda, 0xb1, 0x06, 0xb9, 0x80, 0x16, 0x16, 0xfb, 0x58, 0xd1, 0x23, 0x23, 0xf0, 0x7e,
+	0x55, 0x03, 0x66, 0x53, 0xfb, 0x2e, 0xc0, 0x7b, 0x05, 0xc4, 0x2a, 0xfe, 0xb5, 0x10, 0xe9, 0xd2,
+	0xc7, 0x5f, 0x33, 0x54, 0xba, 0x50, 0x95, 0xc4, 0xbc, 0x54, 0x95, 0xc4, 0x7c, 0xf5, 0x78, 0xf7,
+	0xd7, 0x8f, 0xd7, 0xa3, 0x70, 0x6a, 0xcf, 0xde, 0x84, 0x6a, 0xe3, 0xbc, 0xf7, 0x1a, 0xfa, 0xce,
+	0xc3, 0xa3, 0xfb, 0x32, 0x29, 0x81, 0x46, 0xa6, 0x50, 0x96, 0x1b, 0xae, 0xf8, 0x36, 0x02, 0xe2,
+	0x0b, 0xf3, 0xb0, 0xdd, 0xe2, 0x74, 0xa6, 0x77, 0x07, 0xbd, 0x6a, 0x8a, 0x9d, 0x3b, 0xf2, 0x14,
+	0x5a, 0x29, 0x8f, 0xee, 0x57, 0x0a, 0x74, 0x56, 0xc1, 0x0c, 0x4a, 0xc9, 0xa5, 0xdb, 0xbb, 0xd6,
+	0xf0, 0x06, 0xf0, 0xd2, 0x66, 0x7d, 0xc7, 0xd2, 0x75, 0x6b, 0xde, 0x4f, 0x25, 0x0b, 0x25, 0xbc,
+	0xb3, 0xdc, 0x10, 0xda, 0x19, 0xdb, 0x28, 0xb8, 0xb2, 0xb7, 0x97, 0xbc, 0xfc, 0x63, 0x1f, 0x9a,
+	0x7e, 0xf2, 0xe1, 0x03, 0x27, 0xdf, 0x42, 0xa7, 0xc2, 0x35, 0x19, 0x3d, 0x5f, 0x3b, 0x55, 0x12,
+	0x87, 0x74, 0xd7, 0x5a, 0xf2, 0xf6, 0xc8, 0x8f, 0x70, 0xfc, 0x84, 0x7a, 0xe2, 0x3d, 0x0f, 0x7f,
+	0x3a, 0x97, 0xff, 0x4c, 0xf9, 0x1d, 0xc0, 0x9a, 0x70, 0xf2, 0xff, 0x2d, 0xd9, 0xd6, 0x84, 0x0d,
+	0xff, 0xb7, 0xcb, 0xbd, 0xea, 0xaf, 0x5b, 0x25, 0x94, 0x7c, 0xf2, 0x3c, 0x7e, 0x63, 0x02, 0xc3,
+	0xd1, 0xee, 0x00, 0x9b, 0xf2, 0x6b, 0xfa, 0xe7, 0xc3, 0xa8, 0xf6, 0xf1, 0x61, 0x54, 0xfb, 0xfb,
+	0x61, 0x54, 0xfb, 0xfd, 0x71, 0xb4, 0xf7, 0xf1, 0x71, 0xb4, 0xf7, 0xd7, 0xe3, 0x68, 0xef, 0x97,
+	0x96, 0xf9, 0x4b, 0x72, 0xf5, 0x6f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x66, 0x72, 0x8e, 0x04, 0xa2,
+	0x08, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -648,6 +868,8 @@ type RizzoClient interface {
 	// applies a ref
 	PuppetApply(ctx context.Context, in *PuppetApplyRequest, opts ...grpc.CallOption) (*PuppetReport, error)
 	PuppetLastApply(ctx context.Context, in *PuppetLastApplyRequest, opts ...grpc.CallOption) (*PuppetReport, error)
+	PuppetLock(ctx context.Context, in *PuppetLockRequest, opts ...grpc.CallOption) (*PuppetLockReport, error)
+	PuppetUnlock(ctx context.Context, in *PuppetUnlockRequest, opts ...grpc.CallOption) (*PuppetUnlockReport, error)
 }
 
 type rizzoClient struct {
@@ -676,11 +898,31 @@ func (c *rizzoClient) PuppetLastApply(ctx context.Context, in *PuppetLastApplyRe
 	return out, nil
 }
 
+func (c *rizzoClient) PuppetLock(ctx context.Context, in *PuppetLockRequest, opts ...grpc.CallOption) (*PuppetLockReport, error) {
+	out := new(PuppetLockReport)
+	err := c.cc.Invoke(ctx, "/puppetutil.Rizzo/PuppetLock", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *rizzoClient) PuppetUnlock(ctx context.Context, in *PuppetUnlockRequest, opts ...grpc.CallOption) (*PuppetUnlockReport, error) {
+	out := new(PuppetUnlockReport)
+	err := c.cc.Invoke(ctx, "/puppetutil.Rizzo/PuppetUnlock", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RizzoServer is the server API for Rizzo service.
 type RizzoServer interface {
 	// applies a ref
 	PuppetApply(context.Context, *PuppetApplyRequest) (*PuppetReport, error)
 	PuppetLastApply(context.Context, *PuppetLastApplyRequest) (*PuppetReport, error)
+	PuppetLock(context.Context, *PuppetLockRequest) (*PuppetLockReport, error)
+	PuppetUnlock(context.Context, *PuppetUnlockRequest) (*PuppetUnlockReport, error)
 }
 
 // UnimplementedRizzoServer can be embedded to have forward compatible implementations.
@@ -692,6 +934,12 @@ func (*UnimplementedRizzoServer) PuppetApply(ctx context.Context, req *PuppetApp
 }
 func (*UnimplementedRizzoServer) PuppetLastApply(ctx context.Context, req *PuppetLastApplyRequest) (*PuppetReport, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PuppetLastApply not implemented")
+}
+func (*UnimplementedRizzoServer) PuppetLock(ctx context.Context, req *PuppetLockRequest) (*PuppetLockReport, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PuppetLock not implemented")
+}
+func (*UnimplementedRizzoServer) PuppetUnlock(ctx context.Context, req *PuppetUnlockRequest) (*PuppetUnlockReport, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PuppetUnlock not implemented")
 }
 
 func RegisterRizzoServer(s *grpc.Server, srv RizzoServer) {
@@ -734,6 +982,42 @@ func _Rizzo_PuppetLastApply_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Rizzo_PuppetLock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PuppetLockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RizzoServer).PuppetLock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/puppetutil.Rizzo/PuppetLock",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RizzoServer).PuppetLock(ctx, req.(*PuppetLockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Rizzo_PuppetUnlock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PuppetUnlockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RizzoServer).PuppetUnlock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/puppetutil.Rizzo/PuppetUnlock",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RizzoServer).PuppetUnlock(ctx, req.(*PuppetUnlockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Rizzo_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "puppetutil.Rizzo",
 	HandlerType: (*RizzoServer)(nil),
@@ -745,6 +1029,14 @@ var _Rizzo_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PuppetLastApply",
 			Handler:    _Rizzo_PuppetLastApply_Handler,
+		},
+		{
+			MethodName: "PuppetLock",
+			Handler:    _Rizzo_PuppetLock_Handler,
+		},
+		{
+			MethodName: "PuppetUnlock",
+			Handler:    _Rizzo_PuppetUnlock_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -1227,6 +1519,160 @@ func (m *PuppetLastApplyRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	return len(dAtA) - i, nil
 }
 
+func (m *PuppetLockRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PuppetLockRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PuppetLockRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Comment) > 0 {
+		i -= len(m.Comment)
+		copy(dAtA[i:], m.Comment)
+		i = encodeVarintReport(dAtA, i, uint64(len(m.Comment)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.User) > 0 {
+		i -= len(m.User)
+		copy(dAtA[i:], m.User)
+		i = encodeVarintReport(dAtA, i, uint64(len(m.User)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PuppetLockReport) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PuppetLockReport) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PuppetLockReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Error) > 0 {
+		i -= len(m.Error)
+		copy(dAtA[i:], m.Error)
+		i = encodeVarintReport(dAtA, i, uint64(len(m.Error)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.Locked {
+		i--
+		if m.Locked {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Host) > 0 {
+		i -= len(m.Host)
+		copy(dAtA[i:], m.Host)
+		i = encodeVarintReport(dAtA, i, uint64(len(m.Host)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PuppetUnlockRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PuppetUnlockRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PuppetUnlockRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func (m *PuppetUnlockReport) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PuppetUnlockReport) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PuppetUnlockReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Error) > 0 {
+		i -= len(m.Error)
+		copy(dAtA[i:], m.Error)
+		i = encodeVarintReport(dAtA, i, uint64(len(m.Error)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.Unlocked {
+		i--
+		if m.Unlocked {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Host) > 0 {
+		i -= len(m.Host)
+		copy(dAtA[i:], m.Host)
+		i = encodeVarintReport(dAtA, i, uint64(len(m.Host)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintReport(dAtA []byte, offset int, v uint64) int {
 	offset -= sovReport(v)
 	base := offset
@@ -1445,6 +1891,72 @@ func (m *PuppetLastApplyRequest) Size() (n int) {
 	}
 	var l int
 	_ = l
+	return n
+}
+
+func (m *PuppetLockRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.User)
+	if l > 0 {
+		n += 1 + l + sovReport(uint64(l))
+	}
+	l = len(m.Comment)
+	if l > 0 {
+		n += 1 + l + sovReport(uint64(l))
+	}
+	return n
+}
+
+func (m *PuppetLockReport) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Host)
+	if l > 0 {
+		n += 1 + l + sovReport(uint64(l))
+	}
+	if m.Locked {
+		n += 2
+	}
+	l = len(m.Error)
+	if l > 0 {
+		n += 1 + l + sovReport(uint64(l))
+	}
+	return n
+}
+
+func (m *PuppetUnlockRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *PuppetUnlockReport) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Host)
+	if l > 0 {
+		n += 1 + l + sovReport(uint64(l))
+	}
+	if m.Unlocked {
+		n += 2
+	}
+	l = len(m.Error)
+	if l > 0 {
+		n += 1 + l + sovReport(uint64(l))
+	}
 	return n
 }
 
@@ -2914,6 +3426,450 @@ func (m *PuppetLastApplyRequest) Unmarshal(dAtA []byte) error {
 			return fmt.Errorf("proto: PuppetLastApplyRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipReport(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthReport
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthReport
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PuppetLockRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowReport
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PuppetLockRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PuppetLockRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReport
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthReport
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthReport
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.User = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Comment", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReport
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthReport
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthReport
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Comment = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipReport(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthReport
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthReport
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PuppetLockReport) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowReport
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PuppetLockReport: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PuppetLockReport: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Host", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReport
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthReport
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthReport
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Host = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Locked", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReport
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Locked = bool(v != 0)
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReport
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthReport
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthReport
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Error = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipReport(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthReport
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthReport
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PuppetUnlockRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowReport
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PuppetUnlockRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PuppetUnlockRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipReport(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthReport
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthReport
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PuppetUnlockReport) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowReport
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PuppetUnlockReport: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PuppetUnlockReport: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Host", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReport
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthReport
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthReport
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Host = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Unlocked", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReport
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Unlocked = bool(v != 0)
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReport
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthReport
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthReport
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Error = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipReport(dAtA[iNdEx:])

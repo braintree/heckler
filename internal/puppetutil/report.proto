@@ -1,6 +1,15 @@
 syntax = "proto3";
 package puppetutil;
 
+// The Rizzo service definition.
+service Rizzo {
+  // applies a ref
+  rpc PuppetApply (PuppetApplyRequest) returns (PuppetReport) {}
+  rpc PuppetLastApply (PuppetLastApplyRequest) returns (PuppetReport) {}
+  rpc PuppetLock (PuppetLockRequest) returns (PuppetLockReport) {}
+  rpc PuppetUnlock (PuppetUnlockRequest) returns (PuppetUnlockReport) {}
+}
+
 message Event {
   string property = 1;
   string previous_value = 2;
@@ -64,13 +73,6 @@ message ResourceStatus {
   repeated Event events = 14;
 }
 
-// The Rizzo service definition.
-service Rizzo {
-  // applies a ref
-  rpc PuppetApply (PuppetApplyRequest) returns (PuppetReport) {}
-  rpc PuppetLastApply (PuppetLastApplyRequest) returns (PuppetReport) {}
-}
-
 // The request message containing the git rev identifier, e.g. a tag or a
 // commit id
 message PuppetApplyRequest {
@@ -80,3 +82,22 @@ message PuppetApplyRequest {
 
 // Ask for last apply report
 message PuppetLastApplyRequest {}
+
+message PuppetLockRequest {
+  string user = 1;
+  string comment = 2;
+}
+
+message PuppetLockReport {
+  string host = 1;
+  bool locked = 2;
+  string error = 3;
+}
+
+message PuppetUnlockRequest {}
+
+message PuppetUnlockReport {
+  string host = 1;
+  bool unlocked = 2;
+  string error = 3;
+}

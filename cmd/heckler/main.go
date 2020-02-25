@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/user"
 	"time"
 
 	"github.braintreeps.com/lollipopman/heckler/internal/hecklerpb"
@@ -33,6 +34,8 @@ func main() {
 	var endRev string
 	var rev string
 	var noop bool
+	var lock bool
+	var unlock bool
 	var status bool
 	var printVersion bool
 	var markdownOut bool
@@ -44,6 +47,8 @@ func main() {
 	flag.StringVar(&rev, "rev", "", "rev to apply or noop")
 	flag.BoolVar(&status, "status", false, "Query node apply status")
 	flag.BoolVar(&noop, "noop", false, "noop")
+	flag.BoolVar(&lock, "lock", false, "lock nodes")
+	flag.BoolVar(&unlock, "unlock", false, "unlock nodes")
 	flag.BoolVar(&markdownOut, "md", false, "Generate markdown output")
 	flag.StringVar(&githubMilestone, "github", "", "Github milestone to create")
 	flag.BoolVar(&printVersion, "version", false, "print version")
@@ -80,6 +85,29 @@ func main() {
 	hc := hecklerpb.NewHecklerClient(hecklerdConn)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
 	defer cancel()
+
+	if lock {
+		userInf, err := user.Current()
+		if err != nil {
+			panic(err)
+		}
+		req := hecklerpb.HecklerLockRequest{
+			Nodes:   hosts,
+			User:    userInf.Username,
+			Comment: "Locked by Heckler",
+		}
+		rprt, err := hc.HecklerLock(ctx, &req)
+		if err != nil {
+			log.Fatalf("Unable to lock nodes: %v", err)
+		}
+		for _, node := range rprt.LockedNodes {
+			fmt.Printf("Locked: %s\n", node)
+		}
+		for node, nodeError := range rprt.NodeErrors {
+			fmt.Printf("Error: %s, %s\n", node, nodeError)
+		}
+		os.Exit(0)
+	}
 
 	if status {
 		hsr := hecklerpb.HecklerStatusRequest{Nodes: hosts}

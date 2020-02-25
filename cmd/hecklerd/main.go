@@ -755,6 +755,62 @@ func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.Heckl
 	return hsr, nil
 }
 
+func (hs *hecklerServer) HecklerLock(ctx context.Context, req *hecklerpb.HecklerLockRequest) (*hecklerpb.HecklerLockReport, error) {
+	nodes, errNodes := dialNodes(ctx, req.Nodes)
+	lockedNodes, errLockNodes := nodeLock(req, nodes)
+	res := new(hecklerpb.HecklerLockReport)
+	res.LockedNodes = lockedNodes
+	res.NodeErrors = make(map[string]string)
+	for host, err := range errNodes {
+		res.NodeErrors[host] = err.Error()
+	}
+	for host, err := range errLockNodes {
+		res.NodeErrors[host] = err
+	}
+	return res, nil
+}
+
+func nodeLock(req *hecklerpb.HecklerLockRequest, nodes map[string]*Node) ([]string, map[string]string) {
+	reportChan := make(chan puppetutil.PuppetLockReport)
+	puppetReq := puppetutil.PuppetLockRequest{
+		User:    req.User,
+		Comment: req.Comment,
+	}
+	for _, node := range nodes {
+		go hecklerLock(node.host, node.rizzoClient, puppetReq, reportChan)
+	}
+
+	lockedNodes := make([]string, 0, len(nodes))
+	errNodes := make(map[string]string)
+	for i := 0; i < len(nodes); i++ {
+		r := <-reportChan
+		if r.Locked {
+			lockedNodes = append(lockedNodes, r.Host)
+		} else {
+			errNodes[r.Host] = r.Error
+		}
+	}
+
+	return lockedNodes, errNodes
+}
+
+func hecklerLock(host string, rc puppetutil.RizzoClient, req puppetutil.PuppetLockRequest, c chan<- puppetutil.PuppetLockReport) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	res, err := rc.PuppetLock(ctx, &req)
+	if err != nil {
+		c <- puppetutil.PuppetLockReport{
+			Host:   host,
+			Locked: false,
+			Error:  err.Error(),
+		}
+		return
+	}
+	res.Host = host
+	c <- *res
+	return
+}
+
 func hecklerLastApply(rc puppetutil.RizzoClient, c chan<- puppetutil.PuppetReport) {
 	plar := puppetutil.PuppetLastApplyRequest{}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -762,8 +818,10 @@ func hecklerLastApply(rc puppetutil.RizzoClient, c chan<- puppetutil.PuppetRepor
 	r, err := rc.PuppetLastApply(ctx, &plar)
 	if err != nil {
 		c <- puppetutil.PuppetReport{}
+		return
 	}
 	c <- *r
+	return
 }
 
 func nodeLastApply(nodes map[string]*Node, repo *git.Repository) error {

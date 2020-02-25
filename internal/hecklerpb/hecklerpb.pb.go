@@ -399,6 +399,214 @@ func (m *HecklerApplyReport) GetNodeErrors() map[string]string {
 	return nil
 }
 
+type HecklerLockRequest struct {
+	User    string   `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	Comment string   `protobuf:"bytes,2,opt,name=comment,proto3" json:"comment,omitempty"`
+	Nodes   []string `protobuf:"bytes,3,rep,name=nodes,proto3" json:"nodes,omitempty"`
+}
+
+func (m *HecklerLockRequest) Reset()         { *m = HecklerLockRequest{} }
+func (m *HecklerLockRequest) String() string { return proto.CompactTextString(m) }
+func (*HecklerLockRequest) ProtoMessage()    {}
+func (*HecklerLockRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_993bd662ef9f4722, []int{6}
+}
+func (m *HecklerLockRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HecklerLockRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_HecklerLockRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *HecklerLockRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HecklerLockRequest.Merge(m, src)
+}
+func (m *HecklerLockRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *HecklerLockRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_HecklerLockRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HecklerLockRequest proto.InternalMessageInfo
+
+func (m *HecklerLockRequest) GetUser() string {
+	if m != nil {
+		return m.User
+	}
+	return ""
+}
+
+func (m *HecklerLockRequest) GetComment() string {
+	if m != nil {
+		return m.Comment
+	}
+	return ""
+}
+
+func (m *HecklerLockRequest) GetNodes() []string {
+	if m != nil {
+		return m.Nodes
+	}
+	return nil
+}
+
+type HecklerLockReport struct {
+	LockedNodes []string          `protobuf:"bytes,1,rep,name=locked_nodes,json=lockedNodes,proto3" json:"locked_nodes,omitempty"`
+	NodeErrors  map[string]string `protobuf:"bytes,2,rep,name=node_errors,json=nodeErrors,proto3" json:"node_errors,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+}
+
+func (m *HecklerLockReport) Reset()         { *m = HecklerLockReport{} }
+func (m *HecklerLockReport) String() string { return proto.CompactTextString(m) }
+func (*HecklerLockReport) ProtoMessage()    {}
+func (*HecklerLockReport) Descriptor() ([]byte, []int) {
+	return fileDescriptor_993bd662ef9f4722, []int{7}
+}
+func (m *HecklerLockReport) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HecklerLockReport) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_HecklerLockReport.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *HecklerLockReport) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HecklerLockReport.Merge(m, src)
+}
+func (m *HecklerLockReport) XXX_Size() int {
+	return m.Size()
+}
+func (m *HecklerLockReport) XXX_DiscardUnknown() {
+	xxx_messageInfo_HecklerLockReport.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HecklerLockReport proto.InternalMessageInfo
+
+func (m *HecklerLockReport) GetLockedNodes() []string {
+	if m != nil {
+		return m.LockedNodes
+	}
+	return nil
+}
+
+func (m *HecklerLockReport) GetNodeErrors() map[string]string {
+	if m != nil {
+		return m.NodeErrors
+	}
+	return nil
+}
+
+type HecklerUnlockRequest struct {
+	Nodes []string `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
+}
+
+func (m *HecklerUnlockRequest) Reset()         { *m = HecklerUnlockRequest{} }
+func (m *HecklerUnlockRequest) String() string { return proto.CompactTextString(m) }
+func (*HecklerUnlockRequest) ProtoMessage()    {}
+func (*HecklerUnlockRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_993bd662ef9f4722, []int{8}
+}
+func (m *HecklerUnlockRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HecklerUnlockRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_HecklerUnlockRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *HecklerUnlockRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HecklerUnlockRequest.Merge(m, src)
+}
+func (m *HecklerUnlockRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *HecklerUnlockRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_HecklerUnlockRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HecklerUnlockRequest proto.InternalMessageInfo
+
+func (m *HecklerUnlockRequest) GetNodes() []string {
+	if m != nil {
+		return m.Nodes
+	}
+	return nil
+}
+
+type HecklerUnlockReport struct {
+	UnlockedNodes []string          `protobuf:"bytes,1,rep,name=unlocked_nodes,json=unlockedNodes,proto3" json:"unlocked_nodes,omitempty"`
+	NodeErrors    map[string]string `protobuf:"bytes,2,rep,name=node_errors,json=nodeErrors,proto3" json:"node_errors,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+}
+
+func (m *HecklerUnlockReport) Reset()         { *m = HecklerUnlockReport{} }
+func (m *HecklerUnlockReport) String() string { return proto.CompactTextString(m) }
+func (*HecklerUnlockReport) ProtoMessage()    {}
+func (*HecklerUnlockReport) Descriptor() ([]byte, []int) {
+	return fileDescriptor_993bd662ef9f4722, []int{9}
+}
+func (m *HecklerUnlockReport) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HecklerUnlockReport) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_HecklerUnlockReport.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *HecklerUnlockReport) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HecklerUnlockReport.Merge(m, src)
+}
+func (m *HecklerUnlockReport) XXX_Size() int {
+	return m.Size()
+}
+func (m *HecklerUnlockReport) XXX_DiscardUnknown() {
+	xxx_messageInfo_HecklerUnlockReport.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HecklerUnlockReport proto.InternalMessageInfo
+
+func (m *HecklerUnlockReport) GetUnlockedNodes() []string {
+	if m != nil {
+		return m.UnlockedNodes
+	}
+	return nil
+}
+
+func (m *HecklerUnlockReport) GetNodeErrors() map[string]string {
+	if m != nil {
+		return m.NodeErrors
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterEnum("hecklerpb.OutputFormat", OutputFormat_name, OutputFormat_value)
 	proto.RegisterType((*HecklerStatusRequest)(nil), "hecklerpb.HecklerStatusRequest")
@@ -411,47 +619,62 @@ func init() {
 	proto.RegisterType((*HecklerApplyRequest)(nil), "hecklerpb.HecklerApplyRequest")
 	proto.RegisterType((*HecklerApplyReport)(nil), "hecklerpb.HecklerApplyReport")
 	proto.RegisterMapType((map[string]string)(nil), "hecklerpb.HecklerApplyReport.NodeErrorsEntry")
+	proto.RegisterType((*HecklerLockRequest)(nil), "hecklerpb.HecklerLockRequest")
+	proto.RegisterType((*HecklerLockReport)(nil), "hecklerpb.HecklerLockReport")
+	proto.RegisterMapType((map[string]string)(nil), "hecklerpb.HecklerLockReport.NodeErrorsEntry")
+	proto.RegisterType((*HecklerUnlockRequest)(nil), "hecklerpb.HecklerUnlockRequest")
+	proto.RegisterType((*HecklerUnlockReport)(nil), "hecklerpb.HecklerUnlockReport")
+	proto.RegisterMapType((map[string]string)(nil), "hecklerpb.HecklerUnlockReport.NodeErrorsEntry")
 }
 
 func init() { proto.RegisterFile("hecklerpb.proto", fileDescriptor_993bd662ef9f4722) }
 
 var fileDescriptor_993bd662ef9f4722 = []byte{
-	// 546 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x54, 0x4d, 0x8f, 0x12, 0x41,
-	0x10, 0x9d, 0x9e, 0x61, 0xf9, 0xa8, 0x05, 0x19, 0xcb, 0xcd, 0xee, 0x04, 0xe3, 0x88, 0x73, 0x42,
-	0xa3, 0x64, 0xc5, 0x8b, 0x31, 0xd9, 0x18, 0x4d, 0xd6, 0x78, 0x11, 0x92, 0xd9, 0x78, 0xf2, 0x40,
-	0x40, 0x5a, 0x96, 0x00, 0xdd, 0xe3, 0x4c, 0x0f, 0x86, 0xdf, 0xe0, 0x65, 0xff, 0x8f, 0xf1, 0xe4,
-	0xc5, 0x9b, 0x7b, 0xf4, 0x68, 0xe0, 0x8f, 0x98, 0xe9, 0x1e, 0x60, 0xf8, 0xd8, 0xf1, 0x2b, 0xde,
-	0xba, 0x5e, 0x57, 0xbd, 0xee, 0x7a, 0xaf, 0xba, 0xa1, 0x7c, 0x4e, 0xdf, 0x0e, 0x47, 0xd4, 0xf7,
-	0xba, 0x75, 0xcf, 0xe7, 0x82, 0x63, 0x61, 0x09, 0x38, 0xf7, 0xe1, 0xe0, 0xa5, 0x0a, 0xce, 0x44,
-	0x47, 0x84, 0x81, 0x4b, 0xdf, 0x87, 0x34, 0x10, 0x78, 0x00, 0x7b, 0x8c, 0xf7, 0x68, 0x60, 0x91,
-	0xaa, 0x51, 0x2b, 0xb8, 0x2a, 0x70, 0x3e, 0xeb, 0x70, 0x63, 0x23, 0xdd, 0xe3, 0xbe, 0xc0, 0xd7,
-	0x50, 0x8a, 0x12, 0xda, 0x81, 0x04, 0xe3, 0xaa, 0xfd, 0xc6, 0x71, 0x7d, 0x75, 0xf2, 0x8e, 0xb2,
-	0x7a, 0x93, 0xf7, 0xe8, 0x59, 0x5c, 0x72, 0xca, 0x84, 0x3f, 0x75, 0x8b, 0x2c, 0x01, 0x61, 0x0b,
-	0xf6, 0x25, 0x2d, 0xf5, 0x7d, 0xee, 0x07, 0x96, 0x2e, 0x49, 0xeb, 0xbf, 0x41, 0x7a, 0x2a, 0x0b,
-	0x14, 0x25, 0xb0, 0x25, 0x50, 0x79, 0x0a, 0xd7, 0xb7, 0xce, 0x44, 0x13, 0x8c, 0x21, 0x9d, 0x5a,
-	0xa4, 0x4a, 0x6a, 0x05, 0x37, 0x5a, 0x46, 0xcd, 0x4f, 0x3a, 0xa3, 0x90, 0x5a, 0xba, 0xc4, 0x54,
-	0xf0, 0x44, 0x7f, 0x4c, 0x2a, 0x27, 0x50, 0xde, 0xe0, 0xff, 0x93, 0x72, 0xe7, 0x1b, 0x81, 0xa3,
-	0xf8, 0xce, 0x4d, 0xce, 0x3d, 0xb7, 0xc3, 0xfa, 0x74, 0xa1, 0xf8, 0x4d, 0x28, 0x74, 0x69, 0x7f,
-	0xc0, 0xda, 0x3e, 0x9d, 0xc4, 0x6c, 0x79, 0x09, 0xb8, 0x74, 0x82, 0x47, 0x90, 0xa3, 0xac, 0x27,
-	0xb7, 0x14, 0x69, 0x96, 0xb2, 0x5e, 0xb4, 0x71, 0x17, 0xcc, 0xfe, 0x40, 0x9c, 0x87, 0xdd, 0xf6,
-	0x78, 0x30, 0xa2, 0x81, 0xe0, 0x8c, 0x5a, 0x86, 0xcc, 0x28, 0x2b, 0xfc, 0xd5, 0x02, 0xc6, 0x13,
-	0x28, 0xf1, 0x50, 0x78, 0xa1, 0x68, 0xbf, 0xe3, 0xfe, 0xb8, 0x23, 0xac, 0x4c, 0x95, 0xd4, 0xae,
-	0x35, 0xac, 0x84, 0x9e, 0xad, 0xe4, 0xbe, 0x5b, 0x54, 0xe9, 0x2f, 0x64, 0xb4, 0x9a, 0x88, 0xbd,
-	0xe4, 0x44, 0x7c, 0x21, 0x70, 0xb8, 0xdd, 0x91, 0x1c, 0x8a, 0x43, 0xc8, 0x2a, 0x82, 0xb8, 0x9b,
-	0x38, 0x42, 0x77, 0x97, 0xab, 0x0f, 0xb7, 0x5d, 0xdd, 0xe0, 0x4b, 0x35, 0xf6, 0x1f, 0x7d, 0xb9,
-	0x20, 0xcb, 0xb9, 0x7e, 0xe6, 0x79, 0xa3, 0xe9, 0xc2, 0x13, 0x13, 0x8c, 0x95, 0x1b, 0xd1, 0x12,
-	0x11, 0x32, 0x8c, 0x73, 0x4f, 0x52, 0xe4, 0x5d, 0xb9, 0xde, 0x16, 0xd6, 0xf8, 0x3b, 0x61, 0x33,
-	0x49, 0x61, 0x3f, 0x11, 0xc0, 0xf5, 0x2b, 0xa5, 0x8a, 0xda, 0xdc, 0x25, 0xea, 0x83, 0x6d, 0x51,
-	0x13, 0x5c, 0xff, 0x51, 0xd0, 0x7b, 0xc7, 0x50, 0x5a, 0x6b, 0x19, 0xf3, 0x91, 0x6e, 0x8c, 0x9a,
-	0x1a, 0x16, 0x21, 0x3f, 0xee, 0xf8, 0xc3, 0x1e, 0xff, 0xc0, 0x4c, 0x82, 0x39, 0x30, 0x84, 0x98,
-	0x9a, 0x7a, 0xe3, 0xa3, 0x0e, 0xb9, 0xf8, 0x8e, 0xe8, 0x42, 0x69, 0xed, 0x65, 0xe3, 0xed, 0xab,
-	0xdf, 0xbc, 0x34, 0xaa, 0x62, 0xa7, 0x7f, 0x0a, 0x8e, 0x86, 0x6f, 0xc0, 0xdc, 0x9c, 0x2b, 0x74,
-	0x52, 0x87, 0x4e, 0x31, 0xdf, 0xf9, 0xe5, 0x60, 0x3a, 0x1a, 0xb6, 0xa0, 0x98, 0xd4, 0x17, 0xed,
-	0x2b, 0x85, 0x57, 0xa4, 0xb7, 0x52, 0x8d, 0x71, 0xb4, 0xe7, 0xd6, 0xd7, 0x99, 0x4d, 0x2e, 0x67,
-	0x36, 0xf9, 0x31, 0xb3, 0xc9, 0xc5, 0xdc, 0xd6, 0x2e, 0xe7, 0xb6, 0xf6, 0x7d, 0x6e, 0x6b, 0xdd,
-	0xac, 0xfc, 0xc2, 0x1f, 0xfd, 0x0c, 0x00, 0x00, 0xff, 0xff, 0xfb, 0x1f, 0x83, 0x0c, 0xd5, 0x05,
-	0x00, 0x00,
+	// 693 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x96, 0xcb, 0x6e, 0xd3, 0x4c,
+	0x14, 0xc7, 0x3d, 0x71, 0xda, 0x24, 0x27, 0x49, 0xeb, 0xce, 0x57, 0xb5, 0x56, 0x3f, 0x6a, 0x5a,
+	0x4b, 0x48, 0x05, 0x95, 0xa8, 0x94, 0x0d, 0x42, 0xaa, 0x10, 0x48, 0x45, 0x2c, 0x7a, 0x91, 0x5c,
+	0x55, 0x42, 0x62, 0x11, 0xe5, 0x32, 0xb4, 0x55, 0x92, 0x19, 0x63, 0x8f, 0x8b, 0xf2, 0x16, 0x7d,
+	0x11, 0x9e, 0x00, 0xb1, 0x82, 0x05, 0x0b, 0x24, 0xba, 0x64, 0x89, 0xda, 0x17, 0x41, 0x9e, 0xb1,
+	0xe3, 0x49, 0xec, 0x9a, 0x02, 0xca, 0x6e, 0xce, 0x99, 0x99, 0x7f, 0xe6, 0xfc, 0xce, 0xc5, 0x81,
+	0xf9, 0x53, 0xd2, 0xe9, 0xf5, 0x89, 0xe7, 0xb6, 0x1b, 0xae, 0xc7, 0x38, 0xc3, 0x95, 0x91, 0xc3,
+	0xde, 0x84, 0xc5, 0x57, 0xd2, 0x38, 0xe2, 0x2d, 0x1e, 0xf8, 0x0e, 0x79, 0x17, 0x10, 0x9f, 0xe3,
+	0x45, 0x98, 0xa1, 0xac, 0x4b, 0x7c, 0x13, 0xad, 0xe9, 0x1b, 0x15, 0x47, 0x1a, 0xf6, 0xa7, 0x02,
+	0xfc, 0x37, 0x71, 0xdc, 0x65, 0x1e, 0xc7, 0xc7, 0x50, 0x0f, 0x0f, 0x34, 0x7d, 0xe1, 0x8c, 0x6e,
+	0x55, 0xb7, 0xb7, 0x1a, 0xc9, 0x2f, 0x67, 0x5c, 0x6b, 0x1c, 0xb0, 0x2e, 0x39, 0x8a, 0xae, 0xec,
+	0x52, 0xee, 0x0d, 0x9d, 0x1a, 0x55, 0x5c, 0xf8, 0x10, 0xaa, 0x42, 0x96, 0x78, 0x1e, 0xf3, 0x7c,
+	0xb3, 0x20, 0x44, 0x1b, 0xb7, 0x10, 0xdd, 0x15, 0x17, 0xa4, 0x24, 0xd0, 0x91, 0x63, 0xe5, 0x19,
+	0x2c, 0xa4, 0x7e, 0x13, 0x1b, 0xa0, 0xf7, 0xc8, 0xd0, 0x44, 0x6b, 0x68, 0xa3, 0xe2, 0x84, 0xcb,
+	0x30, 0xf8, 0xf3, 0x56, 0x3f, 0x20, 0x66, 0x41, 0xf8, 0xa4, 0xf1, 0xb4, 0xf0, 0x04, 0xad, 0xec,
+	0xc0, 0xfc, 0x84, 0xfe, 0x9f, 0x5c, 0xb7, 0xbf, 0x23, 0x58, 0x8e, 0xde, 0x7c, 0xc0, 0x98, 0xeb,
+	0xb4, 0xe8, 0x09, 0x89, 0x89, 0xff, 0x0f, 0x95, 0x36, 0x39, 0x39, 0xa3, 0x4d, 0x8f, 0x9c, 0x47,
+	0x6a, 0x65, 0xe1, 0x70, 0xc8, 0x39, 0x5e, 0x86, 0x12, 0xa1, 0x5d, 0xb1, 0x25, 0x45, 0x67, 0x09,
+	0xed, 0x86, 0x1b, 0xf7, 0xc1, 0x38, 0x39, 0xe3, 0xa7, 0x41, 0xbb, 0x39, 0x38, 0xeb, 0x13, 0x9f,
+	0x33, 0x4a, 0x4c, 0x5d, 0x9c, 0x98, 0x97, 0xfe, 0xfd, 0xd8, 0x8d, 0x77, 0xa0, 0xce, 0x02, 0xee,
+	0x06, 0xbc, 0xf9, 0x96, 0x79, 0x83, 0x16, 0x37, 0x8b, 0x6b, 0x68, 0x63, 0x6e, 0xdb, 0x54, 0x78,
+	0x1e, 0xaa, 0xfb, 0x4e, 0x4d, 0x1e, 0x7f, 0x29, 0xac, 0xa4, 0x22, 0x66, 0xd4, 0x8a, 0xf8, 0x8c,
+	0x60, 0x29, 0x1d, 0x91, 0x28, 0x8a, 0x25, 0x98, 0x95, 0x02, 0x51, 0x34, 0x91, 0x85, 0x9d, 0xac,
+	0xac, 0x3e, 0x4a, 0x67, 0x75, 0x42, 0x2f, 0x37, 0xb1, 0xff, 0x98, 0x97, 0x0b, 0x34, 0xaa, 0xeb,
+	0xe7, 0xae, 0xdb, 0x1f, 0xc6, 0x39, 0x31, 0x40, 0x4f, 0xb2, 0x11, 0x2e, 0x31, 0x86, 0x22, 0x65,
+	0xcc, 0x15, 0x12, 0x65, 0x47, 0xac, 0xd3, 0x60, 0xf5, 0xbf, 0x03, 0x5b, 0x54, 0xc1, 0x7e, 0x44,
+	0x80, 0xc7, 0x9f, 0x94, 0x0b, 0xf5, 0x20, 0x0b, 0xea, 0xc3, 0x34, 0x54, 0x45, 0x6b, 0x9a, 0x40,
+	0x5f, 0x8f, 0x1e, 0xbf, 0xc7, 0x3a, 0xbd, 0x18, 0x27, 0x86, 0x62, 0xe0, 0x13, 0x2f, 0x92, 0x10,
+	0x6b, 0x6c, 0x42, 0xa9, 0xc3, 0x06, 0x03, 0x42, 0x79, 0xa4, 0x12, 0x9b, 0x09, 0x17, 0x5d, 0xe5,
+	0xf2, 0x05, 0xc1, 0xc2, 0x98, 0xb4, 0xc0, 0xb2, 0x0e, 0xb5, 0x3e, 0xeb, 0xf4, 0x48, 0xb7, 0xa9,
+	0x4e, 0xad, 0xaa, 0xf4, 0x85, 0x81, 0xf8, 0x78, 0x3f, 0x8b, 0xd0, 0x66, 0x9a, 0x50, 0xa2, 0x3a,
+	0x4d, 0x40, 0xc9, 0xdc, 0x3d, 0xa6, 0x7d, 0x05, 0x51, 0xf6, 0xdc, 0xfd, 0x96, 0xd4, 0x67, 0x7c,
+	0x5c, 0x84, 0x7d, 0x0f, 0xe6, 0x02, 0x9a, 0x11, 0x78, 0x3d, 0xf6, 0xca, 0xd0, 0x6f, 0x3b, 0x47,
+	0x55, 0xed, 0x29, 0x06, 0xff, 0x60, 0x0b, 0xea, 0x63, 0x0d, 0x81, 0xcb, 0x61, 0x57, 0x51, 0x62,
+	0x68, 0xb8, 0x06, 0xe5, 0x41, 0xcb, 0xeb, 0x75, 0xd9, 0x7b, 0x6a, 0x20, 0x5c, 0x02, 0x9d, 0xf3,
+	0xa1, 0x51, 0xd8, 0xfe, 0xa0, 0x43, 0x29, 0x7a, 0x24, 0x76, 0xa0, 0x3e, 0x36, 0xf7, 0xf1, 0xdd,
+	0x9b, 0xbf, 0x08, 0x02, 0xea, 0x8a, 0x95, 0xff, 0xc9, 0xb0, 0x35, 0xfc, 0x06, 0x8c, 0xc9, 0xa9,
+	0x83, 0xed, 0xdc, 0x91, 0x24, 0x95, 0xd7, 0x7f, 0x3b, 0xb6, 0x6c, 0x0d, 0x1f, 0x42, 0x4d, 0xed,
+	0x3e, 0x6c, 0xdd, 0xd8, 0x96, 0x52, 0x74, 0x35, 0xb7, 0x6d, 0x6d, 0x0d, 0xef, 0x41, 0x55, 0x29,
+	0x56, 0xbc, 0x7a, 0x53, 0x11, 0x4b, 0xb9, 0x3b, 0x79, 0x35, 0x6e, 0x6b, 0x0a, 0x4f, 0x99, 0xff,
+	0x2c, 0x9e, 0x63, 0x45, 0x9a, 0xc5, 0x53, 0x2d, 0x1d, 0x5b, 0x7b, 0x61, 0x7e, 0xbd, 0xb2, 0xd0,
+	0xe5, 0x95, 0x85, 0x7e, 0x5e, 0x59, 0xe8, 0xe2, 0xda, 0xd2, 0x2e, 0xaf, 0x2d, 0xed, 0xc7, 0xb5,
+	0xa5, 0xb5, 0x67, 0xc5, 0x5f, 0x90, 0xc7, 0xbf, 0x02, 0x00, 0x00, 0xff, 0xff, 0xb6, 0x18, 0x39,
+	0x49, 0x95, 0x08, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -469,6 +692,8 @@ type HecklerClient interface {
 	HecklerStatus(ctx context.Context, in *HecklerStatusRequest, opts ...grpc.CallOption) (*HecklerStatusReport, error)
 	HecklerNoopRange(ctx context.Context, in *HecklerNoopRangeRequest, opts ...grpc.CallOption) (*HecklerNoopRangeReport, error)
 	HecklerApply(ctx context.Context, in *HecklerApplyRequest, opts ...grpc.CallOption) (*HecklerApplyReport, error)
+	HecklerLock(ctx context.Context, in *HecklerLockRequest, opts ...grpc.CallOption) (*HecklerLockReport, error)
+	HecklerUnlock(ctx context.Context, in *HecklerUnlockRequest, opts ...grpc.CallOption) (*HecklerUnlockReport, error)
 }
 
 type hecklerClient struct {
@@ -506,11 +731,31 @@ func (c *hecklerClient) HecklerApply(ctx context.Context, in *HecklerApplyReques
 	return out, nil
 }
 
+func (c *hecklerClient) HecklerLock(ctx context.Context, in *HecklerLockRequest, opts ...grpc.CallOption) (*HecklerLockReport, error) {
+	out := new(HecklerLockReport)
+	err := c.cc.Invoke(ctx, "/hecklerpb.Heckler/HecklerLock", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hecklerClient) HecklerUnlock(ctx context.Context, in *HecklerUnlockRequest, opts ...grpc.CallOption) (*HecklerUnlockReport, error) {
+	out := new(HecklerUnlockReport)
+	err := c.cc.Invoke(ctx, "/hecklerpb.Heckler/HecklerUnlock", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HecklerServer is the server API for Heckler service.
 type HecklerServer interface {
 	HecklerStatus(context.Context, *HecklerStatusRequest) (*HecklerStatusReport, error)
 	HecklerNoopRange(context.Context, *HecklerNoopRangeRequest) (*HecklerNoopRangeReport, error)
 	HecklerApply(context.Context, *HecklerApplyRequest) (*HecklerApplyReport, error)
+	HecklerLock(context.Context, *HecklerLockRequest) (*HecklerLockReport, error)
+	HecklerUnlock(context.Context, *HecklerUnlockRequest) (*HecklerUnlockReport, error)
 }
 
 // UnimplementedHecklerServer can be embedded to have forward compatible implementations.
@@ -525,6 +770,12 @@ func (*UnimplementedHecklerServer) HecklerNoopRange(ctx context.Context, req *He
 }
 func (*UnimplementedHecklerServer) HecklerApply(ctx context.Context, req *HecklerApplyRequest) (*HecklerApplyReport, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HecklerApply not implemented")
+}
+func (*UnimplementedHecklerServer) HecklerLock(ctx context.Context, req *HecklerLockRequest) (*HecklerLockReport, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HecklerLock not implemented")
+}
+func (*UnimplementedHecklerServer) HecklerUnlock(ctx context.Context, req *HecklerUnlockRequest) (*HecklerUnlockReport, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HecklerUnlock not implemented")
 }
 
 func RegisterHecklerServer(s *grpc.Server, srv HecklerServer) {
@@ -585,6 +836,42 @@ func _Heckler_HecklerApply_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Heckler_HecklerLock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HecklerLockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HecklerServer).HecklerLock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/hecklerpb.Heckler/HecklerLock",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HecklerServer).HecklerLock(ctx, req.(*HecklerLockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Heckler_HecklerUnlock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HecklerUnlockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HecklerServer).HecklerUnlock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/hecklerpb.Heckler/HecklerUnlock",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HecklerServer).HecklerUnlock(ctx, req.(*HecklerUnlockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Heckler_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "hecklerpb.Heckler",
 	HandlerType: (*HecklerServer)(nil),
@@ -600,6 +887,14 @@ var _Heckler_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "HecklerApply",
 			Handler:    _Heckler_HecklerApply_Handler,
+		},
+		{
+			MethodName: "HecklerLock",
+			Handler:    _Heckler_HecklerLock_Handler,
+		},
+		{
+			MethodName: "HecklerUnlock",
+			Handler:    _Heckler_HecklerUnlock_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -909,6 +1204,186 @@ func (m *HecklerApplyReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *HecklerLockRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *HecklerLockRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *HecklerLockRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Nodes) > 0 {
+		for iNdEx := len(m.Nodes) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Nodes[iNdEx])
+			copy(dAtA[i:], m.Nodes[iNdEx])
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.Nodes[iNdEx])))
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if len(m.Comment) > 0 {
+		i -= len(m.Comment)
+		copy(dAtA[i:], m.Comment)
+		i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.Comment)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.User) > 0 {
+		i -= len(m.User)
+		copy(dAtA[i:], m.User)
+		i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.User)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *HecklerLockReport) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *HecklerLockReport) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *HecklerLockReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.NodeErrors) > 0 {
+		for k := range m.NodeErrors {
+			v := m.NodeErrors[k]
+			baseI := i
+			i -= len(v)
+			copy(dAtA[i:], v)
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(v)))
+			i--
+			dAtA[i] = 0x12
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintHecklerpb(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if len(m.LockedNodes) > 0 {
+		for iNdEx := len(m.LockedNodes) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.LockedNodes[iNdEx])
+			copy(dAtA[i:], m.LockedNodes[iNdEx])
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.LockedNodes[iNdEx])))
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *HecklerUnlockRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *HecklerUnlockRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *HecklerUnlockRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Nodes) > 0 {
+		for iNdEx := len(m.Nodes) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Nodes[iNdEx])
+			copy(dAtA[i:], m.Nodes[iNdEx])
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.Nodes[iNdEx])))
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *HecklerUnlockReport) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *HecklerUnlockReport) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *HecklerUnlockReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.NodeErrors) > 0 {
+		for k := range m.NodeErrors {
+			v := m.NodeErrors[k]
+			baseI := i
+			i -= len(v)
+			copy(dAtA[i:], v)
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(v)))
+			i--
+			dAtA[i] = 0x12
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintHecklerpb(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if len(m.UnlockedNodes) > 0 {
+		for iNdEx := len(m.UnlockedNodes) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.UnlockedNodes[iNdEx])
+			copy(dAtA[i:], m.UnlockedNodes[iNdEx])
+			i = encodeVarintHecklerpb(dAtA, i, uint64(len(m.UnlockedNodes[iNdEx])))
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintHecklerpb(dAtA []byte, offset int, v uint64) int {
 	offset -= sovHecklerpb(v)
 	base := offset
@@ -1045,6 +1520,90 @@ func (m *HecklerApplyReport) Size() (n int) {
 	l = len(m.Output)
 	if l > 0 {
 		n += 1 + l + sovHecklerpb(uint64(l))
+	}
+	if len(m.NodeErrors) > 0 {
+		for k, v := range m.NodeErrors {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovHecklerpb(uint64(len(k))) + 1 + len(v) + sovHecklerpb(uint64(len(v)))
+			n += mapEntrySize + 1 + sovHecklerpb(uint64(mapEntrySize))
+		}
+	}
+	return n
+}
+
+func (m *HecklerLockRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.User)
+	if l > 0 {
+		n += 1 + l + sovHecklerpb(uint64(l))
+	}
+	l = len(m.Comment)
+	if l > 0 {
+		n += 1 + l + sovHecklerpb(uint64(l))
+	}
+	if len(m.Nodes) > 0 {
+		for _, s := range m.Nodes {
+			l = len(s)
+			n += 1 + l + sovHecklerpb(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *HecklerLockReport) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.LockedNodes) > 0 {
+		for _, s := range m.LockedNodes {
+			l = len(s)
+			n += 1 + l + sovHecklerpb(uint64(l))
+		}
+	}
+	if len(m.NodeErrors) > 0 {
+		for k, v := range m.NodeErrors {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovHecklerpb(uint64(len(k))) + 1 + len(v) + sovHecklerpb(uint64(len(v)))
+			n += mapEntrySize + 1 + sovHecklerpb(uint64(mapEntrySize))
+		}
+	}
+	return n
+}
+
+func (m *HecklerUnlockRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Nodes) > 0 {
+		for _, s := range m.Nodes {
+			l = len(s)
+			n += 1 + l + sovHecklerpb(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *HecklerUnlockReport) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.UnlockedNodes) > 0 {
+		for _, s := range m.UnlockedNodes {
+			l = len(s)
+			n += 1 + l + sovHecklerpb(uint64(l))
+		}
 	}
 	if len(m.NodeErrors) > 0 {
 		for k, v := range m.NodeErrors {
@@ -2083,6 +2642,664 @@ func (m *HecklerApplyReport) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Output = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NodeErrors", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.NodeErrors == nil {
+				m.NodeErrors = make(map[string]string)
+			}
+			var mapkey string
+			var mapvalue string
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowHecklerpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowHecklerpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var stringLenmapvalue uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowHecklerpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapvalue |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapvalue := int(stringLenmapvalue)
+					if intStringLenmapvalue < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					postStringIndexmapvalue := iNdEx + intStringLenmapvalue
+					if postStringIndexmapvalue < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if postStringIndexmapvalue > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = string(dAtA[iNdEx:postStringIndexmapvalue])
+					iNdEx = postStringIndexmapvalue
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipHecklerpb(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.NodeErrors[mapkey] = mapvalue
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipHecklerpb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *HecklerLockRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowHecklerpb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: HecklerLockRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: HecklerLockRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.User = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Comment", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Comment = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nodes", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Nodes = append(m.Nodes, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipHecklerpb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *HecklerLockReport) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowHecklerpb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: HecklerLockReport: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: HecklerLockReport: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LockedNodes", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.LockedNodes = append(m.LockedNodes, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NodeErrors", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.NodeErrors == nil {
+				m.NodeErrors = make(map[string]string)
+			}
+			var mapkey string
+			var mapvalue string
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowHecklerpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowHecklerpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var stringLenmapvalue uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowHecklerpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapvalue |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapvalue := int(stringLenmapvalue)
+					if intStringLenmapvalue < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					postStringIndexmapvalue := iNdEx + intStringLenmapvalue
+					if postStringIndexmapvalue < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if postStringIndexmapvalue > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = string(dAtA[iNdEx:postStringIndexmapvalue])
+					iNdEx = postStringIndexmapvalue
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipHecklerpb(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthHecklerpb
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.NodeErrors[mapkey] = mapvalue
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipHecklerpb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *HecklerUnlockRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowHecklerpb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: HecklerUnlockRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: HecklerUnlockRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nodes", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Nodes = append(m.Nodes, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipHecklerpb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *HecklerUnlockReport) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowHecklerpb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: HecklerUnlockReport: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: HecklerUnlockReport: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UnlockedNodes", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHecklerpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthHecklerpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.UnlockedNodes = append(m.UnlockedNodes, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
