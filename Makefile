@@ -54,7 +54,7 @@ clean: ## Remove all state
 
 .PHONY: build
 build: vendor/github.com/libgit2/git2go/static-build ## Build heckler, usually called inside the container
-	go build -o . -mod=vendor -tags=static -ldflags '$(GO_LDFLAGS)' ./...
+	go build -o . -ldflags '$(GO_LDFLAGS)' ./...
 
 vendor/github.com/libgit2/git2go/static-build: ## Build libgit2
 	./build-libgit2-static
