@@ -52,6 +52,8 @@ github.com/lollipopman/git-cgi-server v1.0.2-0.20200205213042-56a063d18d5b h1:y8
 github.com/lollipopman/git-cgi-server v1.0.2-0.20200205213042-56a063d18d5b/go.mod h1:Z10JAW/nvQHhoWaUp51zkT8n8r3epXSusDQbIoV7BRM=
 github.com/miekg/yamlfmt v0.0.0-20190824094130-708bde137ebd h1:Z5nOK0Z1saTmvS5CBXNtta2lUh/W8uCGi98FCSvjVs4=
 github.com/miekg/yamlfmt v0.0.0-20190824094130-708bde137ebd/go.mod h1:RK2QNOuZpxb4UI4S1tHCKWgUaOVXquceyDa8yYbTkXo=
+github.com/lollipopman/luser v0.0.0-20200226194359-0e64908ec951 h1:CRgIONjP5sl5XWQo0uBpdmXBfMzJoZ6K4aalOgX7FiY=
+github.com/lollipopman/luser v0.0.0-20200226194359-0e64908ec951/go.mod h1:GN/xJHCt6hZVn/qByjyUBFZkTe1IsAz0fXdfimYINfo=
 github.com/mitchellh/copystructure v1.0.0 h1:Laisrj+bAB6b/yJwB5Bt3ITZhGJdqmxquMKeZ+mmkFQ=
 github.com/mitchellh/copystructure v1.0.0/go.mod h1:SNtv71yrdKgLRyLFxmLdkAbkKEFWgYaq1OVrnRcwhnw=
 github.com/mitchellh/reflectwalk v1.0.0 h1:9D+8oIskB4VJBN5SFlmc27fSlIBZaov1Wpk/IfikLNY=

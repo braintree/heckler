@@ -11,13 +11,13 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"os/user"
 	"strconv"
 	"strings"
 	"syscall"
 
 	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
 	"github.braintreeps.com/lollipopman/heckler/internal/puppetutil"
+	"github.com/lollipopman/luser"
 	"gopkg.in/yaml.v3"
 
 	"google.golang.org/grpc"
@@ -107,7 +107,7 @@ func (s *server) PuppetLock(ctx context.Context, req *puppetutil.PuppetLockReque
 	return res, nil
 }
 
-func puppetLock(username string, comment string) error {
+func puppetLock(locker string, comment string) error {
 	tmpfile, err := ioutil.TempFile("/var/tmp", "rizzoPuppetLockTmpFile.*")
 	if err != nil {
 		return err
@@ -121,6 +121,22 @@ func puppetLock(username string, comment string) error {
 		return err
 	}
 
+	lu, err := luser.Lookup(locker)
+	if err != nil {
+		return err
+	}
+
+	uid, err := strconv.Atoi(lu.Uid)
+	if err != nil {
+		return err
+	}
+	gid, err := strconv.Atoi(lu.Gid)
+	if err != nil {
+		return err
+	}
+	// Chown lock file so it is owned by locker user
+	os.Chown(tmpfile.Name(), uid, gid)
+
 	err = renameAndCheck(tmpfile.Name(), lockPath)
 	if errors.Is(err, os.ErrExist) {
 		buf, err := ioutil.ReadFile(lockPath)
@@ -128,27 +144,25 @@ func puppetLock(username string, comment string) error {
 			return err
 		}
 		comment := strings.TrimRight(string(buf), "\n")
-		username, err := lockUser()
+		lockOwner, err := lockOwner()
 		if err != nil {
 			return err
 		}
-		return errors.New(fmt.Sprintf("Already locked by %s, '%s'", username, comment))
+		return errors.New(fmt.Sprintf("Already locked by %s, '%s'", lockOwner.Username, comment))
 	}
 	return err
 }
 
-// XXX will this fail when using musl against sssd?
-// if so just shell out, `id -nu <UID>`?
-func lockUser() (string, error) {
+func lockOwner() (*luser.User, error) {
 	var stat syscall.Stat_t
 	if err := syscall.Stat(lockPath, &stat); err != nil {
-		return "", err
+		return nil, err
 	}
-	lu, err := user.LookupId(strconv.Itoa(int(stat.Uid)))
+	u, err := luser.LookupId(strconv.Itoa(int(stat.Uid)))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return lu.Username, nil
+	return u, nil
 }
 
 // os.Rename overwrites, which we do not want to do, but hard linking returns
@@ -161,6 +175,54 @@ func renameAndCheck(src, dst string) error {
 
 	return os.Remove(src)
 }
+
+func (s *server) PuppetUnlock(ctx context.Context, req *puppetutil.PuppetUnlockRequest) (*puppetutil.PuppetUnlockReport, error) {
+	log.Printf("PuppetUnlock: request received, %v", req)
+	var res *puppetutil.PuppetUnlockReport
+	res = new(puppetutil.PuppetUnlockReport)
+	err := puppetUnlock(req.User)
+	if err != nil {
+		res.Unlocked = false
+		res.Error = err.Error()
+	} else {
+		res.Unlocked = true
+	}
+	log.Printf("PuppetUnlock: reply, %v", res)
+	return res, nil
+}
+
+func puppetUnlock(unlocker string) error {
+	// if we are already unlocked don't return an error
+	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
+		return nil
+	}
+	lockOwner, err := lockOwner()
+	if err != nil {
+		return err
+	}
+	if unlocker == lockOwner.Username {
+		err = os.Remove(lockPath)
+		if err != nil {
+			return err
+		}
+		return nil
+	} else {
+		comment, err := lockComment()
+		if err != nil {
+			return err
+		}
+		return errors.New(fmt.Sprintf("Already locked by %s, '%s'", lockOwner.Username, comment))
+	}
+}
+
+func lockComment() (string, error) {
+	buf, err := ioutil.ReadFile(lockPath)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(string(buf), "\n"), nil
+}
+
 func puppetApply(oid string, noop bool, conf *RizzoConf) (*puppetutil.PuppetReport, error) {
 	var oldPath string
 

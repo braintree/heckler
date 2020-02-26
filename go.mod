@@ -15,6 +15,7 @@ require (
 	github.com/imdario/mergo v0.3.8 // indirect
 	github.com/libgit2/git2go v0.0.0-20191210224138-ba1b5f0c23b3
 	github.com/lollipopman/git-cgi-server v1.0.2-0.20200205213042-56a063d18d5b
+	github.com/lollipopman/luser v0.0.0-20200226194359-0e64908ec951
 	github.com/miekg/yamlfmt v0.0.0-20190824094130-708bde137ebd // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.1 // indirect

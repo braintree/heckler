@@ -754,6 +754,60 @@ func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.Heckl
 	}
 	return hsr, nil
 }
+func (hs *hecklerServer) HecklerUnlock(ctx context.Context, req *hecklerpb.HecklerUnlockRequest) (*hecklerpb.HecklerUnlockReport, error) {
+	nodes, errNodes := dialNodes(ctx, req.Nodes)
+	unlockedNodes, errUnlockNodes := nodeUnlock(req, nodes)
+	res := new(hecklerpb.HecklerUnlockReport)
+	res.UnlockedNodes = unlockedNodes
+	res.NodeErrors = make(map[string]string)
+	for host, err := range errNodes {
+		res.NodeErrors[host] = err.Error()
+	}
+	for host, err := range errUnlockNodes {
+		res.NodeErrors[host] = err
+	}
+	return res, nil
+}
+
+func nodeUnlock(req *hecklerpb.HecklerUnlockRequest, nodes map[string]*Node) ([]string, map[string]string) {
+	reportChan := make(chan puppetutil.PuppetUnlockReport)
+	puppetReq := puppetutil.PuppetUnlockRequest{
+		User: req.User,
+	}
+	for _, node := range nodes {
+		go hecklerUnlock(node.host, node.rizzoClient, puppetReq, reportChan)
+	}
+
+	unlockedNodes := make([]string, 0, len(nodes))
+	errNodes := make(map[string]string)
+	for i := 0; i < len(nodes); i++ {
+		r := <-reportChan
+		if r.Unlocked {
+			unlockedNodes = append(unlockedNodes, r.Host)
+		} else {
+			errNodes[r.Host] = r.Error
+		}
+	}
+
+	return unlockedNodes, errNodes
+}
+
+func hecklerUnlock(host string, rc puppetutil.RizzoClient, req puppetutil.PuppetUnlockRequest, c chan<- puppetutil.PuppetUnlockReport) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	res, err := rc.PuppetUnlock(ctx, &req)
+	if err != nil {
+		c <- puppetutil.PuppetUnlockReport{
+			Host:     host,
+			Unlocked: false,
+			Error:    err.Error(),
+		}
+		return
+	}
+	res.Host = host
+	c <- *res
+	return
+}
 
 func (hs *hecklerServer) HecklerLock(ctx context.Context, req *hecklerpb.HecklerLockRequest) (*hecklerpb.HecklerLockReport, error) {
 	nodes, errNodes := dialNodes(ctx, req.Nodes)

@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/user"
+
 	"time"
 
 	"github.braintreeps.com/lollipopman/heckler/internal/hecklerpb"
+	"github.com/lollipopman/luser"
 	"google.golang.org/grpc"
 )
 
@@ -87,7 +88,7 @@ func main() {
 	defer cancel()
 
 	if lock {
-		userInf, err := user.Current()
+		userInf, err := luser.Current()
 		if err != nil {
 			panic(err)
 		}
@@ -102,6 +103,29 @@ func main() {
 		}
 		for _, node := range rprt.LockedNodes {
 			fmt.Printf("Locked: %s\n", node)
+		}
+		for node, nodeError := range rprt.NodeErrors {
+			fmt.Printf("Error: %s, %s\n", node, nodeError)
+		}
+		os.Exit(0)
+	}
+
+	if unlock {
+		userInf, err := luser.Current()
+		if err != nil {
+			panic(err)
+		}
+		req := hecklerpb.HecklerUnlockRequest{
+			Nodes: hosts,
+			User:  userInf.Username,
+		}
+		log.Printf("User: %s", userInf.Username)
+		rprt, err := hc.HecklerUnlock(ctx, &req)
+		if err != nil {
+			log.Fatalf("Unable to unlock nodes: %v", err)
+		}
+		for _, node := range rprt.UnlockedNodes {
+			fmt.Printf("Unlocked: %s\n", node)
 		}
 		for node, nodeError := range rprt.NodeErrors {
 			fmt.Printf("Error: %s, %s\n", node, nodeError)

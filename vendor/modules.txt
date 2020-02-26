@@ -40,6 +40,8 @@ github.com/imdario/mergo
 github.com/libgit2/git2go
 # github.com/lollipopman/git-cgi-server v1.0.2-0.20200205213042-56a063d18d5b
 github.com/lollipopman/git-cgi-server
+# github.com/lollipopman/luser v0.0.0-20200226194359-0e64908ec951
+github.com/lollipopman/luser
 # github.com/mitchellh/copystructure v1.0.0
 github.com/mitchellh/copystructure
 # github.com/mitchellh/reflectwalk v1.0.1

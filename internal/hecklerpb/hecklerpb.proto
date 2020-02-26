@@ -64,7 +64,8 @@ message HecklerLockReport {
 }
 
 message HecklerUnlockRequest {
-  repeated string nodes = 1;
+  string user = 1;
+  repeated string nodes = 2;
 }
 
 message HecklerUnlockReport {

@@ -94,7 +94,9 @@ message PuppetLockReport {
   string error = 3;
 }
 
-message PuppetUnlockRequest {}
+message PuppetUnlockRequest {
+  string user = 1;
+}
 
 message PuppetUnlockReport {
   string host = 1;

@@ -8,7 +8,7 @@ BT_VERSION := 2
 DEB_VERSION := $(HECKLER_VERSION)-$(BT_VERSION)~bt$(DEBIAN_RELEASE)
 export CC := /usr/local/musl/bin/musl-gcc 
 GO_LDFLAGS := -X main.Version=$(HECKLER_VERSION) -extldflags=-static -linkmode=external
-export GOFLAGS := -mod=vendor -tags=static
+export GOFLAGS := -mod=vendor -tags=static,osusergo
 export GOCACHE := $(CURDIR)/.go-build
 
 .PHONY: help
