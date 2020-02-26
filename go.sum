@@ -50,8 +50,6 @@ github.com/libgit2/git2go v0.0.0-20191210224138-ba1b5f0c23b3 h1:3po85N78NcPO4mst
 github.com/libgit2/git2go v0.0.0-20191210224138-ba1b5f0c23b3/go.mod h1:hTb4obAjQDTd5qtX3EHWun1t78BEUgXGleuEJL9A0fo=
 github.com/lollipopman/git-cgi-server v1.0.2-0.20200205213042-56a063d18d5b h1:y8dinKXoF3ziWHMJhcmomp8xW5X3w/jZaqY+iyFTDqQ=
 github.com/lollipopman/git-cgi-server v1.0.2-0.20200205213042-56a063d18d5b/go.mod h1:Z10JAW/nvQHhoWaUp51zkT8n8r3epXSusDQbIoV7BRM=
-github.com/miekg/yamlfmt v0.0.0-20190824094130-708bde137ebd h1:Z5nOK0Z1saTmvS5CBXNtta2lUh/W8uCGi98FCSvjVs4=
-github.com/miekg/yamlfmt v0.0.0-20190824094130-708bde137ebd/go.mod h1:RK2QNOuZpxb4UI4S1tHCKWgUaOVXquceyDa8yYbTkXo=
 github.com/lollipopman/luser v0.0.0-20200226194359-0e64908ec951 h1:CRgIONjP5sl5XWQo0uBpdmXBfMzJoZ6K4aalOgX7FiY=
 github.com/lollipopman/luser v0.0.0-20200226194359-0e64908ec951/go.mod h1:GN/xJHCt6hZVn/qByjyUBFZkTe1IsAz0fXdfimYINfo=
 github.com/mitchellh/copystructure v1.0.0 h1:Laisrj+bAB6b/yJwB5Bt3ITZhGJdqmxquMKeZ+mmkFQ=
@@ -69,8 +67,6 @@ github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81P
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2 h1:VklqNMn3ovrHsnt90PveolxSbWFaJdECFbxSq0Mqo2M=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
 golang.org/x/crypto v0.0.0-20200128174031-69ecbb4d6d5d/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
-golang.org/x/crypto v0.0.0-20200204104054-c9f3fb736b72 h1:+ELyKg6m8UBf0nPFSqD0mi7zUfwPyXo23HNjMnXPz7w=
-golang.org/x/crypto v0.0.0-20200204104054-c9f3fb736b72/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
 golang.org/x/crypto v0.0.0-20200206161412-a0c6ece9d31a h1:aczoJ0HPNE92XKa7DrIzkNN6esOKO2TBwiiYoKcINhA=
 golang.org/x/crypto v0.0.0-20200206161412-a0c6ece9d31a/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
 golang.org/x/exp v0.0.0-20190121172915-509febef88a4/go.mod h1:CJ0aWSM057203Lf6IL+f9T1iT9GByDxfZKAQTCR3kQA=
