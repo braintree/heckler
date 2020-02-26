@@ -78,7 +78,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	hecklerdConn, err := grpc.Dial("localhost:50051", grpc.WithInsecure(), grpc.WithBlock())
+	hecklerdConn, err := grpc.Dial("localhost:50052", grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		// XXX support running heckler client remotely
 		log.Fatalf("Unable to connect to: %v, %v", "localhost:50051", err)

@@ -41,7 +41,7 @@ const (
 
 	defaultAddr     = ":8080"
 	shutdownTimeout = time.Second * 5
-	port            = ":50051"
+	port            = ":50052"
 	stateDir        = "/var/lib/hecklerd"
 )
 
