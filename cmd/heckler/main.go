@@ -37,6 +37,7 @@ func main() {
 	var noop bool
 	var lock bool
 	var unlock bool
+	var force bool
 	var status bool
 	var printVersion bool
 	var markdownOut bool
@@ -49,6 +50,7 @@ func main() {
 	flag.BoolVar(&status, "status", false, "Query node apply status")
 	flag.BoolVar(&noop, "noop", false, "noop")
 	flag.BoolVar(&lock, "lock", false, "lock nodes")
+	flag.BoolVar(&force, "force", false, "force unlock or lock of nodes")
 	flag.BoolVar(&unlock, "unlock", false, "unlock nodes")
 	flag.BoolVar(&markdownOut, "md", false, "Generate markdown output")
 	flag.StringVar(&githubMilestone, "github", "", "Github milestone to create")
@@ -93,9 +95,10 @@ func main() {
 			panic(err)
 		}
 		req := hecklerpb.HecklerLockRequest{
-			Nodes:   hosts,
 			User:    userInf.Username,
 			Comment: "Locked by Heckler",
+			Force:   force,
+			Nodes:   hosts,
 		}
 		rprt, err := hc.HecklerLock(ctx, &req)
 		if err != nil {
@@ -116,8 +119,9 @@ func main() {
 			panic(err)
 		}
 		req := hecklerpb.HecklerUnlockRequest{
-			Nodes: hosts,
 			User:  userInf.Username,
+			Force: force,
+			Nodes: hosts,
 		}
 		log.Printf("User: %s", userInf.Username)
 		rprt, err := hc.HecklerUnlock(ctx, &req)

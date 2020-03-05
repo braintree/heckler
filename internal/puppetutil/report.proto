@@ -86,6 +86,7 @@ message PuppetLastApplyRequest {}
 message PuppetLockRequest {
   string user = 1;
   string comment = 2;
+  bool force = 3;
 }
 
 message PuppetLockReport {
@@ -96,6 +97,7 @@ message PuppetLockReport {
 
 message PuppetUnlockRequest {
   string user = 1;
+  bool force = 2;
 }
 
 message PuppetUnlockReport {

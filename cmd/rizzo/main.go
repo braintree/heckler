@@ -96,7 +96,7 @@ func (s *server) PuppetLock(ctx context.Context, req *puppetutil.PuppetLockReque
 	log.Printf("PuppetLock: request received, %v", req)
 	var res *puppetutil.PuppetLockReport
 	res = new(puppetutil.PuppetLockReport)
-	err := puppetLock(req.User, req.Comment)
+	err := puppetLock(req.User, req.Comment, req.Force)
 	if err != nil {
 		res.Locked = false
 		res.Error = err.Error()
@@ -107,7 +107,7 @@ func (s *server) PuppetLock(ctx context.Context, req *puppetutil.PuppetLockReque
 	return res, nil
 }
 
-func puppetLock(locker string, comment string) error {
+func puppetLock(locker string, comment string, forceLock bool) error {
 	tmpfile, err := ioutil.TempFile("/var/tmp", "rizzoPuppetLockTmpFile.*")
 	if err != nil {
 		return err
@@ -136,6 +136,10 @@ func puppetLock(locker string, comment string) error {
 	}
 	// Chown lock file so it is owned by locker user
 	os.Chown(tmpfile.Name(), uid, gid)
+
+	if forceLock {
+		return os.Rename(tmpfile.Name(), lockPath)
+	}
 
 	err = renameAndCheck(tmpfile.Name(), lockPath)
 	if errors.Is(err, os.ErrExist) {
@@ -180,7 +184,7 @@ func (s *server) PuppetUnlock(ctx context.Context, req *puppetutil.PuppetUnlockR
 	log.Printf("PuppetUnlock: request received, %v", req)
 	var res *puppetutil.PuppetUnlockReport
 	res = new(puppetutil.PuppetUnlockReport)
-	err := puppetUnlock(req.User)
+	err := puppetUnlock(req.User, req.Force)
 	if err != nil {
 		res.Unlocked = false
 		res.Error = err.Error()
@@ -191,7 +195,7 @@ func (s *server) PuppetUnlock(ctx context.Context, req *puppetutil.PuppetUnlockR
 	return res, nil
 }
 
-func puppetUnlock(unlocker string) error {
+func puppetUnlock(unlocker string, forceUnlock bool) error {
 	// if we are already unlocked don't return an error
 	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
 		return nil
@@ -200,7 +204,7 @@ func puppetUnlock(unlocker string) error {
 	if err != nil {
 		return err
 	}
-	if unlocker == lockOwner.Username {
+	if unlocker == lockOwner.Username || forceUnlock {
 		err = os.Remove(lockPath)
 		if err != nil {
 			return err

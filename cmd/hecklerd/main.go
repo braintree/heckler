@@ -772,7 +772,8 @@ func (hs *hecklerServer) HecklerUnlock(ctx context.Context, req *hecklerpb.Heckl
 func nodeUnlock(req *hecklerpb.HecklerUnlockRequest, nodes map[string]*Node) ([]string, map[string]string) {
 	reportChan := make(chan puppetutil.PuppetUnlockReport)
 	puppetReq := puppetutil.PuppetUnlockRequest{
-		User: req.User,
+		User:  req.User,
+		Force: req.Force,
 	}
 	for _, node := range nodes {
 		go hecklerUnlock(node.host, node.rizzoClient, puppetReq, reportChan)
@@ -829,6 +830,7 @@ func nodeLock(req *hecklerpb.HecklerLockRequest, nodes map[string]*Node) ([]stri
 	puppetReq := puppetutil.PuppetLockRequest{
 		User:    req.User,
 		Comment: req.Comment,
+		Force:   req.Force,
 	}
 	for _, node := range nodes {
 		go hecklerLock(node.host, node.rizzoClient, puppetReq, reportChan)

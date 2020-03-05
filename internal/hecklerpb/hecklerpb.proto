@@ -55,7 +55,8 @@ message HecklerApplyReport {
 message HecklerLockRequest {
   string user = 1;
   string comment = 2;
-  repeated string nodes = 3;
+  bool force = 3;
+  repeated string nodes = 4;
 }
 
 message HecklerLockReport {
@@ -65,7 +66,8 @@ message HecklerLockReport {
 
 message HecklerUnlockRequest {
   string user = 1;
-  repeated string nodes = 2;
+  bool force = 2;
+  repeated string nodes = 3;
 }
 
 message HecklerUnlockReport {
