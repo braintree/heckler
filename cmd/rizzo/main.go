@@ -16,7 +16,7 @@ import (
 	"syscall"
 
 	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
-	"github.braintreeps.com/lollipopman/heckler/internal/puppetutil"
+	"github.braintreeps.com/lollipopman/heckler/internal/rizzopb"
 	"github.com/lollipopman/luser"
 	"gopkg.in/yaml.v3"
 
@@ -32,12 +32,12 @@ const (
 
 // server is used to implement rizzo.RizzoServer.
 type server struct {
-	puppetutil.UnimplementedRizzoServer
+	rizzopb.UnimplementedRizzoServer
 	conf *RizzoConf
 }
 
 // PuppetApply implements rizzo.RizzoServer
-func (s *server) PuppetApply(ctx context.Context, req *puppetutil.PuppetApplyRequest) (*puppetutil.PuppetReport, error) {
+func (s *server) PuppetApply(ctx context.Context, req *rizzopb.PuppetApplyRequest) (*rizzopb.PuppetReport, error) {
 	var err error
 	var oid string
 
@@ -47,7 +47,7 @@ func (s *server) PuppetApply(ctx context.Context, req *puppetutil.PuppetApplyReq
 	repo, err := gitutil.Pull("http://"+s.conf.HecklerHost+":8080/puppetcode", repoDir)
 	if err != nil {
 		log.Printf("Pull error: %v", err)
-		return &puppetutil.PuppetReport{}, err
+		return &rizzopb.PuppetReport{}, err
 	}
 	log.Printf("Pull Complete: %v", req.Rev)
 
@@ -55,7 +55,7 @@ func (s *server) PuppetApply(ctx context.Context, req *puppetutil.PuppetApplyReq
 	oid, err = gitutil.Checkout(req.Rev, repo)
 	if err != nil {
 		log.Printf("Checkout error: %v", err)
-		return &puppetutil.PuppetReport{}, err
+		return &rizzopb.PuppetReport{}, err
 	}
 	log.Printf("Checkout Complete: %v", oid)
 
@@ -63,39 +63,39 @@ func (s *server) PuppetApply(ctx context.Context, req *puppetutil.PuppetApplyReq
 	pr, err := puppetApply(oid, req.Noop, s.conf)
 	if err != nil {
 		log.Printf("Apply error: %v", err)
-		return &puppetutil.PuppetReport{}, err
+		return &rizzopb.PuppetReport{}, err
 	}
 	log.Printf("Done: %v", req.Rev)
 	return pr, nil
 }
 
 // PuppetLastApply implements rizzo.RizzoServer
-func (s *server) PuppetLastApply(ctx context.Context, req *puppetutil.PuppetLastApplyRequest) (*puppetutil.PuppetReport, error) {
+func (s *server) PuppetLastApply(ctx context.Context, req *rizzopb.PuppetLastApplyRequest) (*rizzopb.PuppetReport, error) {
 	var err error
 
 	log.Printf("PuppetLastApply: request received")
 	file, err := os.Open(s.conf.PuppetReportDir + "/heckler/heckler_last_apply.json")
 	if err != nil {
-		return &puppetutil.PuppetReport{}, err
+		return &rizzopb.PuppetReport{}, err
 	}
 	defer file.Close()
 	data, err := ioutil.ReadAll(file)
 	if err != nil {
-		return &puppetutil.PuppetReport{}, err
+		return &rizzopb.PuppetReport{}, err
 	}
-	pr := new(puppetutil.PuppetReport)
+	pr := new(rizzopb.PuppetReport)
 	err = json.Unmarshal([]byte(data), pr)
 	if err != nil {
-		return &puppetutil.PuppetReport{}, err
+		return &rizzopb.PuppetReport{}, err
 	}
 	log.Printf("PuppetLastApply: status@%s", pr.ConfigurationVersion)
 	return pr, nil
 }
 
-func (s *server) PuppetLock(ctx context.Context, req *puppetutil.PuppetLockRequest) (*puppetutil.PuppetLockReport, error) {
+func (s *server) PuppetLock(ctx context.Context, req *rizzopb.PuppetLockRequest) (*rizzopb.PuppetLockReport, error) {
 	log.Printf("PuppetLock: request received, %v", req)
-	var res *puppetutil.PuppetLockReport
-	res = new(puppetutil.PuppetLockReport)
+	var res *rizzopb.PuppetLockReport
+	res = new(rizzopb.PuppetLockReport)
 	err := puppetLock(req.User, req.Comment, req.Force)
 	if err != nil {
 		res.Locked = false
@@ -180,10 +180,10 @@ func renameAndCheck(src, dst string) error {
 	return os.Remove(src)
 }
 
-func (s *server) PuppetUnlock(ctx context.Context, req *puppetutil.PuppetUnlockRequest) (*puppetutil.PuppetUnlockReport, error) {
+func (s *server) PuppetUnlock(ctx context.Context, req *rizzopb.PuppetUnlockRequest) (*rizzopb.PuppetUnlockReport, error) {
 	log.Printf("PuppetUnlock: request received, %v", req)
-	var res *puppetutil.PuppetUnlockReport
-	res = new(puppetutil.PuppetUnlockReport)
+	var res *rizzopb.PuppetUnlockReport
+	res = new(rizzopb.PuppetUnlockReport)
 	err := puppetUnlock(req.User, req.Force)
 	if err != nil {
 		res.Unlocked = false
@@ -227,7 +227,7 @@ func lockComment() (string, error) {
 	return strings.TrimRight(string(buf), "\n"), nil
 }
 
-func puppetApply(oid string, noop bool, conf *RizzoConf) (*puppetutil.PuppetReport, error) {
+func puppetApply(oid string, noop bool, conf *RizzoConf) (*rizzopb.PuppetReport, error) {
 	var oldPath string
 
 	if noop {
@@ -255,24 +255,24 @@ func puppetApply(oid string, noop bool, conf *RizzoConf) (*puppetutil.PuppetRepo
 	stdoutStderr, err := cmd.CombinedOutput()
 	log.Printf("%s", stdoutStderr)
 	if err != nil {
-		return &puppetutil.PuppetReport{}, err
+		return &rizzopb.PuppetReport{}, err
 	}
 	if oldPath != "" {
 		os.Setenv("PATH", oldPath)
 	}
 	file, err := os.Open(conf.PuppetReportDir + "/heckler/heckler_" + oid + ".json")
 	if err != nil {
-		return &puppetutil.PuppetReport{}, err
+		return &rizzopb.PuppetReport{}, err
 	}
 	defer file.Close()
 	data, err := ioutil.ReadAll(file)
 	if err != nil {
-		return &puppetutil.PuppetReport{}, err
+		return &rizzopb.PuppetReport{}, err
 	}
-	pr := new(puppetutil.PuppetReport)
+	pr := new(rizzopb.PuppetReport)
 	err = json.Unmarshal([]byte(data), pr)
 	if err != nil {
-		return &puppetutil.PuppetReport{}, err
+		return &rizzopb.PuppetReport{}, err
 	}
 	return pr, nil
 }
@@ -336,7 +336,7 @@ func main() {
 	s := grpc.NewServer()
 	server := new(server)
 	server.conf = rizzoConf
-	puppetutil.RegisterRizzoServer(s, server)
+	rizzopb.RegisterRizzoServer(s, server)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}

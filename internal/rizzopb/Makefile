@@ -3,4 +3,4 @@
 # go get github.com/gogo/protobuf/gogoproto
 
 all:
-	protoc --gogofaster_out=plugins=grpc:. ./report.proto
+	protoc --gogofaster_out=plugins=grpc:. ./rizzopb.proto

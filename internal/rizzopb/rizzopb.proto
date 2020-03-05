@@ -1,5 +1,5 @@
 syntax = "proto3";
-package puppetutil;
+package rizzopb;
 
 // The Rizzo service definition.
 service Rizzo {

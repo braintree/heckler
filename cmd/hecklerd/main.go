@@ -23,7 +23,7 @@ import (
 
 	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
 	"github.braintreeps.com/lollipopman/heckler/internal/hecklerpb"
-	"github.braintreeps.com/lollipopman/heckler/internal/puppetutil"
+	"github.braintreeps.com/lollipopman/heckler/internal/rizzopb"
 	"github.com/Masterminds/sprig"
 	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-cmp/cmp"
@@ -58,9 +58,9 @@ type hecklerServer struct {
 
 type Node struct {
 	host                 string
-	commitReports        map[git.Oid]*puppetutil.PuppetReport
+	commitReports        map[git.Oid]*rizzopb.PuppetReport
 	commitDeltaResources map[git.Oid]map[ResourceTitle]*deltaResource
-	rizzoClient          puppetutil.RizzoClient
+	rizzoClient          rizzopb.RizzoClient
 	lastApply            *git.Oid
 }
 
@@ -73,8 +73,8 @@ type deltaResource struct {
 	Title      ResourceTitle
 	Type       string
 	DefineType string
-	Events     []*puppetutil.Event
-	Logs       []*puppetutil.Log
+	Events     []*rizzopb.Event
+	Logs       []*rizzopb.Log
 }
 
 type groupedResource struct {
@@ -99,8 +99,8 @@ type groupLog struct {
 
 type ResourceTitle string
 
-func commitParentReports(commit *git.Commit, commitReports map[git.Oid]*puppetutil.PuppetReport) []*puppetutil.PuppetReport {
-	var parentReports []*puppetutil.PuppetReport
+func commitParentReports(commit *git.Commit, commitReports map[git.Oid]*rizzopb.PuppetReport) []*rizzopb.PuppetReport {
+	var parentReports []*rizzopb.PuppetReport
 
 	parentCount := commit.ParentCount()
 	for i := uint(0); i < parentCount; i++ {
@@ -120,7 +120,7 @@ func grpcConnect(ctx context.Context, node *Node, clientConnChan chan nodeResult
 	} else if err != nil {
 		clientConnChan <- nodeResult{node, err}
 	} else {
-		node.rizzoClient = puppetutil.NewRizzoClient(conn)
+		node.rizzoClient = rizzopb.NewRizzoClient(conn)
 		clientConnChan <- nodeResult{node, nil}
 	}
 }
@@ -194,7 +194,7 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, repo *git.Repository) (map[git.Oid][]*groupedResource, error) {
 	var err error
 	var data []byte
-	puppetReportChan := make(chan puppetutil.PuppetReport)
+	puppetReportChan := make(chan rizzopb.PuppetReport)
 
 	revdir := fmt.Sprintf(stateDir+"/noops/%s..%s", beginRev, endRev)
 
@@ -208,18 +208,18 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 	groupedCommits = make(map[git.Oid][]*groupedResource)
 
 	for _, node := range nodes {
-		node.commitReports = make(map[git.Oid]*puppetutil.PuppetReport)
+		node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 		node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 	}
 
 	var noopRequests int
 	var reportPath string
 	var file *os.File
-	var rprt *puppetutil.PuppetReport
+	var rprt *rizzopb.PuppetReport
 
 	for i, commitLogId := range commitLogIds {
 		log.Printf("Nooping: %s (%d of %d)", commitLogId.String(), i, len(commitLogIds))
-		par := puppetutil.PuppetApplyRequest{Rev: commitLogId.String(), Noop: true}
+		par := rizzopb.PuppetApplyRequest{Rev: commitLogId.String(), Noop: true}
 		noopRequests = 0
 		for host, node := range nodes {
 			if node.lastApply == nil {
@@ -229,7 +229,7 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 			if commitAlreadyApplied(node.lastApply, &commitLogId, repo) {
 				// Use empty report if commit already applied, i.e. empty puppet noop diff
 				log.Printf("Already applied using empty noop: %s@%s", node.host, commitLogId.String())
-				nodes[node.host].commitReports[commitLogId] = new(puppetutil.PuppetReport)
+				nodes[node.host].commitReports[commitLogId] = new(rizzopb.PuppetReport)
 			} else {
 				if _, err := os.Stat(reportPath); err == nil {
 					file, err = os.Open(reportPath)
@@ -242,7 +242,7 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 					if err != nil {
 						log.Fatalf("cannot read report: %v", err)
 					}
-					rprt = new(puppetutil.PuppetReport)
+					rprt = new(rizzopb.PuppetReport)
 					err = json.Unmarshal([]byte(data), rprt)
 					if err != nil {
 						log.Fatalf("cannot unmarshal report: %v", err)
@@ -281,7 +281,7 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 	for host, node := range nodes {
 		for i, gi := range commitLogIds {
 			if i == 0 {
-				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], []*puppetutil.PuppetReport{new(puppetutil.PuppetReport)})
+				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], []*rizzopb.PuppetReport{new(rizzopb.PuppetReport)})
 			} else {
 				log.Printf("Creating delta resource: %s@%s", host, gi.String())
 				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], commitParentReports(commits[gi], node.commitReports))
@@ -300,7 +300,7 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 	return groupedCommits, nil
 }
 
-func priorEvent(event *puppetutil.Event, resourceTitleStr string, priorCommitNoops []*puppetutil.PuppetReport) bool {
+func priorEvent(event *rizzopb.Event, resourceTitleStr string, priorCommitNoops []*rizzopb.PuppetReport) bool {
 	for _, priorCommitNoop := range priorCommitNoops {
 		if priorResourceStatuses, ok := priorCommitNoop.ResourceStatuses[resourceTitleStr]; ok {
 			for _, priorEvent := range priorResourceStatuses.Events {
@@ -313,7 +313,7 @@ func priorEvent(event *puppetutil.Event, resourceTitleStr string, priorCommitNoo
 	return false
 }
 
-func priorLog(log *puppetutil.Log, priorCommitNoops []*puppetutil.PuppetReport) bool {
+func priorLog(log *rizzopb.Log, priorCommitNoops []*rizzopb.PuppetReport) bool {
 	for _, priorCommitNoop := range priorCommitNoops {
 		for _, priorLog := range priorCommitNoop.Logs {
 			if *log == *priorLog {
@@ -324,7 +324,7 @@ func priorLog(log *puppetutil.Log, priorCommitNoops []*puppetutil.PuppetReport) 
 	return false
 }
 
-func initDeltaResource(resourceTitle ResourceTitle, r *puppetutil.ResourceStatus, deltaEvents []*puppetutil.Event, deltaLogs []*puppetutil.Log) *deltaResource {
+func initDeltaResource(resourceTitle ResourceTitle, r *rizzopb.ResourceStatus, deltaEvents []*rizzopb.Event, deltaLogs []*rizzopb.Log) *deltaResource {
 	deltaRes := new(deltaResource)
 	deltaRes.Title = resourceTitle
 	deltaRes.Type = r.ResourceType
@@ -334,9 +334,9 @@ func initDeltaResource(resourceTitle ResourceTitle, r *puppetutil.ResourceStatus
 	return deltaRes
 }
 
-func deltaNoop(commitNoop *puppetutil.PuppetReport, priorCommitNoops []*puppetutil.PuppetReport) map[ResourceTitle]*deltaResource {
-	var deltaEvents []*puppetutil.Event
-	var deltaLogs []*puppetutil.Log
+func deltaNoop(commitNoop *rizzopb.PuppetReport, priorCommitNoops []*rizzopb.PuppetReport) map[ResourceTitle]*deltaResource {
+	var deltaEvents []*rizzopb.Event
+	var deltaLogs []*rizzopb.Log
 	var deltaResources map[ResourceTitle]*deltaResource
 	var resourceTitle ResourceTitle
 
@@ -408,7 +408,7 @@ func normalizeDiff(msg string) string {
 	return newMsg
 }
 
-func resourceDefineType(res *puppetutil.ResourceStatus) string {
+func resourceDefineType(res *rizzopb.ResourceStatus) string {
 	var defineType string
 
 	cplen := len(res.ContainmentPath)
@@ -481,10 +481,10 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 	return gr
 }
 
-func normalizeLogs(Logs []*puppetutil.Log) []*puppetutil.Log {
+func normalizeLogs(Logs []*rizzopb.Log) []*rizzopb.Log {
 	var newSource string
 	var origSource string
-	var newLogs []*puppetutil.Log
+	var newLogs []*rizzopb.Log
 
 	// extract resource from log source
 	regexResourcePropertyTail := regexp.MustCompile(`/[a-z][a-z0-9_]*$`)
@@ -554,16 +554,16 @@ func normalizeLogs(Logs []*puppetutil.Log) []*puppetutil.Log {
 	return newLogs
 }
 
-func hecklerApply(rc puppetutil.RizzoClient, c chan<- puppetutil.PuppetReport, par puppetutil.PuppetApplyRequest) {
+func hecklerApply(rc rizzopb.RizzoClient, c chan<- rizzopb.PuppetReport, par rizzopb.PuppetApplyRequest) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
 	defer cancel()
 	r, err := rc.PuppetApply(ctx, &par)
 	if err != nil {
-		c <- puppetutil.PuppetReport{}
+		c <- rizzopb.PuppetReport{}
 	}
 	if ctx.Err() != nil {
 		log.Printf("ERROR: Context error: %v", ctx.Err())
-		c <- puppetutil.PuppetReport{}
+		c <- rizzopb.PuppetReport{}
 	}
 	c <- *r
 }
@@ -580,15 +580,15 @@ func parseTemplates() *template.Template {
 
 func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.HecklerApplyRequest) (*hecklerpb.HecklerApplyReport, error) {
 	nodes, errNodes := dialNodes(ctx, req.Nodes)
-	par := puppetutil.PuppetApplyRequest{Rev: req.Rev, Noop: req.Noop}
-	puppetReportChan := make(chan puppetutil.PuppetReport)
+	par := rizzopb.PuppetApplyRequest{Rev: req.Rev, Noop: req.Noop}
+	puppetReportChan := make(chan rizzopb.PuppetReport)
 	for _, node := range nodes {
 		go hecklerApply(node.rizzoClient, puppetReportChan, par)
 	}
 
 	for range nodes {
 		r := <-puppetReportChan
-		if cmp.Equal(r, puppetutil.PuppetReport{}) {
+		if cmp.Equal(r, rizzopb.PuppetReport{}) {
 			log.Fatalf("Received an empty report")
 		} else if r.Status == "failed" {
 			log.Printf("ERROR: Apply failed, %s@%s", r.Host, r.ConfigurationVersion)
@@ -770,8 +770,8 @@ func (hs *hecklerServer) HecklerUnlock(ctx context.Context, req *hecklerpb.Heckl
 }
 
 func nodeUnlock(req *hecklerpb.HecklerUnlockRequest, nodes map[string]*Node) ([]string, map[string]string) {
-	reportChan := make(chan puppetutil.PuppetUnlockReport)
-	puppetReq := puppetutil.PuppetUnlockRequest{
+	reportChan := make(chan rizzopb.PuppetUnlockReport)
+	puppetReq := rizzopb.PuppetUnlockRequest{
 		User:  req.User,
 		Force: req.Force,
 	}
@@ -793,12 +793,12 @@ func nodeUnlock(req *hecklerpb.HecklerUnlockRequest, nodes map[string]*Node) ([]
 	return unlockedNodes, errNodes
 }
 
-func hecklerUnlock(host string, rc puppetutil.RizzoClient, req puppetutil.PuppetUnlockRequest, c chan<- puppetutil.PuppetUnlockReport) {
+func hecklerUnlock(host string, rc rizzopb.RizzoClient, req rizzopb.PuppetUnlockRequest, c chan<- rizzopb.PuppetUnlockReport) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	res, err := rc.PuppetUnlock(ctx, &req)
 	if err != nil {
-		c <- puppetutil.PuppetUnlockReport{
+		c <- rizzopb.PuppetUnlockReport{
 			Host:     host,
 			Unlocked: false,
 			Error:    err.Error(),
@@ -826,8 +826,8 @@ func (hs *hecklerServer) HecklerLock(ctx context.Context, req *hecklerpb.Heckler
 }
 
 func nodeLock(req *hecklerpb.HecklerLockRequest, nodes map[string]*Node) ([]string, map[string]string) {
-	reportChan := make(chan puppetutil.PuppetLockReport)
-	puppetReq := puppetutil.PuppetLockRequest{
+	reportChan := make(chan rizzopb.PuppetLockReport)
+	puppetReq := rizzopb.PuppetLockRequest{
 		User:    req.User,
 		Comment: req.Comment,
 		Force:   req.Force,
@@ -850,12 +850,12 @@ func nodeLock(req *hecklerpb.HecklerLockRequest, nodes map[string]*Node) ([]stri
 	return lockedNodes, errNodes
 }
 
-func hecklerLock(host string, rc puppetutil.RizzoClient, req puppetutil.PuppetLockRequest, c chan<- puppetutil.PuppetLockReport) {
+func hecklerLock(host string, rc rizzopb.RizzoClient, req rizzopb.PuppetLockRequest, c chan<- rizzopb.PuppetLockReport) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	res, err := rc.PuppetLock(ctx, &req)
 	if err != nil {
-		c <- puppetutil.PuppetLockReport{
+		c <- rizzopb.PuppetLockReport{
 			Host:   host,
 			Locked: false,
 			Error:  err.Error(),
@@ -867,13 +867,13 @@ func hecklerLock(host string, rc puppetutil.RizzoClient, req puppetutil.PuppetLo
 	return
 }
 
-func hecklerLastApply(rc puppetutil.RizzoClient, c chan<- puppetutil.PuppetReport) {
-	plar := puppetutil.PuppetLastApplyRequest{}
+func hecklerLastApply(rc rizzopb.RizzoClient, c chan<- rizzopb.PuppetReport) {
+	plar := rizzopb.PuppetLastApplyRequest{}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	r, err := rc.PuppetLastApply(ctx, &plar)
 	if err != nil {
-		c <- puppetutil.PuppetReport{}
+		c <- rizzopb.PuppetReport{}
 		return
 	}
 	c <- *r
@@ -883,7 +883,7 @@ func hecklerLastApply(rc puppetutil.RizzoClient, c chan<- puppetutil.PuppetRepor
 func nodeLastApply(nodes map[string]*Node, repo *git.Repository) error {
 	var err error
 
-	puppetReportChan := make(chan puppetutil.PuppetReport)
+	puppetReportChan := make(chan rizzopb.PuppetReport)
 	for _, node := range nodes {
 		go hecklerLastApply(node.rizzoClient, puppetReportChan)
 	}
