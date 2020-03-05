@@ -165,12 +165,19 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 	// ancestor in the topology.
 	rv.Sorting(git.SortTopological | git.SortReverse)
 
-	// XXX only tags???
-	err = rv.PushRef("refs/tags/" + endRev)
+	endObj, err := repo.RevparseSingle(endRev)
 	if err != nil {
 		return nil, nil, err
 	}
-	err = rv.HideRef("refs/tags/" + beginRev)
+	err = rv.Push(endObj.Id())
+	if err != nil {
+		return nil, nil, err
+	}
+	beginObj, err := repo.RevparseSingle(beginRev)
+	if err != nil {
+		return nil, nil, err
+	}
+	err = rv.Hide(beginObj.Id())
 	if err != nil {
 		return nil, nil, err
 	}
