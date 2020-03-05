@@ -28,11 +28,12 @@ message HecklerStatusReport {
 }
 
 message HecklerNoopRangeRequest {
-  string begin_rev = 1;
-  string end_rev = 2;
-  string github_milestone = 3;
-  Output_format output_format = 4;
-  repeated string nodes = 5;
+  string user = 1;
+  string begin_rev = 2;
+  string end_rev = 3;
+  string github_milestone = 4;
+  Output_format output_format = 5;
+  repeated string nodes = 6;
 }
 
 message HecklerNoopRangeReport {
@@ -41,10 +42,11 @@ message HecklerNoopRangeReport {
 }
 
 message HecklerApplyRequest {
-  string rev = 1;
-  bool noop = 2;
-  Output_format output_format = 3;
-  repeated string nodes = 4;
+  string user = 1;
+  string rev = 2;
+  bool noop = 3;
+  Output_format output_format = 4;
+  repeated string nodes = 5;
 }
 
 message HecklerApplyReport {

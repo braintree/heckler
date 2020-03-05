@@ -80,6 +80,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	curUserInf, err := luser.Current()
+	if err != nil {
+		panic(err)
+	}
+
 	hecklerdConn, err := grpc.Dial("localhost:50052", grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		// XXX support running heckler client remotely
@@ -90,12 +95,8 @@ func main() {
 	defer cancel()
 
 	if lock {
-		userInf, err := luser.Current()
-		if err != nil {
-			panic(err)
-		}
 		req := hecklerpb.HecklerLockRequest{
-			User:    userInf.Username,
+			User:    curUserInf.Username,
 			Comment: "Locked by Heckler",
 			Force:   force,
 			Nodes:   hosts,
@@ -114,16 +115,11 @@ func main() {
 	}
 
 	if unlock {
-		userInf, err := luser.Current()
-		if err != nil {
-			panic(err)
-		}
 		req := hecklerpb.HecklerUnlockRequest{
-			User:  userInf.Username,
+			User:  curUserInf.Username,
 			Force: force,
 			Nodes: hosts,
 		}
-		log.Printf("User: %s", userInf.Username)
 		rprt, err := hc.HecklerUnlock(ctx, &req)
 		if err != nil {
 			log.Fatalf("Unable to unlock nodes: %v", err)
@@ -154,6 +150,7 @@ func main() {
 
 	if rev != "" {
 		har := hecklerpb.HecklerApplyRequest{
+			User:  curUserInf.Username,
 			Rev:   rev,
 			Noop:  noop,
 			Nodes: hosts,
@@ -173,6 +170,7 @@ func main() {
 
 	if beginRev != "" && endRev != "" {
 		hnr := hecklerpb.HecklerNoopRangeRequest{
+			User:     curUserInf.Username,
 			BeginRev: beginRev,
 			EndRev:   endRev,
 			Nodes:    hosts,

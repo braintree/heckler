@@ -580,13 +580,22 @@ func parseTemplates() *template.Template {
 
 func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.HecklerApplyRequest) (*hecklerpb.HecklerApplyReport, error) {
 	nodes, errNodes := dialNodes(ctx, req.Nodes)
+	lockReq := hecklerpb.HecklerLockRequest{
+		User:    req.User,
+		Comment: "Applying with Heckler",
+	}
+	lockedNodes, errLockNodes := nodeLock(&lockReq, nodes)
+	unlockReq := hecklerpb.HecklerUnlockRequest{
+		User: req.User,
+	}
+	defer nodeUnlock(&unlockReq, lockedNodes)
 	par := rizzopb.PuppetApplyRequest{Rev: req.Rev, Noop: req.Noop}
 	puppetReportChan := make(chan rizzopb.PuppetReport)
-	for _, node := range nodes {
+	for _, node := range lockedNodes {
 		go hecklerApply(node.rizzoClient, puppetReportChan, par)
 	}
 
-	for range nodes {
+	for range lockedNodes {
 		r := <-puppetReportChan
 		if cmp.Equal(r, rizzopb.PuppetReport{}) {
 			log.Fatalf("Received an empty report")
@@ -605,12 +614,24 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 	for host, err := range errNodes {
 		har.NodeErrors[host] = err.Error()
 	}
+	for host, err := range errLockNodes {
+		har.NodeErrors[host] = err.Error()
+	}
 	return har, nil
 }
 
 func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.HecklerNoopRangeRequest) (*hecklerpb.HecklerNoopRangeReport, error) {
 	nodes, errNodes := dialNodes(ctx, req.Nodes)
-	err := nodeLastApply(nodes, hs.repo)
+	lockReq := hecklerpb.HecklerLockRequest{
+		User:    req.User,
+		Comment: "Nooping with Heckler",
+	}
+	lockedNodes, errLockNodes := nodeLock(&lockReq, nodes)
+	unlockReq := hecklerpb.HecklerUnlockRequest{
+		User: req.User,
+	}
+	defer nodeUnlock(&unlockReq, lockedNodes)
+	err := nodeLastApply(lockedNodes, hs.repo)
 	if err != nil {
 		return nil, err
 	}
@@ -618,7 +639,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	if err != nil {
 		return nil, err
 	}
-	groupedCommits, err := noopCommitRange(nodes, req.BeginRev, req.EndRev, commitLogIds, commits, hs.repo)
+	groupedCommits, err := noopCommitRange(lockedNodes, req.BeginRev, req.EndRev, commitLogIds, commits, hs.repo)
 	if err != nil {
 		return nil, err
 	}
@@ -631,6 +652,9 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	}
 	hnrr.NodeErrors = make(map[string]string)
 	for host, err := range errNodes {
+		hnrr.NodeErrors[host] = err.Error()
+	}
+	for host, err := range errLockNodes {
 		hnrr.NodeErrors[host] = err.Error()
 	}
 	return hnrr, nil
