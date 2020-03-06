@@ -12,18 +12,18 @@ Architecture: any
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Built-Using: ${misc:Built-Using},
-Description: Puppet noop review automater
+Description: Heckler daemon for applying and aggregating noops
 
 Package: heckler
 Architecture: any
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Built-Using: ${misc:Built-Using},
-Description: Puppet noop review automater client
+Description: Heckler control client for talking to hecklerd
 
 Package: rizzo
 Architecture: any
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Built-Using: ${misc:Built-Using},
-Description: Heckler node client for applying Puppet
+Description: Heckler node daemon for responding to requests from hecklerd
