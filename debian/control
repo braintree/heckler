@@ -7,12 +7,19 @@ Standards-Version: 4.1.3
 Homepage: https://github.braintreeps.com/lollipopman/heckler
 XS-Go-Import-Path: github.braintreeps.com/lollipopman/heckler
 
-Package: heckler
+Package: hecklerd
 Architecture: any
 Depends: ${misc:Depends},
          ${shlibs:Depends},
 Built-Using: ${misc:Built-Using},
 Description: Puppet noop review automater
+
+Package: heckler
+Architecture: any
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Built-Using: ${misc:Built-Using},
+Description: Puppet noop review automater client
 
 Package: rizzo
 Architecture: any

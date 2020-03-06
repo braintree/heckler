@@ -1,4 +1,1 @@
-/usr/bin/hecklerd
 /usr/bin/heckler
-groupedResource.tmpl /usr/share/heckler/templates/
-commit.tmpl /usr/share/heckler/templates/
