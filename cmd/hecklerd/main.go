@@ -34,6 +34,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var Version string
+
 const GitHubEnterpriseURL = "https://github.braintreeps.com/api/v3"
 
 const (
@@ -1003,10 +1005,17 @@ func main() {
 	var file *os.File
 	var data []byte
 	var clearState bool
+	var printVersion bool
 	templates := parseTemplates()
 
 	flag.BoolVar(&clearState, "clear", false, "Clear local state, e.g. puppet code repo")
+	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.Parse()
+
+	if printVersion {
+		fmt.Printf("v%s\n", Version)
+		os.Exit(0)
+	}
 
 	if _, err := os.Stat("/etc/heckler/hecklerd_conf.yaml"); err == nil {
 		hecklerdConfPath = "/etc/heckler/hecklerd_conf.yaml"

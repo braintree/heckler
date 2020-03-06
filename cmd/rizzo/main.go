@@ -23,6 +23,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+var Version string
+
 const (
 	port     = ":50051"
 	stateDir = "/var/lib/rizzo"
@@ -297,9 +299,16 @@ func main() {
 	var data []byte
 	var rizzoConf *RizzoConf
 	var clearState bool
+	var printVersion bool
 
 	flag.BoolVar(&clearState, "clear", false, "Clear local state, e.g. puppet code repo")
+	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.Parse()
+
+	if printVersion {
+		fmt.Printf("v%s\n", Version)
+		os.Exit(0)
+	}
 
 	if _, err := os.Stat("/etc/rizzo/rizzo_conf.yaml"); err == nil {
 		rizzoConfPath = "/etc/rizzo/rizzo_conf.yaml"
