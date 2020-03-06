@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 
@@ -16,24 +18,51 @@ import (
 
 var Version string
 
-type hostFlags []string
+type nodeFlag []string
 
-func (i *hostFlags) String() string {
+func (i *nodeFlag) String() string {
 	return fmt.Sprint(*i)
 }
 
-func (i *hostFlags) Set(value string) error {
+func (i *nodeFlag) Set(value string) error {
 	*i = append(*i, value)
 	return nil
+}
+
+func readNodeFile(nodeFile string) ([]string, error) {
+	var nodes []string
+	var err error
+	var file *os.File
+
+	if nodeFile == "-" {
+		file = os.Stdin
+	} else {
+		file, err = os.Open(nodeFile)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+	}
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal([]byte(data), &nodes)
+	if err != nil {
+		return nil, err
+	}
+	return nodes, nil
 }
 
 func main() {
 	// add filename and linenumber to log output
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	var hosts hostFlags
+	var nodeFlags nodeFlag
+	var nodes []string
 	var beginRev string
 	var endRev string
 	var rev string
+	var nodeFile string
 	var noop bool
 	var lock bool
 	var unlock bool
@@ -43,10 +72,11 @@ func main() {
 	var markdownOut bool
 	var githubMilestone string
 
-	flag.Var(&hosts, "node", "node hostnames to group")
+	flag.Var(&nodeFlags, "node", "node hostnames to group")
 	flag.StringVar(&beginRev, "beginrev", "", "begin rev")
 	flag.StringVar(&endRev, "endrev", "", "end rev")
 	flag.StringVar(&rev, "rev", "", "rev to apply or noop")
+	flag.StringVar(&nodeFile, "file", "", "file with json array of nodes, use - to read from stdin")
 	flag.BoolVar(&status, "status", false, "Query node apply status")
 	flag.BoolVar(&noop, "noop", false, "noop")
 	flag.BoolVar(&lock, "lock", false, "lock nodes")
@@ -74,10 +104,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	if len(hosts) == 0 {
+	if len(nodeFlags) == 0 && nodeFile == "" {
 		fmt.Printf("ERROR: You must supply one or more nodes\n")
 		flag.Usage()
 		os.Exit(1)
+	}
+
+	var err error
+	if nodeFile != "" {
+		nodes, err = readNodeFile(nodeFile)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		nodes = make([]string, len(nodeFlags))
+		copy(nodes, nodeFlags)
 	}
 
 	curUserInf, err := luser.Current()
@@ -99,7 +140,7 @@ func main() {
 			User:    curUserInf.Username,
 			Comment: "Locked by Heckler",
 			Force:   force,
-			Nodes:   hosts,
+			Nodes:   nodes,
 		}
 		rprt, err := hc.HecklerLock(ctx, &req)
 		if err != nil {
@@ -118,7 +159,7 @@ func main() {
 		req := hecklerpb.HecklerUnlockRequest{
 			User:  curUserInf.Username,
 			Force: force,
-			Nodes: hosts,
+			Nodes: nodes,
 		}
 		rprt, err := hc.HecklerUnlock(ctx, &req)
 		if err != nil {
@@ -134,7 +175,7 @@ func main() {
 	}
 
 	if status {
-		hsr := hecklerpb.HecklerStatusRequest{Nodes: hosts}
+		hsr := hecklerpb.HecklerStatusRequest{Nodes: nodes}
 		rprt, err := hc.HecklerStatus(ctx, &hsr)
 		if err != nil {
 			log.Fatalf("Unable to retreive heckler statuses: %v", err)
@@ -153,7 +194,7 @@ func main() {
 			User:  curUserInf.Username,
 			Rev:   rev,
 			Noop:  noop,
-			Nodes: hosts,
+			Nodes: nodes,
 		}
 		rprt, err := hc.HecklerApply(ctx, &har)
 		if err != nil {
@@ -173,7 +214,7 @@ func main() {
 			User:     curUserInf.Username,
 			BeginRev: beginRev,
 			EndRev:   endRev,
-			Nodes:    hosts,
+			Nodes:    nodes,
 		}
 		if githubMilestone != "" {
 			hnr.GithubMilestone = githubMilestone
