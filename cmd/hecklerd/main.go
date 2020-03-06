@@ -674,12 +674,12 @@ func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits
 	tr := http.DefaultTransport
 
 	var privateKeyPath string
-	if _, err := os.Stat("/etc/heckler/github-private-key.pem"); err == nil {
-		privateKeyPath = "/etc/heckler/github-private-key.pem"
+	if _, err := os.Stat("/etc/hecklerd/github-private-key.pem"); err == nil {
+		privateKeyPath = "/etc/hecklerd/github-private-key.pem"
 	} else if _, err := os.Stat("github-private-key.pem"); err == nil {
 		privateKeyPath = "github-private-key.pem"
 	} else {
-		log.Fatal("Unable to load github-private-key.pem in /etc/heckler or .")
+		log.Fatal("Unable to load github-private-key.pem in /etc/hecklerd or .")
 	}
 	// Wrap the shared transport for use with the app ID 7 authenticating with
 	// installation ID 11.
@@ -951,12 +951,12 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 
 	// XXX dedup with heckler
 	var privateKeyPath string
-	if _, err := os.Stat("/etc/heckler/github-private-key.pem"); err == nil {
-		privateKeyPath = "/etc/heckler/github-private-key.pem"
+	if _, err := os.Stat("/etc/hecklerd/github-private-key.pem"); err == nil {
+		privateKeyPath = "/etc/hecklerd/github-private-key.pem"
 	} else if _, err := os.Stat("github-private-key.pem"); err == nil {
 		privateKeyPath = "github-private-key.pem"
 	} else {
-		log.Fatal("Unable to load github-private-key.pem in /etc/heckler or .")
+		log.Fatal("Unable to load github-private-key.pem in /etc/hecklerd or .")
 	}
 	// Wrap the shared transport for use with the app ID 7 authenticating with
 	// installation ID 11.
@@ -1017,12 +1017,12 @@ func main() {
 		os.Exit(0)
 	}
 
-	if _, err := os.Stat("/etc/heckler/hecklerd_conf.yaml"); err == nil {
-		hecklerdConfPath = "/etc/heckler/hecklerd_conf.yaml"
+	if _, err := os.Stat("/etc/hecklerd/hecklerd_conf.yaml"); err == nil {
+		hecklerdConfPath = "/etc/hecklerd/hecklerd_conf.yaml"
 	} else if _, err := os.Stat("hecklerd_conf.yaml"); err == nil {
 		hecklerdConfPath = "hecklerd_conf.yaml"
 	} else {
-		log.Fatal("Unable to load hecklerd_conf.yaml from /etc/heckler or .")
+		log.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
 	}
 	file, err = os.Open(hecklerdConfPath)
 	if err != nil {
