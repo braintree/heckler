@@ -579,8 +579,8 @@ func hecklerApply(rc rizzopb.RizzoClient, c chan<- rizzopb.PuppetReport, par riz
 
 func parseTemplates() *template.Template {
 	var templatesPath string
-	if _, err := os.Stat("/usr/share/heckler/templates"); err == nil {
-		templatesPath = "/usr/share/heckler/templates" + "/*.tmpl"
+	if _, err := os.Stat("/usr/share/hecklerd/templates"); err == nil {
+		templatesPath = "/usr/share/hecklerd/templates" + "/*.tmpl"
 	} else {
 		templatesPath = "*.tmpl"
 	}
