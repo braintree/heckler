@@ -36,8 +36,6 @@ import (
 
 var Version string
 
-const GitHubEnterpriseURL = "https://github.braintreeps.com/api/v3"
-
 const (
 	ApplicationName = "git-cgi-server"
 
@@ -49,6 +47,14 @@ const (
 
 var Debug = false
 var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
+
+type HecklerdConf struct {
+	PuppetCodeGitURL     string `yaml:"puppet_code_git_url"`
+	GitHubEnterpriseURL  string `yaml:"github_enterprise_url"`
+	GitHubPrivateKeyPath string `yaml:"github_private_key_path"`
+	GitHubAppId          int64  `yaml:"github_app_id"`
+	GitHubAppInstallId   int64  `yaml:"github_app_install_id"`
+}
 
 // hecklerServer is used to implement heckler.HecklerServer
 type hecklerServer struct {
@@ -653,7 +659,11 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 		return nil, err
 	}
 	if req.GithubMilestone != "" {
-		githubCreate(req.GithubMilestone, commitLogIds, groupedCommits, commits, hs.templates)
+		ghclient, _, err := githubConn(hs.conf)
+		if err != nil {
+			return nil, err
+		}
+		githubCreate(ghclient, req.GithubMilestone, commitLogIds, groupedCommits, commits, hs.templates)
 	}
 	hnrr := new(hecklerpb.HecklerNoopRangeReport)
 	if req.OutputFormat == hecklerpb.OutputFormat_markdown {
@@ -669,36 +679,50 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	return hnrr, nil
 }
 
-func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit, templates *template.Template) {
+func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, error) {
+	var privateKey []byte
+	var file *os.File
+	var err error
+
 	// Shared transport to reuse TCP connections.
 	tr := http.DefaultTransport
 
-	var privateKeyPath string
-	if _, err := os.Stat("/etc/hecklerd/github-private-key.pem"); err == nil {
-		privateKeyPath = "/etc/hecklerd/github-private-key.pem"
+	if conf.GitHubPrivateKeyPath != "" {
+		file, err = os.Open(conf.GitHubPrivateKeyPath)
+		if err != nil {
+			return nil, nil, err
+		}
+		privateKey, err = ioutil.ReadAll(file)
 	} else if _, err := os.Stat("github-private-key.pem"); err == nil {
-		privateKeyPath = "github-private-key.pem"
+		file, err = os.Open("github-private-key.pem")
+		if err != nil {
+			return nil, nil, err
+		}
+		privateKey, err = ioutil.ReadAll(file)
 	} else {
-		log.Fatal("Unable to load github-private-key.pem in /etc/hecklerd or .")
+		return nil, nil, errors.New("Unable to load github-private-key.pem in /etc/hecklerd or .")
 	}
-	// Wrap the shared transport for use with the app ID 7 authenticating with
-	// installation ID 11.
-	itr, err := ghinstallation.NewKeyFromFile(tr, 7, 11, privateKeyPath)
+	defer file.Close()
+	itr, err := ghinstallation.New(tr, conf.GitHubAppId, conf.GitHubAppInstallId, privateKey)
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, err
 	}
-	itr.BaseURL = GitHubEnterpriseURL
+	itr.BaseURL = conf.GitHubEnterpriseURL
 
 	// Use installation transport with github.com/google/go-github
-	client, err := github.NewEnterpriseClient(GitHubEnterpriseURL, GitHubEnterpriseURL, &http.Client{Transport: itr})
+	client, err := github.NewEnterpriseClient(conf.GitHubEnterpriseURL, conf.GitHubEnterpriseURL, &http.Client{Transport: itr})
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, err
 	}
+	return client, itr, nil
+}
+
+func githubCreate(ghclient *github.Client, githubMilestone string, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit, templates *template.Template) {
 	ctx := context.Background()
 	m := &github.Milestone{
 		Title: github.String(githubMilestone),
 	}
-	nm, _, err := client.Issues.CreateMilestone(ctx, "lollipopman", "muppetshow", m)
+	nm, _, err := ghclient.Issues.CreateMilestone(ctx, "lollipopman", "muppetshow", m)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -715,7 +739,7 @@ func githubCreate(githubMilestone string, commitLogIds []git.Oid, groupedCommits
 			Body:      github.String(commitToMarkdown(commits[gi], templates) + groupedResourcesToMarkdown(groupedCommits[gi], templates)),
 			Milestone: nm.Number,
 		}
-		ni, _, err := client.Issues.Create(ctx, "lollipopman", "muppetshow", githubIssue)
+		ni, _, err := ghclient.Issues.Create(ctx, "lollipopman", "muppetshow", githubIssue)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -945,29 +969,7 @@ func nodeLastApply(nodes map[string]*Node, repo *git.Repository) error {
 }
 
 func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
-
-	// Shared transport to reuse TCP connections.
-	tr := http.DefaultTransport
-
-	// XXX dedup with heckler
-	var privateKeyPath string
-	if _, err := os.Stat("/etc/hecklerd/github-private-key.pem"); err == nil {
-		privateKeyPath = "/etc/hecklerd/github-private-key.pem"
-	} else if _, err := os.Stat("github-private-key.pem"); err == nil {
-		privateKeyPath = "github-private-key.pem"
-	} else {
-		log.Fatal("Unable to load github-private-key.pem in /etc/hecklerd or .")
-	}
-	// Wrap the shared transport for use with the app ID 7 authenticating with
-	// installation ID 11.
-	itr, err := ghinstallation.NewKeyFromFile(tr, 7, 11, privateKeyPath)
-	if err != nil {
-		return nil, err
-	}
-	itr.BaseURL = GitHubEnterpriseURL
-
-	// Use installation transport with github.com/google/go-github
-	_, err = github.NewEnterpriseClient(GitHubEnterpriseURL, GitHubEnterpriseURL, &http.Client{Transport: itr})
+	_, itr, err := githubConn(conf)
 	if err != nil {
 		return nil, err
 	}
@@ -990,10 +992,6 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 		return nil, err
 	}
 	return bareRepo, nil
-}
-
-type HecklerdConf struct {
-	PuppetCodeGitURL string `yaml:"puppet_code_git_url"`
 }
 
 func main() {
