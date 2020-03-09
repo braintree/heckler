@@ -49,8 +49,9 @@ var Debug = false
 var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 
 type HecklerdConf struct {
-	PuppetCodeGitURL     string `yaml:"puppet_code_git_url"`
-	GitHubEnterpriseURL  string `yaml:"github_enterprise_url"`
+	Repo                 string `yaml:"repo"`
+	RepoOwner            string `yaml:"repo_owner"`
+	GitHubDomain         string `yaml:"github_domain"`
 	GitHubPrivateKeyPath string `yaml:"github_private_key_path"`
 	GitHubAppId          int64  `yaml:"github_app_id"`
 	GitHubAppInstallId   int64  `yaml:"github_app_install_id"`
@@ -663,7 +664,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 		if err != nil {
 			return nil, err
 		}
-		githubCreate(ghclient, req.GithubMilestone, commitLogIds, groupedCommits, commits, hs.templates)
+		githubCreate(ghclient, req.GithubMilestone, hs.conf.RepoOwner, hs.conf.Repo, commitLogIds, groupedCommits, commits, hs.templates)
 	}
 	hnrr := new(hecklerpb.HecklerNoopRangeReport)
 	if req.OutputFormat == hecklerpb.OutputFormat_markdown {
@@ -707,22 +708,23 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 	if err != nil {
 		return nil, nil, err
 	}
-	itr.BaseURL = conf.GitHubEnterpriseURL
+	githubUrl := "https://" + conf.GitHubDomain + "/api/v3"
+	itr.BaseURL = githubUrl
 
 	// Use installation transport with github.com/google/go-github
-	client, err := github.NewEnterpriseClient(conf.GitHubEnterpriseURL, conf.GitHubEnterpriseURL, &http.Client{Transport: itr})
+	client, err := github.NewEnterpriseClient(githubUrl, githubUrl, &http.Client{Transport: itr})
 	if err != nil {
 		return nil, nil, err
 	}
 	return client, itr, nil
 }
 
-func githubCreate(ghclient *github.Client, githubMilestone string, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit, templates *template.Template) {
+func githubCreate(ghclient *github.Client, repoOwner string, repo string, githubMilestone string, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit, templates *template.Template) {
 	ctx := context.Background()
 	m := &github.Milestone{
 		Title: github.String(githubMilestone),
 	}
-	nm, _, err := ghclient.Issues.CreateMilestone(ctx, "lollipopman", "muppetshow", m)
+	nm, _, err := ghclient.Issues.CreateMilestone(ctx, repoOwner, repo, m)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -739,7 +741,7 @@ func githubCreate(ghclient *github.Client, githubMilestone string, commitLogIds 
 			Body:      github.String(commitToMarkdown(commits[gi], templates) + groupedResourcesToMarkdown(groupedCommits[gi], templates)),
 			Milestone: nm.Number,
 		}
-		ni, _, err := ghclient.Issues.Create(ctx, "lollipopman", "muppetshow", githubIssue)
+		ni, _, err := ghclient.Issues.Create(ctx, repoOwner, repo, githubIssue)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -982,7 +984,7 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 	cloneDir := stateDir + "/served_repo/puppetcode"
 	cloneOptions := &git.CloneOptions{}
 	cloneOptions.Bare = true
-	remoteUrl := fmt.Sprintf("https://x-access-token:%s@"+conf.PuppetCodeGitURL, tok)
+	remoteUrl := fmt.Sprintf("https://x-access-token:%s@%s/%s/%s", tok, conf.GitHubDomain, conf.RepoOwner, conf.Repo)
 	bareRepo, err := gitutil.CloneOrOpen(remoteUrl, cloneDir, cloneOptions)
 	if err != nil {
 		return nil, err
