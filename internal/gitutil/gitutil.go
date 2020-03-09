@@ -126,7 +126,7 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 		return err
 	}
 
-	log.Println("Success")
+	log.Println("FastForward Complete")
 	return nil
 }
 
