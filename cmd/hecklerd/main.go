@@ -70,7 +70,7 @@ type Node struct {
 	commitReports        map[git.Oid]*rizzopb.PuppetReport
 	commitDeltaResources map[git.Oid]map[ResourceTitle]*deltaResource
 	rizzoClient          rizzopb.RizzoClient
-	lastApply            *git.Oid
+	lastApply            git.Oid
 }
 
 type nodeResult struct {
@@ -108,12 +108,24 @@ type groupLog struct {
 
 type ResourceTitle string
 
-func commitParentReports(commit *git.Commit, commitReports map[git.Oid]*rizzopb.PuppetReport) []*rizzopb.PuppetReport {
+func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map[git.Oid]*rizzopb.PuppetReport, repo *git.Repository) []*rizzopb.PuppetReport {
 	var parentReports []*rizzopb.PuppetReport
+	var parentReport *rizzopb.PuppetReport
 
 	parentCount := commit.ParentCount()
 	for i := uint(0); i < parentCount; i++ {
-		parentReports = append(parentReports, commitReports[*commit.ParentId(i)])
+		// perma-diff: If our parent is already applied we substitute the lastApply
+		// noop so that we can subtract away any perma-diffs from the noop
+		if commitAlreadyApplied(lastApply, *commit.ParentId(i), repo) {
+			parentReport = commitReports[lastApply]
+		} else {
+			parentReport = commitReports[*commit.ParentId(i)]
+		}
+		if parentReport != nil {
+			parentReports = append(parentReports, commitReports[*commit.ParentId(i)])
+		} else {
+			log.Fatalf("Parent report not found %s", commit.ParentId(i).String())
+		}
 	}
 	return parentReports
 }
@@ -207,10 +219,68 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 	return commitLogIds, commits, nil
 }
 
+func loadNoop(commit git.Oid, node *Node, revdir string, repo *git.Repository) (*rizzopb.PuppetReport, error) {
+	// perma-diff: Substitute an empty puppet noop report if the commit is
+	// already applied, however for the lastApplied commit we do want to use the
+	// noop report so we can use the noop diff to subtract away perma-diffs from
+	// children.
+	descendant, err := repo.DescendantOf(&node.lastApply, &commit)
+	if err != nil {
+		log.Fatalf("Cannot determine descendant status: %v", err)
+	}
+	if descendant {
+		log.Printf("Commit already applied, substituting an empty noop: %s@%s", node.host, commit.String())
+		return new(rizzopb.PuppetReport), nil
+	}
+
+	reportPath := revdir + "/" + node.host + "/" + commit.String() + ".json"
+	if _, err := os.Stat(reportPath); err != nil {
+		return nil, err
+	} else {
+		file, err := os.Open(reportPath)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+
+		data, err := ioutil.ReadAll(file)
+		if err != nil {
+			return nil, err
+		}
+		rprt := new(rizzopb.PuppetReport)
+		err = json.Unmarshal([]byte(data), rprt)
+		if err != nil {
+			return nil, err
+		}
+		if node.host != rprt.Host {
+			return nil, errors.New(fmt.Sprintf("Host mismatch %s != %s", node.host, rprt.Host))
+		}
+		log.Printf("Found serialized noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
+		return rprt, nil
+	}
+}
+func normalizeReport(rprt rizzopb.PuppetReport) rizzopb.PuppetReport {
+	rprt.Logs = normalizeLogs(rprt.Logs)
+	return rprt
+}
+
+func marshalReport(rprt rizzopb.PuppetReport, revdir string, commit git.Oid) error {
+	reportPath := revdir + "/" + rprt.Host + "/" + commit.String() + ".json"
+	data, err := json.Marshal(rprt)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(reportPath, data, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, repo *git.Repository) (map[git.Oid][]*groupedResource, error) {
 	var err error
-	var data []byte
 	puppetReportChan := make(chan rizzopb.PuppetReport)
+	var commitsToNoop []git.Oid
 
 	revdir := fmt.Sprintf(stateDir+"/noops/%s..%s", beginRev, endRev)
 
@@ -229,78 +299,68 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 	}
 
 	var noopRequests int
-	var reportPath string
-	var file *os.File
 	var rprt *rizzopb.PuppetReport
 
-	for i, commitLogId := range commitLogIds {
-		log.Printf("Nooping: %s (%d of %d)", commitLogId.String(), i, len(commitLogIds))
-		par := rizzopb.PuppetApplyRequest{Rev: commitLogId.String(), Noop: true}
-		noopRequests = 0
-		for host, node := range nodes {
-			if node.lastApply == nil {
-				log.Fatalf("Node, %s, does not have a lastApply commit id", node.host)
-			}
-			reportPath = revdir + "/" + host + "/" + commitLogId.String() + ".json"
-			if commitAlreadyApplied(node.lastApply, &commitLogId, repo) {
-				// Use empty report if commit already applied, i.e. empty puppet noop diff
-				log.Printf("Already applied using empty noop: %s@%s", node.host, commitLogId.String())
-				nodes[node.host].commitReports[commitLogId] = new(rizzopb.PuppetReport)
-			} else {
-				if _, err := os.Stat(reportPath); err == nil {
-					file, err = os.Open(reportPath)
-					if err != nil {
-						log.Fatal(err)
-					}
-					defer file.Close()
+	beginObj, err := repo.RevparseSingle(beginRev)
+	if err != nil {
+		return nil, err
+	}
+	beginCommit := *beginObj.Id()
 
-					data, err = ioutil.ReadAll(file)
-					if err != nil {
-						log.Fatalf("cannot read report: %v", err)
-					}
-					rprt = new(rizzopb.PuppetReport)
-					err = json.Unmarshal([]byte(data), rprt)
-					if err != nil {
-						log.Fatalf("cannot unmarshal report: %v", err)
-					}
-					if host != rprt.Host {
-						log.Fatalf("Host mismatch %s != %s", host, rprt.Host)
-					}
-					log.Printf("Found serialized noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
-					nodes[rprt.Host].commitReports[commitLogId] = rprt
-				} else {
-					go hecklerApply(node.rizzoClient, puppetReportChan, par)
-					noopRequests++
-				}
+	commitsToNoop = make([]git.Oid, len(commitLogIds))
+	copy(commitsToNoop, commitLogIds)
+	commitsToNoop = append(commitsToNoop, beginCommit)
+
+	for i, commitToNoop := range commitsToNoop {
+		log.Printf("Nooping: %s (%d of %d)", commitToNoop.String(), i, len(commitsToNoop))
+		par := rizzopb.PuppetApplyRequest{Rev: commitToNoop.String(), Noop: true}
+		noopRequests = 0
+		for _, node := range nodes {
+			// perma-diff: We need a noop report of the lastApply so we can use it to
+			// subtract away perma-diffs from children. Typically the lastApply is
+			// the beginRev, but if someone has applied a newer commit on the host we
+			// need to use the noop from the lastApplied commit.
+			if commitToNoop == beginCommit {
+				commitToNoop = node.lastApply
+			}
+			if rprt, err = loadNoop(commitToNoop, node, revdir, repo); err == nil {
+				nodes[node.host].commitReports[commitToNoop] = rprt
+			} else if os.IsNotExist(err) {
+				go hecklerApply(node.rizzoClient, puppetReportChan, par)
+				noopRequests++
+			} else {
+				log.Fatalf("Unable to load noop: %v", err)
 			}
 		}
 
 		for j := 0; j < noopRequests; j++ {
-			rprt := <-puppetReportChan
-			log.Printf("Received noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
-			nodes[rprt.Host].commitReports[commitLogId] = &rprt
-			nodes[rprt.Host].commitReports[commitLogId].Logs = normalizeLogs(nodes[rprt.Host].commitReports[commitLogId].Logs)
-
-			reportPath = revdir + "/" + rprt.Host + "/" + commitLogId.String() + ".json"
-			data, err = json.Marshal(rprt)
+			newRprt := normalizeReport(<-puppetReportChan)
+			log.Printf("Received noop: %s@%s", newRprt.Host, newRprt.ConfigurationVersion)
+			commitId, err := git.NewOid(newRprt.ConfigurationVersion)
 			if err != nil {
-				log.Fatalf("Cannot marshal report: %v", err)
+				log.Fatalf("Unable to marshal report: %v", err)
 			}
-			err = ioutil.WriteFile(reportPath, data, 0644)
+			nodes[newRprt.Host].commitReports[*commitId] = &newRprt
+			err = marshalReport(newRprt, revdir, *commitId)
 			if err != nil {
-				log.Fatalf("Cannot write report: %v", err)
+				log.Fatalf("Unable to marshal report: %v", err)
 			}
-
 		}
 	}
 
 	for host, node := range nodes {
-		for i, gi := range commitLogIds {
-			if i == 0 {
-				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], []*rizzopb.PuppetReport{new(rizzopb.PuppetReport)})
+		for _, gi := range commitLogIds {
+			log.Printf("Creating delta resource: %s@%s", host, gi.String())
+			// perma-diff: If the commit is already applied we can assume that the
+			// diff is empty. Ideally we would not need this special case as the noop
+			// for an already applied commit should be empty, but we purposefully use
+			// the noop of the lastApply to subtract away perma-diffs, so those would
+			// show up without this special case. TODO: Assign perma-diffs to server
+			// owners?
+			if commitAlreadyApplied(node.lastApply, gi, repo) {
+				node.commitDeltaResources[gi] = make(map[ResourceTitle]*deltaResource)
 			} else {
-				log.Printf("Creating delta resource: %s@%s", host, gi.String())
-				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], commitParentReports(commits[gi], node.commitReports))
+				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], commitParentReports(*commits[gi], node.lastApply, node.commitReports, repo))
 			}
 		}
 	}
@@ -390,13 +450,13 @@ func deltaNoop(commitNoop *rizzopb.PuppetReport, priorCommitNoops []*rizzopb.Pup
 }
 
 // Determine if a commit is already applied based on the last appliedCommit.
-// If the potentialCommit is an ancestor of the appliedCommit then we know the
-// potentialCommit has already been applied.
-func commitAlreadyApplied(appliedCommit *git.Oid, potentialCommit *git.Oid, repo *git.Repository) bool {
-	if appliedCommit.Equal(potentialCommit) {
+// If the potentialCommit is an ancestor of the appliedCommit or equal to the
+// appliedCommit then we know the potentialCommit has already been applied.
+func commitAlreadyApplied(appliedCommit git.Oid, potentialCommit git.Oid, repo *git.Repository) bool {
+	if appliedCommit.Equal(&potentialCommit) {
 		return true
 	}
-	descendant, err := repo.DescendantOf(appliedCommit, potentialCommit)
+	descendant, err := repo.DescendantOf(&appliedCommit, &potentialCommit)
 	if err != nil {
 		log.Fatalf("Cannot determine descendant status: %v", err)
 	}
@@ -961,7 +1021,7 @@ func nodeLastApply(nodes map[string]*Node, repo *git.Repository) error {
 			return err
 		}
 		if node, ok := nodes[r.Host]; ok {
-			node.lastApply = obj.Id()
+			node.lastApply = *obj.Id()
 		} else {
 			log.Fatalf("No Node struct found for report from: %s", r.Host)
 		}
