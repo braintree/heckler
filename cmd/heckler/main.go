@@ -71,20 +71,22 @@ func main() {
 	var printVersion bool
 	var markdownOut bool
 	var githubMilestone string
+	var nodeSet string
 
-	flag.Var(&nodeFlags, "node", "node hostnames to group")
+	flag.BoolVar(&force, "force", false, "force unlock or lock of nodes")
+	flag.BoolVar(&lock, "lock", false, "lock nodes")
+	flag.BoolVar(&markdownOut, "md", false, "Generate markdown output")
+	flag.BoolVar(&noop, "noop", false, "noop")
+	flag.BoolVar(&printVersion, "version", false, "print version")
+	flag.BoolVar(&status, "status", false, "Query node apply status")
+	flag.BoolVar(&unlock, "unlock", false, "unlock nodes")
 	flag.StringVar(&beginRev, "beginrev", "", "begin rev")
 	flag.StringVar(&endRev, "endrev", "", "end rev")
-	flag.StringVar(&rev, "rev", "", "rev to apply or noop")
-	flag.StringVar(&nodeFile, "file", "", "file with json array of nodes, use - to read from stdin")
-	flag.BoolVar(&status, "status", false, "Query node apply status")
-	flag.BoolVar(&noop, "noop", false, "noop")
-	flag.BoolVar(&lock, "lock", false, "lock nodes")
-	flag.BoolVar(&force, "force", false, "force unlock or lock of nodes")
-	flag.BoolVar(&unlock, "unlock", false, "unlock nodes")
-	flag.BoolVar(&markdownOut, "md", false, "Generate markdown output")
 	flag.StringVar(&githubMilestone, "github", "", "Github milestone to create")
-	flag.BoolVar(&printVersion, "version", false, "print version")
+	flag.StringVar(&nodeFile, "file", "", "file with json array of nodes, use - to read from stdin")
+	flag.StringVar(&rev, "rev", "", "rev to apply or noop")
+	flag.StringVar(&nodeSet, "set", "", "node set defined on hecklerd, e.g. 'all'")
+	flag.Var(&nodeFlags, "node", "node hostnames to group, may be repeated")
 	flag.Parse()
 
 	if printVersion {
@@ -104,21 +106,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	if len(nodeFlags) == 0 && nodeFile == "" {
-		fmt.Printf("ERROR: You must supply one or more nodes\n")
+	if len(nodeFlags) != 0 && nodeSet != "" {
+		fmt.Printf("ERROR: flag `-set` cannot be combined with `-node`\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if nodeFile != "" && nodeSet != "" {
+		fmt.Printf("ERROR: flag `-set` cannot be combined with `-file`\n")
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	var err error
 	if nodeFile != "" {
+		nodeSet = ""
 		nodes, err = readNodeFile(nodeFile)
 		if err != nil {
 			panic(err)
 		}
-	} else {
+	} else if len(nodeFlags) != 0 {
+		nodeSet = ""
 		nodes = make([]string, len(nodeFlags))
 		copy(nodes, nodeFlags)
+	} else {
+		nodeSet = "all"
 	}
 
 	curUserInf, err := luser.Current()
@@ -140,6 +152,7 @@ func main() {
 			User:    curUserInf.Username,
 			Comment: "Locked by Heckler",
 			Force:   force,
+			NodeSet: nodeSet,
 			Nodes:   nodes,
 		}
 		rprt, err := hc.HecklerLock(ctx, &req)
@@ -157,9 +170,10 @@ func main() {
 
 	if unlock {
 		req := hecklerpb.HecklerUnlockRequest{
-			User:  curUserInf.Username,
-			Force: force,
-			Nodes: nodes,
+			User:    curUserInf.Username,
+			Force:   force,
+			NodeSet: nodeSet,
+			Nodes:   nodes,
 		}
 		rprt, err := hc.HecklerUnlock(ctx, &req)
 		if err != nil {
@@ -175,7 +189,10 @@ func main() {
 	}
 
 	if status {
-		hsr := hecklerpb.HecklerStatusRequest{Nodes: nodes}
+		hsr := hecklerpb.HecklerStatusRequest{
+			NodeSet: nodeSet,
+			Nodes:   nodes,
+		}
 		rprt, err := hc.HecklerStatus(ctx, &hsr)
 		if err != nil {
 			log.Fatalf("Unable to retreive heckler statuses: %v", err)
@@ -191,10 +208,11 @@ func main() {
 
 	if rev != "" {
 		har := hecklerpb.HecklerApplyRequest{
-			User:  curUserInf.Username,
-			Rev:   rev,
-			Noop:  noop,
-			Nodes: nodes,
+			User:    curUserInf.Username,
+			Rev:     rev,
+			Noop:    noop,
+			NodeSet: nodeSet,
+			Nodes:   nodes,
 		}
 		rprt, err := hc.HecklerApply(ctx, &har)
 		if err != nil {
@@ -214,6 +232,7 @@ func main() {
 			User:     curUserInf.Username,
 			BeginRev: beginRev,
 			EndRev:   endRev,
+			NodeSet:  nodeSet,
 			Nodes:    nodes,
 		}
 		if githubMilestone != "" {

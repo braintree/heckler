@@ -4,3 +4,6 @@ repo_owner: "lollipopman"
 github_domain: "github.braintreeps.com"
 github_app_id: 7
 github_app_install_id: 11
+node_sets:
+  all:
+    cmd: ['jq', '-n', '--arg', 'nodes', 'fozzie.example.com statler.example.com waldorf.example.com', '$nodes | split(" ")']

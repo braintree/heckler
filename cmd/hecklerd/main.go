@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"regexp"
 	"sort"
@@ -49,12 +50,17 @@ var Debug = false
 var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 
 type HecklerdConf struct {
-	Repo                 string `yaml:"repo"`
-	RepoOwner            string `yaml:"repo_owner"`
-	GitHubDomain         string `yaml:"github_domain"`
-	GitHubPrivateKeyPath string `yaml:"github_private_key_path"`
-	GitHubAppId          int64  `yaml:"github_app_id"`
-	GitHubAppInstallId   int64  `yaml:"github_app_install_id"`
+	Repo                 string             `yaml:"repo"`
+	RepoOwner            string             `yaml:"repo_owner"`
+	GitHubDomain         string             `yaml:"github_domain"`
+	GitHubPrivateKeyPath string             `yaml:"github_private_key_path"`
+	GitHubAppId          int64              `yaml:"github_app_id"`
+	GitHubAppInstallId   int64              `yaml:"github_app_install_id"`
+	NodeSets             map[string]NodeSet `yaml:"node_sets"`
+}
+
+type NodeSet struct {
+	Cmd []string `yaml:"cmd"`
 }
 
 // hecklerServer is used to implement heckler.HecklerServer
@@ -654,8 +660,43 @@ func parseTemplates() *template.Template {
 	return template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob(templatesPath))
 }
 
+func reqNodes(conf *HecklerdConf, nodes []string, nodeSetName string) ([]string, error) {
+	if len(nodes) > 0 {
+		return nodes, nil
+	}
+	if nodeSetName == "" {
+		return nil, errors.New("Empty nodeSetName provided")
+	}
+	var cmdArgs []string
+	if nodeSet, ok := conf.NodeSets[nodeSetName]; ok {
+		cmdArgs = nodeSet.Cmd
+	} else {
+		return nil, errors.New(fmt.Sprintf("nodeSetName '%s' not found in hecklerd config", nodeSetName))
+	}
+	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	log.Printf("Executing cmd '%s' for node set '%s'", cmd, nodeSetName)
+	stdout, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(stdout, &nodes)
+	if err != nil {
+		return nil, err
+	}
+	if len(nodes) == 0 {
+		return nil, errors.New(fmt.Sprintf("Cmd '%s' produced zero nodes", cmd))
+	}
+	log.Printf("Cmd for node set '%s' succeeded, node count: %d", nodeSetName, len(nodes))
+	return nodes, nil
+}
+
 func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.HecklerApplyRequest) (*hecklerpb.HecklerApplyReport, error) {
-	nodes, errNodes := dialNodes(ctx, req.Nodes)
+	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet)
+	if err != nil {
+		return nil, err
+	}
+	nodes, errNodes := dialNodes(ctx, nodesToDial)
 	lockReq := hecklerpb.HecklerLockRequest{
 		User:    req.User,
 		Comment: "Applying with Heckler",
@@ -697,7 +738,11 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 }
 
 func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.HecklerNoopRangeRequest) (*hecklerpb.HecklerNoopRangeReport, error) {
-	nodes, errNodes := dialNodes(ctx, req.Nodes)
+	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet)
+	if err != nil {
+		return nil, err
+	}
+	nodes, errNodes := dialNodes(ctx, nodesToDial)
 	lockReq := hecklerpb.HecklerLockRequest{
 		User:    req.User,
 		Comment: "Nooping with Heckler",
@@ -707,7 +752,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 		User: req.User,
 	}
 	defer nodeUnlock(&unlockReq, lockedNodes)
-	err := nodeLastApply(lockedNodes, hs.repo)
+	err = nodeLastApply(lockedNodes, hs.repo)
 	if err != nil {
 		return nil, err
 	}
@@ -857,8 +902,12 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource, templates *
 }
 
 func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.HecklerStatusRequest) (*hecklerpb.HecklerStatusReport, error) {
-	nodes, errNodes := dialNodes(ctx, req.Nodes)
-	err := nodeLastApply(nodes, hs.repo)
+	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet)
+	if err != nil {
+		return nil, err
+	}
+	nodes, errNodes := dialNodes(ctx, nodesToDial)
+	err = nodeLastApply(nodes, hs.repo)
 	if err != nil {
 		return nil, err
 	}
@@ -874,7 +923,11 @@ func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.Heckl
 	return hsr, nil
 }
 func (hs *hecklerServer) HecklerUnlock(ctx context.Context, req *hecklerpb.HecklerUnlockRequest) (*hecklerpb.HecklerUnlockReport, error) {
-	nodes, errNodes := dialNodes(ctx, req.Nodes)
+	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet)
+	if err != nil {
+		return nil, err
+	}
+	nodes, errNodes := dialNodes(ctx, nodesToDial)
 	unlockedNodes, errUnlockNodes := nodeUnlock(req, nodes)
 	res := new(hecklerpb.HecklerUnlockReport)
 	res.UnlockedNodes = make([]string, 0, len(unlockedNodes))
@@ -933,7 +986,11 @@ func hecklerUnlock(host string, rc rizzopb.RizzoClient, req rizzopb.PuppetUnlock
 }
 
 func (hs *hecklerServer) HecklerLock(ctx context.Context, req *hecklerpb.HecklerLockRequest) (*hecklerpb.HecklerLockReport, error) {
-	nodes, errNodes := dialNodes(ctx, req.Nodes)
+	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet)
+	if err != nil {
+		return nil, err
+	}
+	nodes, errNodes := dialNodes(ctx, nodesToDial)
 	lockedNodes, errLockNodes := nodeLock(req, nodes)
 	res := new(hecklerpb.HecklerLockReport)
 	res.LockedNodes = make([]string, 0, len(lockedNodes))

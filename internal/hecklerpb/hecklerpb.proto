@@ -19,7 +19,8 @@ service Heckler {
 }
 
 message HecklerStatusRequest {
-  repeated string nodes = 1;
+  string node_set = 1;
+  repeated string nodes = 2;
 }
 
 message HecklerStatusReport {
@@ -33,7 +34,8 @@ message HecklerNoopRangeRequest {
   string end_rev = 3;
   string github_milestone = 4;
   Output_format output_format = 5;
-  repeated string nodes = 6;
+  string node_set = 6;
+  repeated string nodes = 7;
 }
 
 message HecklerNoopRangeReport {
@@ -46,7 +48,8 @@ message HecklerApplyRequest {
   string rev = 2;
   bool noop = 3;
   Output_format output_format = 4;
-  repeated string nodes = 5;
+  string node_set = 5;
+  repeated string nodes = 6;
 }
 
 message HecklerApplyReport {
@@ -58,7 +61,8 @@ message HecklerLockRequest {
   string user = 1;
   string comment = 2;
   bool force = 3;
-  repeated string nodes = 4;
+  string node_set = 4;
+  repeated string nodes = 5;
 }
 
 message HecklerLockReport {
@@ -69,7 +73,8 @@ message HecklerLockReport {
 message HecklerUnlockRequest {
   string user = 1;
   bool force = 2;
-  repeated string nodes = 3;
+  string node_set = 3;
+  repeated string nodes = 4;
 }
 
 message HecklerUnlockReport {
