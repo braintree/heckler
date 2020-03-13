@@ -81,11 +81,11 @@ for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
   git add nodes.pp
   git commit --author "${AUTHORS[$commit]}" -F - <<<"${MSGS[commit]}"
   if ((commit == 1)); then
-    git tag v1
+    git tag v1 -m 'v1'
   fi
 done
 git merge -m manhattan manhattan
-git tag v2
+git tag v2 -m 'v2'
 
 git remote add origin git@github.braintreeps.com:lollipopman/muppetshow.git
 git push -fu origin master
