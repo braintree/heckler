@@ -44,4 +44,9 @@ class muppetshow {
     content => "Rowlf the Dog\n",
     order   => '02'
   }
+  exec { 'devnull-permadiff':
+    command => 'bash -c \'printf "garbage" > /dev/null\'',
+    onlyif => 'bash -c \'[[ "garbage" != "$(</dev/null)" ]]\'',
+    path => ['/bin'],
+  }
 }

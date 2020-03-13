@@ -39,4 +39,9 @@ class muppetshow {
     ensure => present,
     content => "Cookie Monster\n",
   }
+  exec { 'devnull-permadiff':
+    command => 'bash -c \'printf "garbage" > /dev/null\'',
+    onlyif => 'bash -c \'[[ "garbage" != "$(</dev/null)" ]]\'',
+    path => ['/bin'],
+  }
 }
