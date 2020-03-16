@@ -1105,7 +1105,6 @@ func hecklerLastApply(node *Node, c chan<- rizzopb.PuppetReport) {
 		}
 		return
 	}
-	log.Printf("WTF, %v", r.Host)
 	c <- *r
 	return
 }
