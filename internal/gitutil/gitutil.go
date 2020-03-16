@@ -178,6 +178,16 @@ func Checkout(rev string, repo *git.Repository) (string, error) {
 		return "", err
 	}
 
+	// Annotated tags are separate git objects, so we need to find the target
+	// commit object of the tag.
+	if obj.Type() == git.ObjectTag {
+		tagObj, err := obj.AsTag()
+		if err != nil {
+			return "", err
+		}
+		obj = tagObj.Target()
+	}
+
 	commit, err := obj.AsCommit()
 	if err != nil {
 		return "", err
