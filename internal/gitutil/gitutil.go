@@ -169,13 +169,10 @@ func Pull(url string, destDir string) (*git.Repository, error) {
 	return repo, nil
 }
 
-func Checkout(rev string, repo *git.Repository) (string, error) {
-	var err error
-
-	log.Printf("Rev: %v\n", rev)
+func RevparseToCommit(rev string, repo *git.Repository) (*git.Commit, error) {
 	obj, err := repo.RevparseSingle(rev)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Annotated tags are separate git objects, so we need to find the target
@@ -183,13 +180,25 @@ func Checkout(rev string, repo *git.Repository) (string, error) {
 	if obj.Type() == git.ObjectTag {
 		tagObj, err := obj.AsTag()
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		obj = tagObj.Target()
 	}
 
 	commit, err := obj.AsCommit()
 	if err != nil {
+		return nil, err
+	}
+	return commit, nil
+}
+
+func Checkout(rev string, repo *git.Repository) (string, error) {
+	var err error
+
+	log.Printf("Rev: %v\n", rev)
+	commit, err := RevparseToCommit(rev, repo)
+	if err != nil {
+		log.Fatal(err)
 		return "", err
 	}
 
@@ -218,10 +227,11 @@ func Checkout(rev string, repo *git.Repository) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	err = repo.SetHeadDetached(obj.Id())
+	commitId := commit.Id()
+	err = repo.SetHeadDetached(commitId)
 	if err != nil {
 		return "", err
 	}
 
-	return (obj.Id()).String(), nil
+	return commitId.String(), nil
 }

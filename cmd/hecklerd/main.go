@@ -36,6 +36,7 @@ import (
 )
 
 var Version string
+var ErrLastApplyUnknown = errors.New("Unable to determine lastApply commit, use force flag to update")
 
 const (
 	ApplicationName = "git-cgi-server"
@@ -192,7 +193,7 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 	// ancestor in the topology.
 	rv.Sorting(git.SortTopological | git.SortReverse)
 
-	endObj, err := repo.RevparseSingle(endRev)
+	endObj, err := gitutil.RevparseToCommit(endRev, repo)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -200,7 +201,7 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 	if err != nil {
 		return nil, nil, err
 	}
-	beginObj, err := repo.RevparseSingle(beginRev)
+	beginObj, err := gitutil.RevparseToCommit(beginRev, repo)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -307,15 +308,15 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 	var noopRequests int
 	var rprt *rizzopb.PuppetReport
 
-	beginObj, err := repo.RevparseSingle(beginRev)
+	beginCommit, err := gitutil.RevparseToCommit(beginRev, repo)
 	if err != nil {
 		return nil, err
 	}
-	beginCommit := *beginObj.Id()
+	beginCommitId := *beginCommit.Id()
 
 	commitsToNoop = make([]git.Oid, len(commitLogIds))
 	copy(commitsToNoop, commitLogIds)
-	commitsToNoop = append(commitsToNoop, beginCommit)
+	commitsToNoop = append(commitsToNoop, beginCommitId)
 
 	for i, commitToNoop := range commitsToNoop {
 		log.Printf("Nooping: %s (%d of %d)", commitToNoop.String(), i, len(commitsToNoop))
@@ -326,7 +327,7 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 			// subtract away perma-diffs from children. Typically the lastApply is
 			// the beginRev, but if someone has applied a newer commit on the host we
 			// need to use the noop from the lastApplied commit.
-			if commitToNoop == beginCommit {
+			if commitToNoop == beginCommitId {
 				commitToNoop = node.lastApply
 			}
 			if rprt, err = loadNoop(commitToNoop, node, revdir, repo); err == nil {
@@ -696,7 +697,7 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 	if err != nil {
 		return nil, err
 	}
-	nodes, errNodes := dialNodes(ctx, nodesToDial)
+	nodes, errDialNodes := dialNodes(ctx, nodesToDial)
 	lockReq := hecklerpb.HecklerLockRequest{
 		User:    req.User,
 		Comment: "Applying with Heckler",
@@ -706,33 +707,76 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 		User: req.User,
 	}
 	defer nodeUnlock(&unlockReq, lockedNodes)
+
+	var nodesToApply map[string]*Node
+	beyondRevNodes := make([]string, 0)
+	lastApplyNodes := make(map[string]*Node)
+	errUnknownRevNodes := make(map[string]error)
+	// No need to check node revision if force applying
+	if req.Force {
+		nodesToApply = lockedNodes
+	} else {
+		lastApplyNodes, errUnknownRevNodes = nodeLastApply(lockedNodes, hs.repo)
+		obj, err := gitutil.RevparseToCommit(req.Rev, hs.repo)
+		if err != nil {
+			return nil, err
+		}
+		revId := *obj.Id()
+		nodesToApply = make(map[string]*Node)
+		for host, node := range lastApplyNodes {
+			if commitAlreadyApplied(node.lastApply, revId, hs.repo) {
+				beyondRevNodes = append(beyondRevNodes, host)
+			} else {
+				nodesToApply[host] = node
+			}
+		}
+	}
 	par := rizzopb.PuppetApplyRequest{Rev: req.Rev, Noop: req.Noop}
 	puppetReportChan := make(chan rizzopb.PuppetReport)
-	for _, node := range lockedNodes {
+	for _, node := range nodesToApply {
 		go hecklerApply(node.rizzoClient, puppetReportChan, par)
 	}
 
-	for range lockedNodes {
+	errApplyNodes := make(map[string]error)
+	appliedNodes := make([]string, 0)
+	for range nodesToApply {
 		r := <-puppetReportChan
 		if cmp.Equal(r, rizzopb.PuppetReport{}) {
 			log.Fatalf("Received an empty report")
 		} else if r.Status == "failed" {
 			log.Printf("ERROR: Apply failed, %s@%s", r.Host, r.ConfigurationVersion)
+			errApplyNodes[r.Host] = errors.New("Apply failed")
 		} else {
 			if req.Noop {
 				log.Printf("Nooped: %s@%s", r.Host, r.ConfigurationVersion)
 			} else {
 				log.Printf("Applied: %s@%s", r.Host, r.ConfigurationVersion)
 			}
+			appliedNodes = append(appliedNodes, r.Host)
 		}
+	}
+	errNodes := make(map[string]error)
+	for host, err := range errDialNodes {
+		errNodes[host] = err
+	}
+	for host, err := range errLockNodes {
+		errNodes[host] = err
+	}
+	for host, err := range errUnknownRevNodes {
+		errNodes[host] = err
+	}
+	for host, err := range errApplyNodes {
+		errNodes[host] = err
 	}
 	har := new(hecklerpb.HecklerApplyReport)
 	har.NodeErrors = make(map[string]string)
 	for host, err := range errNodes {
 		har.NodeErrors[host] = err.Error()
 	}
-	for host, err := range errLockNodes {
-		har.NodeErrors[host] = err.Error()
+	if req.Force {
+		har.Output = fmt.Sprintf("Applied nodes: %d; Error nodes: %d", len(appliedNodes), len(errNodes))
+	} else {
+		har.Output = fmt.Sprintf("Applied nodes: %d; Beyond rev nodes: %d; Error nodes: %d", len(appliedNodes), len(beyondRevNodes), len(errNodes))
 	}
 	return har, nil
 }
@@ -752,15 +796,12 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 		User: req.User,
 	}
 	defer nodeUnlock(&unlockReq, lockedNodes)
-	err = nodeLastApply(lockedNodes, hs.repo)
-	if err != nil {
-		return nil, err
-	}
+	lastApplyNodes, errUnknownRevNodes := nodeLastApply(lockedNodes, hs.repo)
 	commitLogIds, commits, err := commitLogIdList(hs.repo, req.BeginRev, req.EndRev)
 	if err != nil {
 		return nil, err
 	}
-	groupedCommits, err := noopCommitRange(lockedNodes, req.BeginRev, req.EndRev, commitLogIds, commits, hs.repo)
+	groupedCommits, err := noopCommitRange(lastApplyNodes, req.BeginRev, req.EndRev, commitLogIds, commits, hs.repo)
 	if err != nil {
 		return nil, err
 	}
@@ -780,6 +821,9 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 		hnrr.NodeErrors[host] = err.Error()
 	}
 	for host, err := range errLockNodes {
+		hnrr.NodeErrors[host] = err.Error()
+	}
+	for host, err := range errUnknownRevNodes {
 		hnrr.NodeErrors[host] = err.Error()
 	}
 	return hnrr, nil
@@ -907,17 +951,17 @@ func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.Heckl
 		return nil, err
 	}
 	nodes, errNodes := dialNodes(ctx, nodesToDial)
-	err = nodeLastApply(nodes, hs.repo)
-	if err != nil {
-		return nil, err
-	}
+	lastApplyNodes, errUnknownRevNodes := nodeLastApply(nodes, hs.repo)
 	hsr := new(hecklerpb.HecklerStatusReport)
 	hsr.NodeStatuses = make(map[string]string)
-	for _, node := range nodes {
+	for _, node := range lastApplyNodes {
 		hsr.NodeStatuses[node.host] = node.lastApply.String()
 	}
 	hsr.NodeErrors = make(map[string]string)
 	for host, err := range errNodes {
+		hsr.NodeErrors[host] = err.Error()
+	}
+	for host, err := range errUnknownRevNodes {
 		hsr.NodeErrors[host] = err.Error()
 	}
 	return hsr, nil
@@ -1049,42 +1093,54 @@ func hecklerLock(host string, rc rizzopb.RizzoClient, req rizzopb.PuppetLockRequ
 	return
 }
 
-func hecklerLastApply(rc rizzopb.RizzoClient, c chan<- rizzopb.PuppetReport) {
+func hecklerLastApply(node *Node, c chan<- rizzopb.PuppetReport) {
 	plar := rizzopb.PuppetLastApplyRequest{}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	r, err := rc.PuppetLastApply(ctx, &plar)
+	r, err := node.rizzoClient.PuppetLastApply(ctx, &plar)
 	if err != nil {
-		c <- rizzopb.PuppetReport{}
+		log.Printf("Puppet lastApply error substituting an empty report, %v", err)
+		c <- rizzopb.PuppetReport{
+			Host: node.host,
+		}
 		return
 	}
+	log.Printf("WTF, %v", r.Host)
 	c <- *r
 	return
 }
 
-func nodeLastApply(nodes map[string]*Node, repo *git.Repository) error {
+func nodeLastApply(nodes map[string]*Node, repo *git.Repository) (map[string]*Node, map[string]error) {
 	var err error
+	errNodes := make(map[string]error)
+	lastApplyNodes := make(map[string]*Node)
 
 	puppetReportChan := make(chan rizzopb.PuppetReport)
 	for _, node := range nodes {
-		go hecklerLastApply(node.rizzoClient, puppetReportChan)
+		go hecklerLastApply(node, puppetReportChan)
 	}
 
 	var obj *git.Object
 	for range nodes {
 		r := <-puppetReportChan
+		if r.ConfigurationVersion == "" {
+			log.Printf("ConfigurationVersion empty, for host %s", r.Host)
+			errNodes[r.Host] = ErrLastApplyUnknown
+			continue
+		}
 		obj, err = repo.RevparseSingle(r.ConfigurationVersion)
 		if err != nil {
-			return err
+			log.Fatalf("Unable to revparse ConfigurationVersion, '%s', for host %s: %v", r.ConfigurationVersion, r.Host, err)
 		}
 		if node, ok := nodes[r.Host]; ok {
 			node.lastApply = *obj.Id()
+			lastApplyNodes[r.Host] = node
 		} else {
 			log.Fatalf("No Node struct found for report from: %s", r.Host)
 		}
 	}
 
-	return nil
+	return lastApplyNodes, errNodes
 }
 
 func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {

@@ -51,12 +51,12 @@ func (s *server) PuppetApply(ctx context.Context, req *rizzopb.PuppetApplyReques
 		log.Printf("Pull error: %v", err)
 		return &rizzopb.PuppetReport{}, err
 	}
-	log.Printf("Pull Complete: %v", req.Rev)
+	log.Println("Pull Complete")
 
 	// checkout
 	oid, err = gitutil.Checkout(req.Rev, repo)
 	if err != nil {
-		log.Printf("Checkout error: %v", err)
+		log.Printf("Checkout error, rev: %s: %v", req.Rev, err)
 		return &rizzopb.PuppetReport{}, err
 	}
 	log.Printf("Checkout Complete: %v", oid)
@@ -74,21 +74,21 @@ func (s *server) PuppetApply(ctx context.Context, req *rizzopb.PuppetApplyReques
 // PuppetLastApply implements rizzo.RizzoServer
 func (s *server) PuppetLastApply(ctx context.Context, req *rizzopb.PuppetLastApplyRequest) (*rizzopb.PuppetReport, error) {
 	var err error
+	log.Printf("PuppetLastApply: request received, %v", req)
 
-	log.Printf("PuppetLastApply: request received")
 	file, err := os.Open(s.conf.PuppetReportDir + "/heckler/heckler_last_apply.json")
 	if err != nil {
-		return &rizzopb.PuppetReport{}, err
+		return nil, err
 	}
 	defer file.Close()
 	data, err := ioutil.ReadAll(file)
 	if err != nil {
-		return &rizzopb.PuppetReport{}, err
+		return nil, err
 	}
 	pr := new(rizzopb.PuppetReport)
 	err = json.Unmarshal([]byte(data), pr)
 	if err != nil {
-		return &rizzopb.PuppetReport{}, err
+		return nil, err
 	}
 	log.Printf("PuppetLastApply: status@%s", pr.ConfigurationVersion)
 	return pr, nil
@@ -280,8 +280,8 @@ func puppetApply(oid string, noop bool, conf *RizzoConf) (*rizzopb.PuppetReport,
 }
 
 type PuppetCmd struct {
-	Env  map[string]string `yaml:env`
-	Args []string          `yaml:args`
+	Env  map[string]string `yaml:"env"`
+	Args []string          `yaml:"args"`
 }
 
 type RizzoConf struct {

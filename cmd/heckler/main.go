@@ -73,7 +73,7 @@ func main() {
 	var githubMilestone string
 	var nodeSet string
 
-	flag.BoolVar(&force, "force", false, "force unlock or lock of nodes")
+	flag.BoolVar(&force, "force", false, "force unlock, lock, or apply of nodes")
 	flag.BoolVar(&lock, "lock", false, "lock nodes")
 	flag.BoolVar(&markdownOut, "md", false, "Generate markdown output")
 	flag.BoolVar(&noop, "noop", false, "noop")
@@ -211,6 +211,7 @@ func main() {
 			User:    curUserInf.Username,
 			Rev:     rev,
 			Noop:    noop,
+			Force:   force,
 			NodeSet: nodeSet,
 			Nodes:   nodes,
 		}
@@ -219,7 +220,7 @@ func main() {
 			log.Fatalf("Unable to retreive heckler apply report: %v", err)
 		}
 		if rprt.Output != "" {
-			fmt.Printf("%s", rprt.Output)
+			fmt.Printf("%s\n", rprt.Output)
 		}
 		for node, nodeError := range rprt.NodeErrors {
 			fmt.Printf("Error: %s, %s\n", node, nodeError)
