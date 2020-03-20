@@ -70,7 +70,6 @@ func main() {
 	var status bool
 	var printVersion bool
 	var markdownOut bool
-	var githubMilestone string
 	var nodeSet string
 
 	flag.BoolVar(&force, "force", false, "force unlock, lock, or apply of nodes")
@@ -82,7 +81,6 @@ func main() {
 	flag.BoolVar(&unlock, "unlock", false, "unlock nodes")
 	flag.StringVar(&beginRev, "beginrev", "", "begin rev")
 	flag.StringVar(&endRev, "endrev", "", "end rev")
-	flag.StringVar(&githubMilestone, "github", "", "Github milestone to create")
 	flag.StringVar(&nodeFile, "file", "", "file with json array of nodes, use - to read from stdin")
 	flag.StringVar(&rev, "rev", "", "rev to apply or noop")
 	flag.StringVar(&nodeSet, "set", "", "node set defined on hecklerd, e.g. 'all'")
@@ -235,9 +233,6 @@ func main() {
 			EndRev:   endRev,
 			NodeSet:  nodeSet,
 			Nodes:    nodes,
-		}
-		if githubMilestone != "" {
-			hnr.GithubMilestone = githubMilestone
 		}
 		if markdownOut {
 			hnr.OutputFormat = hecklerpb.OutputFormat_markdown

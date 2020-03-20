@@ -32,10 +32,9 @@ message HecklerNoopRangeRequest {
   string user = 1;
   string begin_rev = 2;
   string end_rev = 3;
-  string github_milestone = 4;
-  Output_format output_format = 5;
-  string node_set = 6;
-  repeated string nodes = 7;
+  Output_format output_format = 4;
+  string node_set = 5;
+  repeated string nodes = 6;
 }
 
 message HecklerNoopRangeReport {
