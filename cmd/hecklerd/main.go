@@ -707,72 +707,10 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 	if err != nil {
 		return nil, err
 	}
-	nodes, errDialNodes := dialNodes(ctx, nodesToDial)
-	lockReq := hecklerpb.HecklerLockRequest{
-		User:    req.User,
-		Comment: "Applying with Heckler",
-	}
-	lockedNodes, errLockNodes := nodeLock(&lockReq, nodes)
-	unlockReq := hecklerpb.HecklerUnlockRequest{
-		User: req.User,
-	}
-	defer nodeUnlock(&unlockReq, lockedNodes)
-
-	var nodesToApply map[string]*Node
-	beyondRevNodes := make([]string, 0)
-	lastApplyNodes := make(map[string]*Node)
-	errUnknownRevNodes := make(map[string]error)
-	// No need to check node revision if force applying
-	if req.Force {
-		nodesToApply = lockedNodes
-	} else {
-		lastApplyNodes, errUnknownRevNodes = nodeLastApply(lockedNodes, hs.repo)
-		obj, err := gitutil.RevparseToCommit(req.Rev, hs.repo)
-		if err != nil {
-			return nil, err
-		}
-		revId := *obj.Id()
-		nodesToApply = make(map[string]*Node)
-		for host, node := range lastApplyNodes {
-			if commitAlreadyApplied(node.lastApply, revId, hs.repo) {
-				beyondRevNodes = append(beyondRevNodes, host)
-			} else {
-				nodesToApply[host] = node
-			}
-		}
-	}
-	par := rizzopb.PuppetApplyRequest{Rev: req.Rev, Noop: req.Noop}
-	puppetReportChan := make(chan rizzopb.PuppetReport)
-	for _, node := range nodesToApply {
-		go hecklerApply(node.rizzoClient, puppetReportChan, par)
-	}
-
-	errApplyNodes := make(map[string]error)
-	appliedNodes := make([]string, 0)
-	for range nodesToApply {
-		r := <-puppetReportChan
-		if cmp.Equal(r, rizzopb.PuppetReport{}) {
-			log.Fatalf("Received an empty report")
-		} else if r.Status == "failed" {
-			log.Printf("ERROR: Apply failed, %s@%s", r.Host, r.ConfigurationVersion)
-			errApplyNodes[r.Host] = errors.New("Apply failed")
-		} else {
-			if req.Noop {
-				log.Printf("Nooped: %s@%s", r.Host, r.ConfigurationVersion)
-			} else {
-				log.Printf("Applied: %s@%s", r.Host, r.ConfigurationVersion)
-			}
-			appliedNodes = append(appliedNodes, r.Host)
-		}
-	}
+	dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
+	appliedNodes, beyondRevNodes, errApplyNodes := applyNodes(dialedNodes, req.User, req.Force, req.Noop, req.Rev, hs.repo)
 	errNodes := make(map[string]error)
 	for host, err := range errDialNodes {
-		errNodes[host] = err
-	}
-	for host, err := range errLockNodes {
-		errNodes[host] = err
-	}
-	for host, err := range errUnknownRevNodes {
 		errNodes[host] = err
 	}
 	for host, err := range errApplyNodes {
@@ -789,6 +727,76 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 		har.Output = fmt.Sprintf("Applied nodes: %d; Beyond rev nodes: %d; Error nodes: %d", len(appliedNodes), len(beyondRevNodes), len(errNodes))
 	}
 	return har, nil
+}
+
+func applyNodes(dialedNodes map[string]*Node, lockUser string, forceApply bool, noop bool, rev string, repo *git.Repository) (appliedNodes []string, beyondRevNodes []string, errNodes map[string]error) {
+	lockReq := hecklerpb.HecklerLockRequest{
+		User:    lockUser,
+		Comment: "Applying with Heckler",
+	}
+	lockedNodes, errLockNodes := nodeLock(&lockReq, dialedNodes)
+	unlockReq := hecklerpb.HecklerUnlockRequest{
+		User: lockUser,
+	}
+	defer nodeUnlock(&unlockReq, lockedNodes)
+	var nodesToApply map[string]*Node
+	beyondRevNodes = make([]string, 0)
+	lastApplyNodes := make(map[string]*Node)
+	errUnknownRevNodes := make(map[string]error)
+	// No need to check node revision if force applying
+	if forceApply {
+		nodesToApply = lockedNodes
+	} else {
+		lastApplyNodes, errUnknownRevNodes = nodeLastApply(lockedNodes, repo)
+		obj, err := gitutil.RevparseToCommit(rev, repo)
+		if err != nil {
+			log.Fatalf("Unable to parse rev: '%s'", rev)
+		}
+		revId := *obj.Id()
+		nodesToApply = make(map[string]*Node)
+		for host, node := range lastApplyNodes {
+			if commitAlreadyApplied(node.lastApply, revId, repo) {
+				beyondRevNodes = append(beyondRevNodes, host)
+			} else {
+				nodesToApply[host] = node
+			}
+		}
+	}
+	par := rizzopb.PuppetApplyRequest{Rev: rev, Noop: noop}
+	puppetReportChan := make(chan rizzopb.PuppetReport)
+	for _, node := range nodesToApply {
+		go hecklerApply(node.rizzoClient, puppetReportChan, par)
+	}
+
+	errApplyNodes := make(map[string]error)
+	appliedNodes = make([]string, 0)
+	for range nodesToApply {
+		r := <-puppetReportChan
+		if cmp.Equal(r, rizzopb.PuppetReport{}) {
+			log.Fatalf("Received an empty report")
+		} else if r.Status == "failed" {
+			log.Printf("ERROR: Apply failed, %s@%s", r.Host, r.ConfigurationVersion)
+			errApplyNodes[r.Host] = errors.New("Apply failed")
+		} else {
+			if noop {
+				log.Printf("Nooped: %s@%s", r.Host, r.ConfigurationVersion)
+			} else {
+				log.Printf("Applied: %s@%s", r.Host, r.ConfigurationVersion)
+			}
+			appliedNodes = append(appliedNodes, r.Host)
+		}
+	}
+	errNodes = make(map[string]error)
+	for host, err := range errLockNodes {
+		errNodes[host] = err
+	}
+	for host, err := range errUnknownRevNodes {
+		errNodes[host] = err
+	}
+	for host, err := range errApplyNodes {
+		errNodes[host] = err
+	}
+	return appliedNodes, beyondRevNodes, errNodes
 }
 
 func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.HecklerNoopRangeRequest) (*hecklerpb.HecklerNoopRangeReport, error) {
@@ -1270,9 +1278,6 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 		for host, err := range errUnknownRevNodes {
 			errNodes[host] = err
 		}
-		for host, err := range errNodes {
-			log.Printf("errNodes: %s, %v", host, err)
-		}
 		commonTag, err := commonAncestorTag(lastApplyNodes, repo)
 		if err != nil {
 			log.Fatalf("Unable to find common tag: %v", err)
@@ -1298,12 +1303,19 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			log.Fatalf("Unable to find next tag: %v", err)
 			return
 		}
-		if tagIssuesReviewed {
-			log.Printf("Tag '%s' is ready to apply", nextTag)
-			// XXX Tomorrow, factor out an apply func from HecklerApply?
-		} else {
+		if !tagIssuesReviewed {
 			log.Printf("Tag '%s' is not ready to apply", nextTag)
+			continue
 		}
+		log.Printf("Tag '%s' is ready to apply, applying...", nextTag)
+		appliedNodes, beyondRevNodes, errApplyNodes := applyNodes(dialedNodes, "root", false, false, nextTag, repo)
+		for host, err := range errApplyNodes {
+			errNodes[host] = err
+		}
+		for host, err := range errNodes {
+			log.Printf("errNodes: %s, %v", host, err)
+		}
+		log.Printf("Applied nodes: %d; Beyond rev nodes: %d; Error nodes: %d", len(appliedNodes), len(beyondRevNodes), len(errNodes))
 	}
 }
 
