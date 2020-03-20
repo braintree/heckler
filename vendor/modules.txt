@@ -2,6 +2,8 @@
 github.com/Masterminds/goutils
 # github.com/Masterminds/semver v1.5.0
 github.com/Masterminds/semver
+# github.com/Masterminds/semver/v3 v3.0.3
+github.com/Masterminds/semver/v3
 # github.com/Masterminds/sprig v2.22.0+incompatible
 github.com/Masterminds/sprig
 # github.com/abbot/go-http-auth v0.4.0
@@ -24,9 +26,7 @@ github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
 github.com/google/go-cmp/cmp/internal/function
 github.com/google/go-cmp/cmp/internal/value
-# github.com/google/go-github v17.0.0+incompatible
-github.com/google/go-github/github
-# github.com/google/go-github/v29 v29.0.2
+# github.com/google/go-github/v29 v29.0.3
 github.com/google/go-github/v29/github
 # github.com/google/go-querystring v1.0.0
 github.com/google/go-querystring/query
@@ -46,7 +46,7 @@ github.com/lollipopman/luser
 github.com/mitchellh/copystructure
 # github.com/mitchellh/reflectwalk v1.0.1
 github.com/mitchellh/reflectwalk
-# golang.org/x/crypto v0.0.0-20200206161412-a0c6ece9d31a
+# golang.org/x/crypto v0.0.0-20200317142112-1b76d66859c6
 golang.org/x/crypto/bcrypt
 golang.org/x/crypto/blowfish
 golang.org/x/crypto/cast5
