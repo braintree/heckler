@@ -46,6 +46,8 @@ github.com/lollipopman/luser
 github.com/mitchellh/copystructure
 # github.com/mitchellh/reflectwalk v1.0.1
 github.com/mitchellh/reflectwalk
+# github.com/robfig/cron/v3 v3.0.1
+github.com/robfig/cron/v3
 # golang.org/x/crypto v0.0.0-20200317142112-1b76d66859c6
 golang.org/x/crypto/bcrypt
 golang.org/x/crypto/blowfish

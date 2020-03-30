@@ -32,6 +32,7 @@ import (
 	"github.com/google/go-github/v29/github"
 	git "github.com/libgit2/git2go"
 	gitcgiserver "github.com/lollipopman/git-cgi-server"
+	"github.com/robfig/cron/v3"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
@@ -59,6 +60,8 @@ type HecklerdConf struct {
 	GitHubAppId          int64              `yaml:"github_app_id"`
 	GitHubAppInstallId   int64              `yaml:"github_app_install_id"`
 	NodeSets             map[string]NodeSet `yaml:"node_sets"`
+	AutoTagCronSchedule  string             `yaml:"auto_tag_cron_schedule"`
+	AutoCloseIssues      bool               `yaml:"auto_close_issues"`
 }
 
 type NodeSet struct {
@@ -909,6 +912,8 @@ func milestoneFromTag(milestone string, ghclient *github.Client, conf *HecklerdC
 	return nil, nil
 }
 
+// Given a git oid this function returns the associated github issue, if it
+// exists
 func githubIssueFromCommit(ghclient *github.Client, oid git.Oid) (*github.Issue, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -945,7 +950,17 @@ func updateIssueMilestone(ghclient *github.Client, conf *HecklerdConf, issue *gi
 	return err
 }
 
-func githubCreateIssues(ghclient *github.Client, repoOwner string, repo string, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit, templates *template.Template) error {
+func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue) error {
+	issuePatch := &github.IssueRequest{
+		State: github.String("closed"),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	_, _, err := ghclient.Issues.Edit(ctx, conf.RepoOwner, conf.Repo, *issue.Number, issuePatch)
+	return err
+}
+
+func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit, templates *template.Template) error {
 	ctx := context.Background()
 
 	for _, gi := range commitLogIds {
@@ -962,11 +977,18 @@ func githubCreateIssues(ghclient *github.Client, repoOwner string, repo string, 
 			Assignee: github.String(commits[gi].Author().Name),
 			Body:     github.String(commitToMarkdown(commits[gi], templates) + groupedResourcesToMarkdown(groupedCommits[gi], templates)),
 		}
-		ni, _, err := ghclient.Issues.Create(ctx, repoOwner, repo, githubIssue)
+		ni, _, err := ghclient.Issues.Create(ctx, conf.RepoOwner, conf.Repo, githubIssue)
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("Successfully created new issue: %v", *ni.Title)
+		log.Printf("Successfully created new issue: '%v'", *ni.Title)
+		if conf.AutoCloseIssues {
+			log.Println("Marking issue as auto closed")
+			err := closeIssue(ghclient, conf, ni)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
 	}
 	return nil
 }
@@ -1227,14 +1249,19 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 	}
 
 	cloneDir := stateDir + "/served_repo/puppetcode"
-	cloneOptions := &git.CloneOptions{}
-	cloneOptions.Bare = true
+	cloneOptions := &git.CloneOptions{
+		FetchOptions: &git.FetchOptions{
+			UpdateFetchhead: true,
+			DownloadTags:    git.DownloadTagsAll,
+		},
+		Bare: true,
+	}
 	remoteUrl := fmt.Sprintf("https://x-access-token:%s@%s/%s/%s", tok, conf.GitHubDomain, conf.RepoOwner, conf.Repo)
 	bareRepo, err := gitutil.CloneOrOpen(remoteUrl, cloneDir, cloneOptions)
 	if err != nil {
 		return nil, err
 	}
-	err = gitutil.FastForward(bareRepo, nil)
+	err = gitutil.FastForward(bareRepo, cloneOptions.FetchOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -1283,6 +1310,10 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			log.Fatalf("Unable to find common tag: %v", err)
 			return
 		}
+		if commonTag == "" {
+			log.Println("No common tag found")
+			continue
+		}
 		log.Printf("Common tag: %s", commonTag)
 		ghclient, _, err := githubConn(conf)
 		if err != nil {
@@ -1319,6 +1350,109 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 	}
 }
 
+// Are their commits beyond the last tag?
+// 	If yes, create a new tag
+// If no, do nothing
+func tagNewCommits(conf *HecklerdConf, repo *git.Repository) {
+	headCommit, err := gitutil.RevparseToCommit("master", repo)
+	if err != nil {
+		log.Fatalf("Unable to revparse: %v", err)
+	}
+	log.Printf("Master commit, '%s'", headCommit.AsObject().Id().String())
+	describeOpts, err := git.DefaultDescribeOptions()
+	if err != nil {
+		log.Fatalf("Unable to set describe opts: %v", err)
+	}
+	result, err := headCommit.Describe(&describeOpts)
+	if err != nil {
+		log.Fatalf("Unable to describe: %v", err)
+	}
+	formatOpts, err := git.DefaultDescribeFormatOptions()
+	formatOpts.AbbreviatedSize = 0
+	if err != nil {
+		log.Fatalf("Unable to set format opts: %v", err)
+	}
+	mostRecentTag, err := result.Format(&formatOpts)
+	if err != nil {
+		log.Fatalf("Unable to format describe output: %v", err)
+	}
+	log.Printf("Most recent tag from commit, %s tag: '%s'", headCommit.AsObject().Id().String(), mostRecentTag)
+	commitLogIds, _, err := commitLogIdList(repo, mostRecentTag, "master")
+	if err != nil {
+		log.Fatalf("Unable to obtain commit log ids: %v", err)
+		return
+	}
+	// No new commits
+	if len(commitLogIds) == 0 {
+		return
+	}
+	ghclient, _, err := githubConn(conf)
+	if err != nil {
+		log.Fatalf("Unable to connect to github: %v", err)
+		return
+	}
+	mostRecentVersion, err := semver.NewVersion(mostRecentTag)
+	if err != nil {
+		log.Fatalf("Unable to parse version: %v", err)
+	}
+	newVersion := mostRecentVersion.IncMajor()
+	newTag := fmt.Sprintf("v%d", newVersion.Major())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	// Check if tag ref already exists
+	refs, _, err := ghclient.Git.GetRefs(ctx, conf.RepoOwner, conf.Repo, fmt.Sprintf("refs/tags/%s", newTag))
+	if len(refs) == 1 {
+		log.Printf("New tag ref already exists on github, skipping creation, '%s'", newTag)
+		return
+	}
+	err = createTag(newTag, conf, ghclient, repo)
+	if err != nil {
+		log.Fatalf("Unable to create new tag: %v", err)
+	}
+}
+
+func createTag(newTag string, conf *HecklerdConf, ghclient *github.Client, repo *git.Repository) error {
+	timeNow := time.Now()
+	tagger := &github.CommitAuthor{
+		Date:  &timeNow,
+		Name:  github.String("Heckler"),
+		Email: github.String("hathaway@paypal.com"),
+	}
+	commit, err := gitutil.RevparseToCommit("master", repo)
+	if err != nil {
+		return err
+	}
+	commitObj := &github.GitObject{
+		Type: github.String("commit"),
+		SHA:  github.String(commit.AsObject().Id().String()),
+	}
+	tagReq := &github.Tag{
+		Tag:     github.String(newTag),
+		Message: github.String("Auto Tagged by Heckler"),
+		Tagger:  tagger,
+		Object:  commitObj,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	tag, _, err := ghclient.Git.CreateTag(ctx, conf.RepoOwner, conf.Repo, tagReq)
+	if err != nil {
+		return err
+	}
+	tagObj := &github.GitObject{
+		Type: github.String("tag"),
+		SHA:  github.String(tag.GetSHA()),
+	}
+	refReq := &github.Reference{
+		Ref:    github.String(fmt.Sprintf("refs/tags/%s", newTag)),
+		Object: tagObj,
+	}
+	_, _, err = ghclient.Git.CreateRef(ctx, conf.RepoOwner, conf.Repo, refReq)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func tagIssuesReviewed(repo *git.Repository, ghclient *github.Client, conf *HecklerdConf, priorTag string, nextTag string) (bool, error) {
 	var nextTagMilestone *github.Milestone
 	nextTagMilestone, err := milestoneFromTag(nextTag, ghclient, conf)
@@ -1345,7 +1479,7 @@ func tagIssuesReviewed(repo *git.Repository, ghclient *github.Client, conf *Heck
 		if issue == nil {
 			return false, nil
 		}
-		if *issue.GetMilestone().Title != nextTag {
+		if issue.GetMilestone() == nil || *issue.GetMilestone().Title != nextTag {
 			return false, nil
 		}
 		if issue.GetState() != "closed" {
@@ -1392,6 +1526,10 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 		if err != nil {
 			log.Fatalf("Unable to find common tag: %v", err)
 			return
+		}
+		if commonTag == "" {
+			log.Println("No common tag found")
+			continue
 		}
 		log.Printf("Common tag: %s", commonTag)
 		ghclient, _, err := githubConn(conf)
@@ -1476,6 +1614,10 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			log.Fatalf("Unable to find common tag: %v", err)
 			return
 		}
+		if commonTag == "" {
+			log.Println("No common tag found")
+			continue
+		}
 		log.Printf("Common tag: %s", commonTag)
 		errNodes := make(map[string]error)
 		for host, err := range errDialNodes {
@@ -1523,7 +1665,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			log.Fatalf("Unable to group commits: %v", err)
 			return
 		}
-		err = githubCreateIssues(ghclient, conf.RepoOwner, conf.Repo, commitLogIds, groupedCommits, commits, templates)
+		err = githubCreateIssues(ghclient, conf, commitLogIds, groupedCommits, commits, templates)
 		if err != nil {
 			log.Fatalf("Unable to create github issues: %v", err)
 			return
@@ -1537,6 +1679,7 @@ func commonAncestorTag(nodes map[string]*Node, repo *git.Repository) (string, er
 		return "", err
 	}
 	formatOpts, err := git.DefaultDescribeFormatOptions()
+	formatOpts.AbbreviatedSize = 0
 	if err != nil {
 		return "", err
 	}
@@ -1563,6 +1706,9 @@ func commonAncestorTag(nodes map[string]*Node, repo *git.Repository) (string, er
 		}
 	}
 	log.Printf("Tags to nodes: %v", tagNodes)
+	if len(tagNodes) == 0 {
+		return "", nil
+	}
 
 	tagSet := make([]*semver.Version, len(tagNodes))
 	tagCount := 0
@@ -1741,6 +1887,17 @@ func main() {
 	go noopLoop(hecklerdConf, repo, templates)
 	go milestoneLoop(hecklerdConf, repo)
 	go applyLoop(hecklerdConf, repo)
+	if hecklerdConf.AutoTagCronSchedule != "" {
+		c := cron.New()
+		c.AddFunc(
+			hecklerdConf.AutoTagCronSchedule,
+			func() {
+				tagNewCommits(hecklerdConf, repo)
+			},
+		)
+		c.Start()
+		defer c.Stop()
+	}
 
 	// XXX any reason to make this a separate goroutine?
 	go func() {

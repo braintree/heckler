@@ -153,7 +153,12 @@ func Walk(repo *git.Repository) error {
 }
 
 func Pull(url string, destDir string) (*git.Repository, error) {
-	cloneOptions := &git.CloneOptions{}
+	cloneOptions := &git.CloneOptions{
+		FetchOptions: &git.FetchOptions{
+			UpdateFetchhead: true,
+			DownloadTags:    git.DownloadTagsAll,
+		},
+	}
 	err := os.MkdirAll(filepath.Dir(destDir), 0775)
 	if err != nil {
 		return nil, err
