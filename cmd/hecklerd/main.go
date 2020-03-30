@@ -940,6 +940,62 @@ func githubIssueFromCommit(ghclient *github.Client, oid git.Oid) (*github.Issue,
 	}
 }
 
+func clearMilestones(ghclient *github.Client, conf *HecklerdConf) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*100)
+	defer cancel()
+	milestoneOpts := &github.MilestoneListOptions{
+		State: "all",
+	}
+	milestones, _, err := ghclient.Issues.ListMilestones(ctx, conf.RepoOwner, conf.Repo, milestoneOpts)
+	if err != nil {
+		log.Fatal(err)
+		return nil
+	}
+	var msTitle string
+	for _, ms := range milestones {
+		msTitle = *ms.Title
+		if *ms.Creator.Type == "Bot" && *ms.Creator.Login == "heckler-dev[bot]" {
+			_, err := ghclient.Issues.DeleteMilestone(ctx, conf.RepoOwner, conf.Repo, *ms.Number)
+			if err != nil {
+				log.Fatal(err)
+				return nil
+			}
+			log.Printf("Deleted milestone: '%s'", msTitle)
+		}
+	}
+	return nil
+}
+
+func clearIssues(ghclient *github.Client, conf *HecklerdConf) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*100)
+	defer cancel()
+	query := fmt.Sprintf("author:app/%s", "heckler-dev")
+	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
+	if err != nil {
+		log.Fatal(err)
+		return nil
+	}
+	// The rest API does not support deletion,
+	// https://github.community/t5/GitHub-API-Development-and/Delete-Issues-programmatically/td-p/29524,
+	// so for now just close the issue and change the title to deleted & remove the milestone
+	issuePatch := &github.IssueRequest{
+		Title:     github.String("SoftDeleted"),
+		Milestone: nil,
+		State:     github.String("closed"),
+	}
+	for _, issue := range searchResults.Issues {
+		if *issue.Title != "SoftDeleted" {
+			_, _, err := ghclient.Issues.Edit(ctx, conf.RepoOwner, conf.Repo, *issue.Number, issuePatch)
+			if err != nil {
+				log.Fatal(err)
+				return nil
+			}
+			log.Printf("Soft deleted issue: '%s'", *issue.Title)
+		}
+	}
+	return nil
+}
+
 func updateIssueMilestone(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, ms *github.Milestone) error {
 	issuePatch := &github.IssueRequest{
 		Milestone: ms.Number,
@@ -1779,19 +1835,37 @@ func nextTag(priorTag string, repo *git.Repository) (string, error) {
 	}
 }
 
+func clearGithub(conf *HecklerdConf) error {
+	ghclient, _, err := githubConn(conf)
+	if err != nil {
+		return err
+	}
+	err = clearIssues(ghclient, conf)
+	if err != nil {
+		return err
+	}
+	err = clearMilestones(ghclient, conf)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func main() {
 	// add filename and line number to log output
 	log.SetFlags(log.Lshortfile)
 	var err error
 	var hecklerdConfPath string
-	var hecklerdConf *HecklerdConf
+	var conf *HecklerdConf
 	var file *os.File
 	var data []byte
 	var clearState bool
+	var clearGitHub bool
 	var printVersion bool
 	templates := parseTemplates()
 
 	flag.BoolVar(&clearState, "clear", false, "Clear local state, e.g. puppet code repo")
+	flag.BoolVar(&clearGitHub, "ghclear", false, "Clear remote github state, e.g. issues & milestones")
 	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.Parse()
 
@@ -1816,10 +1890,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("Cannot read config: %v", err)
 	}
-	hecklerdConf = new(HecklerdConf)
-	err = yaml.Unmarshal([]byte(data), hecklerdConf)
+	conf = new(HecklerdConf)
+	err = yaml.Unmarshal([]byte(data), conf)
 	if err != nil {
 		log.Fatalf("Cannot unmarshal config: %v", err)
+	}
+
+	if clearState && clearGitHub {
+		log.Println("clear & ghclear are mutually exclusive")
+		os.Exit(1)
 	}
 
 	if clearState {
@@ -1828,7 +1907,15 @@ func main() {
 		os.Exit(0)
 	}
 
-	repo, err := fetchRepo(hecklerdConf)
+	if clearGitHub {
+		err = clearGithub(conf)
+		if err != nil {
+			log.Fatalf("Unable to clear GitHub: %v", err)
+		}
+		os.Exit(0)
+	}
+
+	repo, err := fetchRepo(conf)
 	if err != nil {
 		log.Fatalf("Unable to fetch repo to serve: %v", err)
 	}
@@ -1849,7 +1936,7 @@ func main() {
 			if Debug {
 				log.Println("Updating repo..")
 			}
-			_, err = fetchRepo(hecklerdConf)
+			_, err = fetchRepo(conf)
 			if err != nil {
 				log.Fatalf("Unable to fetch repo: %v", err)
 			}
@@ -1871,7 +1958,7 @@ func main() {
 	}
 	grpcServer := grpc.NewServer()
 	hecklerServer := new(hecklerServer)
-	hecklerServer.conf = hecklerdConf
+	hecklerServer.conf = conf
 	hecklerServer.templates = templates
 	hecklerServer.repo = repo
 	hecklerpb.RegisterHecklerServer(grpcServer, hecklerServer)
@@ -1884,15 +1971,15 @@ func main() {
 		}
 	}()
 
-	go noopLoop(hecklerdConf, repo, templates)
-	go milestoneLoop(hecklerdConf, repo)
-	go applyLoop(hecklerdConf, repo)
-	if hecklerdConf.AutoTagCronSchedule != "" {
+	go noopLoop(conf, repo, templates)
+	go milestoneLoop(conf, repo)
+	go applyLoop(conf, repo)
+	if conf.AutoTagCronSchedule != "" {
 		c := cron.New()
 		c.AddFunc(
-			hecklerdConf.AutoTagCronSchedule,
+			conf.AutoTagCronSchedule,
 			func() {
-				tagNewCommits(hecklerdConf, repo)
+				tagNewCommits(conf, repo)
 			},
 		)
 		c.Start()
