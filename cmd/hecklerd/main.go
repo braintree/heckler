@@ -986,7 +986,7 @@ func issuePrefix(prefix string) string {
 	if prefix == "" {
 		return ""
 	} else {
-		return fmt.Sprintf("[%s-env]", prefix)
+		return fmt.Sprintf("[%s-env] ", prefix)
 	}
 }
 
@@ -995,7 +995,7 @@ func clearIssues(ghclient *github.Client, conf *HecklerdConf) error {
 	defer cancel()
 	query := fmt.Sprintf("author:app/%s", "heckler-dev")
 	if conf.EnvPrefix != "" {
-		query += fmt.Sprintf(" %s in:title", issuePrefix(conf.EnvPrefix))
+		query += fmt.Sprintf(" %sin:title", issuePrefix(conf.EnvPrefix))
 	}
 	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
 	if err != nil {
@@ -1077,7 +1077,7 @@ func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogId
 }
 
 func noopTitle(gi git.Oid, prefix string) string {
-	return fmt.Sprintf("%s Puppet noop output for commit: %s", issuePrefix(prefix), gi.String())
+	return fmt.Sprintf("%sPuppet noop output for commit: %s", issuePrefix(prefix), gi.String())
 }
 
 func markdownOutput(conf *HecklerdConf, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, groupedCommits map[git.Oid][]*groupedResource, templates *template.Template) string {
