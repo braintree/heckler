@@ -120,7 +120,7 @@ type groupLog struct {
 
 type ResourceTitle string
 
-func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map[git.Oid]*rizzopb.PuppetReport, repo *git.Repository) []*rizzopb.PuppetReport {
+func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map[git.Oid]*rizzopb.PuppetReport, repo *git.Repository, logger *log.Logger) []*rizzopb.PuppetReport {
 	var parentReports []*rizzopb.PuppetReport
 	var parentReport *rizzopb.PuppetReport
 
@@ -129,7 +129,7 @@ func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map
 		// perma-diff: If our parent is already applied we substitute the lastApply
 		// noop so that we can subtract away any perma-diffs from the noop
 		if commitAlreadyApplied(lastApply, *commit.ParentId(i), repo) {
-			log.Printf("Parent already applied substituting lastApply, %s", commit.ParentId(i).String())
+			logger.Printf("Parent already applied substituting lastApply, %s", commit.ParentId(i).String())
 			parentReport = commitReports[lastApply]
 		} else {
 			parentReport = commitReports[*commit.ParentId(i)]
@@ -137,7 +137,7 @@ func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map
 		if parentReport != nil {
 			parentReports = append(parentReports, commitReports[*commit.ParentId(i)])
 		} else {
-			log.Fatalf("Parent report not found %s", commit.ParentId(i).String())
+			logger.Fatalf("Parent report not found %s", commit.ParentId(i).String())
 		}
 	}
 	return parentReports
@@ -145,7 +145,6 @@ func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map
 
 func grpcConnect(ctx context.Context, node *Node, clientConnChan chan nodeResult) {
 	address := node.host + ":50051"
-	log.Printf("Dialing: %v", node.host)
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, address, grpc.WithInsecure(), grpc.WithBlock(), grpc.FailOnNonTempDialError(true))
@@ -188,7 +187,6 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 
 	commits = make(map[git.Oid]*git.Commit)
 
-	log.Printf("Walk begun: %s..%s", beginRev, endRev)
 	rv, err := repo.Walk()
 	if err != nil {
 		return nil, nil, err
@@ -225,24 +223,21 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 			return nil, nil, err
 		}
 		commits[gi] = c
-		log.Printf("commit: %s", gi.String())
 	}
-	log.Printf("Walk Complete")
-
 	return commitLogIds, commits, nil
 }
 
-func loadNoop(commit git.Oid, node *Node, revdir string, repo *git.Repository) (*rizzopb.PuppetReport, error) {
+func loadNoop(commit git.Oid, node *Node, revdir string, repo *git.Repository, logger *log.Logger) (*rizzopb.PuppetReport, error) {
 	// perma-diff: Substitute an empty puppet noop report if the commit is
 	// already applied, however for the lastApplied commit we do want to use the
 	// noop report so we can use the noop diff to subtract away perma-diffs from
 	// children.
 	descendant, err := repo.DescendantOf(&node.lastApply, &commit)
 	if err != nil {
-		log.Fatalf("Cannot determine descendant status: %v", err)
+		logger.Fatalf("Cannot determine descendant status: %v", err)
 	}
 	if descendant {
-		log.Printf("Commit already applied, substituting an empty noop: %s@%s", node.host, commit.String())
+		logger.Printf("Commit already applied, substituting an empty noop: %s@%s", node.host, commit.String())
 		return new(rizzopb.PuppetReport), nil
 	}
 
@@ -268,10 +263,11 @@ func loadNoop(commit git.Oid, node *Node, revdir string, repo *git.Repository) (
 		if node.host != rprt.Host {
 			return nil, errors.New(fmt.Sprintf("Host mismatch %s != %s", node.host, rprt.Host))
 		}
-		log.Printf("Found serialized noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
+		logger.Printf("Found serialized noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
 		return rprt, nil
 	}
 }
+
 func normalizeReport(rprt rizzopb.PuppetReport) rizzopb.PuppetReport {
 	rprt.Logs = normalizeLogs(rprt.Logs)
 	return rprt
@@ -290,7 +286,7 @@ func marshalReport(rprt rizzopb.PuppetReport, revdir string, commit git.Oid) err
 	return nil
 }
 
-func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, repo *git.Repository) (map[git.Oid][]*groupedResource, error) {
+func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, repo *git.Repository, logger *log.Logger) (map[git.Oid][]*groupedResource, error) {
 	var err error
 	puppetReportChan := make(chan rizzopb.PuppetReport)
 	var commitsToNoop []git.Oid
@@ -326,7 +322,7 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 
 	var nodeCommitToNoop git.Oid
 	for i, commitToNoop := range commitsToNoop {
-		log.Printf("Nooping: %s (%d of %d)", commitToNoop.String(), i+1, len(commitsToNoop))
+		logger.Printf("Nooping: %s (%d of %d)", commitToNoop.String(), i+1, len(commitsToNoop))
 		noopRequests = 0
 		for _, node := range nodes {
 			// perma-diff: We need a noop report of the lastApply so we can use it to
@@ -338,35 +334,35 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 			} else {
 				nodeCommitToNoop = commitToNoop
 			}
-			if rprt, err = loadNoop(nodeCommitToNoop, node, revdir, repo); err == nil {
+			if rprt, err = loadNoop(nodeCommitToNoop, node, revdir, repo, logger); err == nil {
 				nodes[node.host].commitReports[nodeCommitToNoop] = rprt
 			} else if os.IsNotExist(err) {
 				par := rizzopb.PuppetApplyRequest{Rev: nodeCommitToNoop.String(), Noop: true}
 				go hecklerApply(node.rizzoClient, puppetReportChan, par)
 				noopRequests++
 			} else {
-				log.Fatalf("Unable to load noop: %v", err)
+				logger.Fatalf("Unable to load noop: %v", err)
 			}
 		}
 
 		for j := 0; j < noopRequests; j++ {
 			newRprt := normalizeReport(<-puppetReportChan)
-			log.Printf("Received noop: %s@%s", newRprt.Host, newRprt.ConfigurationVersion)
+			logger.Printf("Received noop: %s@%s", newRprt.Host, newRprt.ConfigurationVersion)
 			commitId, err := git.NewOid(newRprt.ConfigurationVersion)
 			if err != nil {
-				log.Fatalf("Unable to marshal report: %v", err)
+				logger.Fatalf("Unable to marshal report: %v", err)
 			}
 			nodes[newRprt.Host].commitReports[*commitId] = &newRprt
 			err = marshalReport(newRprt, revdir, *commitId)
 			if err != nil {
-				log.Fatalf("Unable to marshal report: %v", err)
+				logger.Fatalf("Unable to marshal report: %v", err)
 			}
 		}
 	}
 
 	for host, node := range nodes {
 		for _, gi := range commitLogIds {
-			log.Printf("Creating delta resource: %s@%s", host, gi.String())
+			logger.Printf("Creating delta resource: %s@%s", host, gi.String())
 			// perma-diff: If the commit is already applied we can assume that the
 			// diff is empty. Ideally we would not need this special case as the noop
 			// for an already applied commit should be empty, but we purposefully
@@ -376,13 +372,13 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 			if commitAlreadyApplied(node.lastApply, gi, repo) {
 				node.commitDeltaResources[gi] = make(map[ResourceTitle]*deltaResource)
 			} else {
-				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], commitParentReports(*commits[gi], node.lastApply, node.commitReports, repo))
+				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], commitParentReports(*commits[gi], node.lastApply, node.commitReports, repo, logger))
 			}
 		}
 	}
 
 	for _, gi := range commitLogIds {
-		log.Printf("Grouping: %s", gi.String())
+		logger.Printf("Grouping: %s", gi.String())
 		for _, node := range nodes {
 			for _, nodeDeltaRes := range node.commitDeltaResources[gi] {
 				groupedCommits[gi] = append(groupedCommits[gi], groupResources(gi, nodeDeltaRes, nodes))
@@ -688,7 +684,6 @@ func nodesFromSet(conf *HecklerdConf, nodeSetName string) ([]string, error) {
 		return nil, errors.New(fmt.Sprintf("nodeSetName '%s' not found in hecklerd config", nodeSetName))
 	}
 	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
-	log.Printf("Executing cmd '%s' for node set '%s'", cmd, nodeSetName)
 	stdout, err := cmd.Output()
 	if err != nil {
 		return nil, err
@@ -702,17 +697,17 @@ func nodesFromSet(conf *HecklerdConf, nodeSetName string) ([]string, error) {
 	if len(nodes) == 0 {
 		return nil, errors.New(fmt.Sprintf("Cmd '%s' produced zero nodes", cmd))
 	}
-	log.Printf("Cmd for node set '%s' succeeded, node count: %d", nodeSetName, len(nodes))
 	return nodes, nil
 }
 
 func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.HecklerApplyRequest) (*hecklerpb.HecklerApplyReport, error) {
+	logger := log.New(os.Stdout, "[HecklerApply] ", log.Lshortfile)
 	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet)
 	if err != nil {
 		return nil, err
 	}
 	dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-	appliedNodes, beyondRevNodes, errApplyNodes := applyNodes(dialedNodes, req.User, req.Force, req.Noop, req.Rev, hs.repo)
+	appliedNodes, beyondRevNodes, errApplyNodes := applyNodes(dialedNodes, req.User, req.Force, req.Noop, req.Rev, hs.repo, logger)
 	errNodes := make(map[string]error)
 	for host, err := range errDialNodes {
 		errNodes[host] = err
@@ -733,7 +728,7 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 	return har, nil
 }
 
-func applyNodes(dialedNodes map[string]*Node, lockUser string, forceApply bool, noop bool, rev string, repo *git.Repository) (appliedNodes []string, beyondRevNodes []string, errNodes map[string]error) {
+func applyNodes(dialedNodes map[string]*Node, lockUser string, forceApply bool, noop bool, rev string, repo *git.Repository, logger *log.Logger) (appliedNodes []string, beyondRevNodes []string, errNodes map[string]error) {
 	lockReq := hecklerpb.HecklerLockRequest{
 		User:    lockUser,
 		Comment: "Applying with Heckler",
@@ -754,7 +749,7 @@ func applyNodes(dialedNodes map[string]*Node, lockUser string, forceApply bool, 
 		lastApplyNodes, errUnknownRevNodes = nodeLastApply(lockedNodes, repo)
 		obj, err := gitutil.RevparseToCommit(rev, repo)
 		if err != nil {
-			log.Fatalf("Unable to parse rev: '%s'", rev)
+			logger.Fatalf("Unable to parse rev: '%s'", rev)
 		}
 		revId := *obj.Id()
 		nodesToApply = make(map[string]*Node)
@@ -777,15 +772,15 @@ func applyNodes(dialedNodes map[string]*Node, lockUser string, forceApply bool, 
 	for range nodesToApply {
 		r := <-puppetReportChan
 		if cmp.Equal(r, rizzopb.PuppetReport{}) {
-			log.Fatalf("Received an empty report")
+			logger.Fatalf("Received an empty report")
 		} else if r.Status == "failed" {
-			log.Printf("ERROR: Apply failed, %s@%s", r.Host, r.ConfigurationVersion)
+			logger.Printf("ERROR: Apply failed, %s@%s", r.Host, r.ConfigurationVersion)
 			errApplyNodes[r.Host] = errors.New("Apply failed")
 		} else {
 			if noop {
-				log.Printf("Nooped: %s@%s", r.Host, r.ConfigurationVersion)
+				logger.Printf("Nooped: %s@%s", r.Host, r.ConfigurationVersion)
 			} else {
-				log.Printf("Applied: %s@%s", r.Host, r.ConfigurationVersion)
+				logger.Printf("Applied: %s@%s", r.Host, r.ConfigurationVersion)
 			}
 			appliedNodes = append(appliedNodes, r.Host)
 		}
@@ -804,6 +799,7 @@ func applyNodes(dialedNodes map[string]*Node, lockUser string, forceApply bool, 
 }
 
 func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.HecklerNoopRangeRequest) (*hecklerpb.HecklerNoopRangeReport, error) {
+	logger := log.New(os.Stdout, "[HecklerNoopRange] ", log.Lshortfile)
 	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet)
 	if err != nil {
 		return nil, err
@@ -824,7 +820,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	if err != nil {
 		return nil, err
 	}
-	groupedCommits, err := noopCommitRange(lastApplyNodes, req.BeginRev, req.EndRev, commitLogIds, commits, hs.repo)
+	groupedCommits, err := noopCommitRange(lastApplyNodes, req.BeginRev, req.EndRev, commitLogIds, commits, hs.repo, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -894,7 +890,6 @@ func createMilestone(milestone string, ghclient *github.Client, conf *HecklerdCo
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Successfully created new milestone: %v", *nms.Title)
 	return nms, nil
 }
 
@@ -906,11 +901,10 @@ func closeMilestone(milestone string, ghclient *github.Client, conf *HecklerdCon
 	ms.State = github.String("closed")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	nms, _, err := ghclient.Issues.EditMilestone(ctx, conf.RepoOwner, conf.Repo, *ms.Number, ms)
+	_, _, err = ghclient.Issues.EditMilestone(ctx, conf.RepoOwner, conf.Repo, *ms.Number, ms)
 	if err != nil {
 		return err
 	}
-	log.Printf("Successfully closed milestone: '%s'", *nms.Title)
 	return nil
 }
 
@@ -1049,7 +1043,7 @@ func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue
 	return err
 }
 
-func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit, templates *template.Template) error {
+func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit, templates *template.Template, logger *log.Logger) error {
 	ctx := context.Background()
 
 	for _, gi := range commitLogIds {
@@ -1058,7 +1052,7 @@ func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogId
 			return err
 		}
 		if issue != nil {
-			log.Printf("Issue already exists for commit %s, skipping", gi.String())
+			logger.Printf("Issue already exists for commit %s, skipping create", gi.String())
 			continue
 		}
 		githubIssue := &github.IssueRequest{
@@ -1068,14 +1062,14 @@ func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogId
 		}
 		ni, _, err := ghclient.Issues.Create(ctx, conf.RepoOwner, conf.Repo, githubIssue)
 		if err != nil {
-			log.Fatal(err)
+			logger.Fatal(err)
 		}
-		log.Printf("Successfully created new issue: '%v'", *ni.Title)
+		logger.Printf("Successfully created new issue: '%v'", *ni.Title)
 		if conf.AutoCloseIssues {
-			log.Println("Marking issue as auto closed")
+			logger.Println("Auto close set, marking issue as 'closed'")
 			err := closeIssue(ghclient, conf, ni)
 			if err != nil {
-				log.Fatal(err)
+				logger.Fatal(err)
 			}
 		}
 	}
@@ -1311,7 +1305,6 @@ func nodeLastApply(nodes map[string]*Node, repo *git.Repository) (map[string]*No
 	for range nodes {
 		r := <-puppetReportChan
 		if r.ConfigurationVersion == "" {
-			log.Printf("ConfigurationVersion empty, for host %s", r.Host)
 			errNodes[r.Host] = ErrLastApplyUnknown
 			continue
 		}
@@ -1378,12 +1371,13 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 //             If no, do nothing
 //   If no, do nothing
 func applyLoop(conf *HecklerdConf, repo *git.Repository) {
+	logger := log.New(os.Stdout, "[applyLoop] ", log.Lshortfile)
 	prefix := conf.EnvPrefix
 	for {
 		time.Sleep(10 * time.Second)
 		nodesToDial, err := nodesFromSet(conf, "all")
 		if err != nil {
-			log.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
+			logger.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -1397,54 +1391,55 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 		for host, err := range errUnknownRevNodes {
 			errNodes[host] = err
 		}
-		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo)
+		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo, logger)
 		if err != nil {
-			log.Fatalf("Unable to find common tag: %v", err)
+			logger.Fatalf("Unable to find common tag: %v", err)
 			return
 		}
 		if commonTag == "" {
-			log.Println("No common tag found")
+			logger.Println("No common tag found, sleeping")
 			continue
 		}
-		log.Printf("Common tag: %s", commonTag)
 		ghclient, _, err := githubConn(conf)
 		if err != nil {
-			log.Fatalf("Unable to connect to github: %v", err)
+			logger.Fatalf("Unable to connect to github: %v", err)
 			return
 		}
 		nextTag, err := nextTag(commonTag, conf.EnvPrefix, repo)
 		if err != nil {
-			log.Fatalf("Unable to find next tag: %v", err)
+			logger.Fatalf("Unable to find next tag: %v", err)
 			return
 		}
 		if nextTag == "" {
+			logger.Println("No nextTag found, sleeping")
 			continue
 		}
 		priorTag := commonTag
 		tagIssuesReviewed, err := tagIssuesReviewed(repo, ghclient, conf, priorTag, nextTag)
 		if err != nil {
-			log.Fatalf("Unable to find next tag: %v", err)
+			logger.Fatalf("Unable to find next tag: %v", err)
 			return
 		}
 		if tagIssuesReviewed {
 			err = closeMilestone(nextTag, ghclient, conf)
 			if err != nil {
-				log.Fatalf("Unable to close miletstone: %v", err)
+				logger.Fatalf("Unable to close miletstone: %v", err)
 				return
 			}
 		} else {
-			log.Printf("Tag '%s' is not ready to apply", nextTag)
+			logger.Printf("Tag '%s' is not ready to apply, sleeping", nextTag)
 			continue
 		}
-		log.Printf("Tag '%s' is ready to apply, applying...", nextTag)
-		appliedNodes, beyondRevNodes, errApplyNodes := applyNodes(dialedNodes, "root", false, false, nextTag, repo)
+		logger.Printf("Tag '%s' is ready to apply, applying...", nextTag)
+		appliedNodes, beyondRevNodes, errApplyNodes := applyNodes(dialedNodes, "root", false, false, nextTag, repo, logger)
 		for host, err := range errApplyNodes {
 			errNodes[host] = err
 		}
 		for host, err := range errNodes {
-			log.Printf("errNodes: %s, %v", host, err)
+			logger.Printf("errNodes: %s, %v", host, err)
 		}
-		log.Printf("Applied nodes: %d; Beyond rev nodes: %d; Error nodes: %d", len(appliedNodes), len(beyondRevNodes), len(errNodes))
+		logger.Printf("Applied nodes: %d; Beyond rev nodes: %d; Error nodes: %d", len(appliedNodes), len(beyondRevNodes), len(errNodes))
+		logger.Println("Apply complete, sleeping")
 	}
 }
 
@@ -1452,48 +1447,49 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 // 	If yes, create a new tag
 // If no, do nothing
 func tagNewCommits(conf *HecklerdConf, repo *git.Repository) {
+	logger := log.New(os.Stdout, "[tagNewCommits] ", log.Lshortfile)
 	headCommit, err := gitutil.RevparseToCommit("master", repo)
 	if err != nil {
-		log.Fatalf("Unable to revparse: %v", err)
+		logger.Fatalf("Unable to revparse: %v", err)
 	}
-	log.Printf("Master commit, '%s'", headCommit.AsObject().Id().String())
+	logger.Printf("Master commit, '%s'", headCommit.AsObject().Id().String())
 	describeOpts, err := git.DefaultDescribeOptions()
 	if err != nil {
-		log.Fatalf("Unable to set describe opts: %v", err)
+		logger.Fatalf("Unable to set describe opts: %v", err)
 	}
 	prefix := conf.EnvPrefix
 	describeOpts.Pattern = fmt.Sprintf("%sv*", tagPrefix(prefix))
 	result, err := headCommit.Describe(&describeOpts)
 	if err != nil {
-		log.Fatalf("Unable to describe: %v", err)
+		logger.Fatalf("Unable to describe: %v", err)
 	}
 	formatOpts, err := git.DefaultDescribeFormatOptions()
 	formatOpts.AbbreviatedSize = 0
 	if err != nil {
-		log.Fatalf("Unable to set format opts: %v", err)
+		logger.Fatalf("Unable to set format opts: %v", err)
 	}
 	mostRecentTag, err := result.Format(&formatOpts)
 	if err != nil {
-		log.Fatalf("Unable to format describe output: %v", err)
+		logger.Fatalf("Unable to format describe output: %v", err)
 	}
-	log.Printf("Most recent tag from commit, %s tag: '%s'", headCommit.AsObject().Id().String(), mostRecentTag)
+	logger.Printf("Most recent tag from commit, %s tag: '%s'", headCommit.AsObject().Id().String(), mostRecentTag)
 	commitLogIds, _, err := commitLogIdList(repo, mostRecentTag, "master")
 	if err != nil {
-		log.Fatalf("Unable to obtain commit log ids: %v", err)
+		logger.Fatalf("Unable to obtain commit log ids: %v", err)
 		return
 	}
-	// No new commits
 	if len(commitLogIds) == 0 {
+		logger.Printf("No new commits since last tag: '%s'", mostRecentTag)
 		return
 	}
 	ghclient, _, err := githubConn(conf)
 	if err != nil {
-		log.Fatalf("Unable to connect to github: %v", err)
+		logger.Fatalf("Unable to connect to github: %v", err)
 		return
 	}
 	mostRecentVersion, err := tagToSemver(mostRecentTag, prefix)
 	if err != nil {
-		log.Fatalf("Unable to parse version: %v", err)
+		logger.Fatalf("Unable to parse version: %v", err)
 	}
 	newVersion := mostRecentVersion.IncMajor()
 	newTag := fmt.Sprintf("%sv%d", tagPrefix(prefix), newVersion.Major())
@@ -1502,12 +1498,12 @@ func tagNewCommits(conf *HecklerdConf, repo *git.Repository) {
 	// Check if tag ref already exists
 	refs, _, err := ghclient.Git.GetRefs(ctx, conf.RepoOwner, conf.Repo, fmt.Sprintf("refs/tags/%s", newTag))
 	if len(refs) == 1 {
-		log.Printf("New tag ref already exists on github, skipping creation, '%s'", newTag)
+		logger.Printf("New tag ref already exists on github, skipping creation, '%s'", newTag)
 		return
 	}
 	err = createTag(newTag, conf, ghclient, repo)
 	if err != nil {
-		log.Fatalf("Unable to create new tag: %v", err)
+		logger.Fatalf("Unable to create new tag: %v", err)
 	}
 }
 
@@ -1601,12 +1597,13 @@ func tagIssuesReviewed(repo *git.Repository, ghclient *github.Client, conf *Heck
 //       If no, do nothing
 //   If no, do nothing
 func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
+	logger := log.New(os.Stdout, "[milestoneLoop] ", log.Lshortfile)
 	prefix := conf.EnvPrefix
 	for {
 		time.Sleep(10 * time.Second)
 		nodesToDial, err := nodesFromSet(conf, "all")
 		if err != nil {
-			log.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
+			logger.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -1621,60 +1618,61 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 			errNodes[host] = err
 		}
 		for host, err := range errNodes {
-			log.Printf("errNodes: %s, %v", host, err)
+			logger.Printf("errNodes: %s, %v", host, err)
 		}
-		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo)
+		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo, logger)
 		if err != nil {
-			log.Fatalf("Unable to find common tag: %v", err)
+			logger.Fatalf("Unable to find common tag: %v", err)
 			return
 		}
 		if commonTag == "" {
-			log.Println("No common tag found")
+			logger.Println("No common tag found, sleeping")
 			continue
 		}
-		log.Printf("Common tag: %s", commonTag)
 		ghclient, _, err := githubConn(conf)
 		if err != nil {
-			log.Fatalf("Unable to connect to github: %v", err)
+			logger.Fatalf("Unable to connect to github: %v", err)
 			return
 		}
 		nextTag, err := nextTag(commonTag, prefix, repo)
 		if err != nil {
-			log.Fatalf("Unable to find next tag: %v", err)
+			logger.Fatalf("Unable to find next tag: %v", err)
 			return
 		}
 		if nextTag == "" {
+			logger.Println("No nextTag found, sleeping")
 			continue
 		}
 		priorTag := commonTag
 		var nextTagMilestone *github.Milestone
 		nextTagMilestone, err = milestoneFromTag(nextTag, ghclient, conf)
 		if err != nil {
-			log.Fatalf("Unable to find milestone from tag, '%s': %v", nextTag, err)
+			logger.Fatalf("Unable to find milestone from tag, '%s': %v", nextTag, err)
 			return
 		}
 		if nextTagMilestone == nil {
 			nextTagMilestone, err = createMilestone(nextTag, ghclient, conf)
 			if err != nil {
-				log.Fatalf("Unable to create new milestone for tag '%s': %v", nextTag, err)
+				logger.Fatalf("Unable to create new milestone for tag '%s': %v", nextTag, err)
 				return
 			}
+			logger.Printf("Successfully created new milestone: %v", *nextTagMilestone.Title)
 		}
 		// TODO support other branches?
 		commitLogIds, _, err := commitLogIdList(repo, priorTag, nextTag)
 		if err != nil {
-			log.Fatalf("Unable to obtain commit log ids: %v", err)
+			logger.Fatalf("Unable to obtain commit log ids: %v", err)
 			return
 		}
 		// No new commits
 		if len(commitLogIds) == 0 {
-			log.Fatalf("No commits between versions: %s..%s", priorTag, nextTag)
+			logger.Fatalf("No commits between versions: %s..%s", priorTag, nextTag)
 			return
 		}
 		for _, gi := range commitLogIds {
 			issue, err := githubIssueFromCommit(ghclient, gi)
 			if err != nil {
-				log.Fatalf("Unable to determine if issues exists: %s", gi.String())
+				logger.Fatalf("Unable to determine if issues exists: %s", gi.String())
 				return
 			}
 			if issue != nil {
@@ -1682,13 +1680,13 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 				if issueMilestone == nil || *issueMilestone != *nextTagMilestone {
 					err = updateIssueMilestone(ghclient, conf, issue, nextTagMilestone)
 					if err != nil {
-						log.Fatalf("Unable to update issue milestone: %v", err)
+						logger.Fatalf("Unable to update issue milestone: %v", err)
 						return
 					}
 				}
 			}
 		}
-		log.Println("All issues updated with milestone, sleeping")
+		logger.Println("All issues updated with milestone, sleeping")
 	}
 }
 
@@ -1699,28 +1697,28 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 //      If yes, do nothing
 //  If no, do nothing
 func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
+	logger := log.New(os.Stdout, "[noopLoop] ", log.Lshortfile)
 	prefix := conf.EnvPrefix
 	for {
 		time.Sleep(10 * time.Second)
 		nodesToDial, err := nodesFromSet(conf, "all")
 		if err != nil {
-			log.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
+			logger.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
 		lastApplyNodes, errUnknownRevNodes := nodeLastApply(dialedNodes, repo)
-		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo)
+		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo, logger)
 		if err != nil {
-			log.Fatalf("Unable to find common tag: %v", err)
+			logger.Fatalf("Call to commonAncestorTag failed: %v", err)
 			return
 		}
 		if commonTag == "" {
-			log.Println("No common tag found")
+			logger.Println("No common tag found, sleeping")
 			continue
 		}
-		log.Printf("Common tag: %s", commonTag)
 		errNodes := make(map[string]error)
 		for host, err := range errDialNodes {
 			errNodes[host] = err
@@ -1729,28 +1727,28 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			errNodes[host] = err
 		}
 		for host, err := range errNodes {
-			log.Printf("errNodes: %s, %v", host, err)
+			logger.Printf("errNodes: %s, %v", host, err)
 		}
 		// TODO support other branches?
 		commitLogIds, commits, err := commitLogIdList(repo, commonTag, "master")
 		if err != nil {
-			log.Fatalf("Unable to obtain commit log ids: %v", err)
+			logger.Fatalf("Unable to obtain commit log ids: %v", err)
 			return
 		}
-		// No new commits
 		if len(commitLogIds) == 0 {
+			logger.Println("No new commits, sleeping")
 			continue
 		}
 		ghclient, _, err := githubConn(conf)
 		if err != nil {
-			log.Fatalf("Unable to connect to github: %v", err)
+			logger.Fatalf("Unable to connect to github: %v", err)
 			return
 		}
 		allIssuesExist := true
 		for _, gi := range commitLogIds {
 			issue, err := githubIssueFromCommit(ghclient, gi)
 			if err != nil {
-				log.Fatalf("Unable to determine if issues exists: %s", gi.String())
+				logger.Fatalf("Unable to determine if issues exists: %s", gi.String())
 				return
 			}
 			if issue == nil {
@@ -1759,23 +1757,23 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			}
 		}
 		if allIssuesExist {
-			log.Println("All issues exist, sleeping")
+			logger.Println("All issues exist, sleeping")
 			continue
 		}
-		groupedCommits, err := noopCommitRange(lastApplyNodes, commonTag, "master", commitLogIds, commits, repo)
+		groupedCommits, err := noopCommitRange(lastApplyNodes, commonTag, "master", commitLogIds, commits, repo, logger)
 		if err != nil {
-			log.Fatalf("Unable to group commits: %v", err)
+			logger.Fatalf("Unable to group commits: %v", err)
 			return
 		}
-		err = githubCreateIssues(ghclient, conf, commitLogIds, groupedCommits, commits, templates)
+		err = githubCreateIssues(ghclient, conf, commitLogIds, groupedCommits, commits, templates, logger)
 		if err != nil {
-			log.Fatalf("Unable to create github issues: %v", err)
+			logger.Fatalf("Unable to create github issues: %v", err)
 			return
 		}
 	}
 }
 
-func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Repository) (string, error) {
+func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Repository, logger *log.Logger) (string, error) {
 	describeOpts, err := git.DefaultDescribeOptions()
 	if err != nil {
 		return "", err
@@ -1808,8 +1806,8 @@ func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Reposito
 			tagNodes[resultStr] = []string{node.host}
 		}
 	}
-	log.Printf("Tags to nodes: %v", tagNodes)
 	if len(tagNodes) == 0 {
+		logger.Printf("No common tag found, tags to nodes: %v", tagNodes)
 		return "", nil
 	}
 
@@ -1854,7 +1852,6 @@ func sortedSemVers(tags []string, prefix string) ([]*semver.Version, error) {
 	}
 
 	sort.Sort(semver.Collection(tagSet))
-	log.Printf("Tag set: %v", tagSet)
 	return tagSet, nil
 }
 
@@ -1890,7 +1887,6 @@ func nextTag(priorTag string, prefix string, repo *git.Repository) (string, erro
 	nextTagIndex := priorTagIndex + 1
 	if len(tagSet) > nextTagIndex {
 		nextTag := semverToOrig(tagSet[nextTagIndex], prefix)
-		log.Printf("Found next tag: %s", nextTag)
 		return nextTag, nil
 	} else {
 		return "", nil
