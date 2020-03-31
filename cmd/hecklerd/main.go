@@ -898,6 +898,22 @@ func createMilestone(milestone string, ghclient *github.Client, conf *HecklerdCo
 	return nms, nil
 }
 
+func closeMilestone(milestone string, ghclient *github.Client, conf *HecklerdConf) error {
+	ms, err := milestoneFromTag(milestone, ghclient, conf)
+	if err != nil {
+		return err
+	}
+	ms.State = github.String("closed")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	nms, _, err := ghclient.Issues.EditMilestone(ctx, conf.RepoOwner, conf.Repo, *ms.Number, ms)
+	if err != nil {
+		return err
+	}
+	log.Printf("Successfully closed milestone: '%s'", *nms.Title)
+	return nil
+}
+
 func milestoneFromTag(milestone string, ghclient *github.Client, conf *HecklerdConf) (*github.Milestone, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -1352,12 +1368,10 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 //         Does a github issue exist for each issue?
 //          If no, do nothing
 //          If yes
-//            Are all issues assigned to the tag & closed?
+//            Are all issues assigned to the milestone & closed?
 //             If yes
+//               Close milestone
 //               Apply new tag across all nodes
-//               Apply successful?
-//                 If yes, close milestone
-//                 If no, do nothing
 //             If no, do nothing
 //   If no, do nothing
 func applyLoop(conf *HecklerdConf, repo *git.Repository) {
@@ -1409,7 +1423,13 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			log.Fatalf("Unable to find next tag: %v", err)
 			return
 		}
-		if !tagIssuesReviewed {
+		if tagIssuesReviewed {
+			err = closeMilestone(nextTag, ghclient, conf)
+			if err != nil {
+				log.Fatalf("Unable to close miletstone: %v", err)
+				return
+			}
+		} else {
 			log.Printf("Tag '%s' is not ready to apply", nextTag)
 			continue
 		}
