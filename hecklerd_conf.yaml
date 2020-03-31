@@ -6,6 +6,7 @@ github_app_id: 7
 github_app_install_id: 11
 auto_tag_cron_schedule: "* * * * *"
 auto_close_issues: true
+env_prefix: "dev"
 node_sets:
   all:
     cmd: ['jq', '-n', '--arg', 'nodes', 'fozzie.example.com statler.example.com waldorf.example.com', '$nodes | split(" ")']

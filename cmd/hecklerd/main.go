@@ -62,6 +62,7 @@ type HecklerdConf struct {
 	NodeSets             map[string]NodeSet `yaml:"node_sets"`
 	AutoTagCronSchedule  string             `yaml:"auto_tag_cron_schedule"`
 	AutoCloseIssues      bool               `yaml:"auto_close_issues"`
+	EnvPrefix            string             `yaml:"env_prefix"`
 }
 
 type NodeSet struct {
@@ -829,7 +830,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	}
 	rprt := new(hecklerpb.HecklerNoopRangeReport)
 	if req.OutputFormat == hecklerpb.OutputFormat_markdown {
-		rprt.Output = markdownOutput(commitLogIds, commits, groupedCommits, hs.templates)
+		rprt.Output = markdownOutput(hs.conf, commitLogIds, commits, groupedCommits, hs.templates)
 	}
 	rprt.NodeErrors = make(map[string]string)
 	for host, err := range errNodes {
@@ -954,7 +955,9 @@ func clearMilestones(ghclient *github.Client, conf *HecklerdConf) error {
 	var msTitle string
 	for _, ms := range milestones {
 		msTitle = *ms.Title
-		if *ms.Creator.Type == "Bot" && *ms.Creator.Login == "heckler-dev[bot]" {
+		if *ms.Creator.Type == "Bot" &&
+			*ms.Creator.Login == "heckler-dev[bot]" &&
+			strings.HasPrefix(*ms.Title, tagPrefix(conf.EnvPrefix)) {
 			_, err := ghclient.Issues.DeleteMilestone(ctx, conf.RepoOwner, conf.Repo, *ms.Number)
 			if err != nil {
 				log.Fatal(err)
@@ -966,10 +969,21 @@ func clearMilestones(ghclient *github.Client, conf *HecklerdConf) error {
 	return nil
 }
 
+func issuePrefix(prefix string) string {
+	if prefix == "" {
+		return ""
+	} else {
+		return fmt.Sprintf("[%s-env]", prefix)
+	}
+}
+
 func clearIssues(ghclient *github.Client, conf *HecklerdConf) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*100)
 	defer cancel()
 	query := fmt.Sprintf("author:app/%s", "heckler-dev")
+	if conf.EnvPrefix != "" {
+		query += fmt.Sprintf(" %s in:title", issuePrefix(conf.EnvPrefix))
+	}
 	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
 	if err != nil {
 		log.Fatal(err)
@@ -1029,7 +1043,7 @@ func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogId
 			continue
 		}
 		githubIssue := &github.IssueRequest{
-			Title:    github.String(fmt.Sprintf("Puppet noop output for commit: %s", gi.String())),
+			Title:    github.String(noopTitle(gi, conf.EnvPrefix)),
 			Assignee: github.String(commits[gi].Author().Name),
 			Body:     github.String(commitToMarkdown(commits[gi], templates) + groupedResourcesToMarkdown(groupedCommits[gi], templates)),
 		}
@@ -1049,14 +1063,18 @@ func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogId
 	return nil
 }
 
-func markdownOutput(commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, groupedCommits map[git.Oid][]*groupedResource, templates *template.Template) string {
+func noopTitle(gi git.Oid, prefix string) string {
+	return fmt.Sprintf("%s Puppet noop output for commit: %s", issuePrefix(prefix), gi.String())
+}
+
+func markdownOutput(conf *HecklerdConf, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, groupedCommits map[git.Oid][]*groupedResource, templates *template.Template) string {
 	var output string
 	for _, gi := range commitLogIds {
 		if len(groupedCommits[gi]) == 0 {
 			log.Printf("Skipping %s, no noop output", gi.String())
 			continue
 		}
-		output += fmt.Sprintf("## Puppet noop output for commit: '%v'\n\n", commits[gi].Summary())
+		output += fmt.Sprintf("## %s\n\n", noopTitle(gi, conf.EnvPrefix))
 		output += commitToMarkdown(commits[gi], templates)
 		output += groupedResourcesToMarkdown(groupedCommits[gi], templates)
 	}
@@ -1343,6 +1361,7 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 //             If no, do nothing
 //   If no, do nothing
 func applyLoop(conf *HecklerdConf, repo *git.Repository) {
+	prefix := conf.EnvPrefix
 	for {
 		time.Sleep(10 * time.Second)
 		nodesToDial, err := nodesFromSet(conf, "all")
@@ -1361,7 +1380,7 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 		for host, err := range errUnknownRevNodes {
 			errNodes[host] = err
 		}
-		commonTag, err := commonAncestorTag(lastApplyNodes, repo)
+		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo)
 		if err != nil {
 			log.Fatalf("Unable to find common tag: %v", err)
 			return
@@ -1376,7 +1395,7 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			log.Fatalf("Unable to connect to github: %v", err)
 			return
 		}
-		nextTag, err := nextTag(commonTag, repo)
+		nextTag, err := nextTag(commonTag, conf.EnvPrefix, repo)
 		if err != nil {
 			log.Fatalf("Unable to find next tag: %v", err)
 			return
@@ -1419,6 +1438,10 @@ func tagNewCommits(conf *HecklerdConf, repo *git.Repository) {
 	if err != nil {
 		log.Fatalf("Unable to set describe opts: %v", err)
 	}
+	prefix := conf.EnvPrefix
+	if prefix != "" {
+		describeOpts.Pattern = fmt.Sprintf("%s/*", prefix)
+	}
 	result, err := headCommit.Describe(&describeOpts)
 	if err != nil {
 		log.Fatalf("Unable to describe: %v", err)
@@ -1447,12 +1470,12 @@ func tagNewCommits(conf *HecklerdConf, repo *git.Repository) {
 		log.Fatalf("Unable to connect to github: %v", err)
 		return
 	}
-	mostRecentVersion, err := semver.NewVersion(mostRecentTag)
+	mostRecentVersion, err := tagToSemver(mostRecentTag, prefix)
 	if err != nil {
 		log.Fatalf("Unable to parse version: %v", err)
 	}
 	newVersion := mostRecentVersion.IncMajor()
-	newTag := fmt.Sprintf("v%d", newVersion.Major())
+	newTag := fmt.Sprintf("%sv%d", tagPrefix(prefix), newVersion.Major())
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	// Check if tag ref already exists
@@ -1557,6 +1580,7 @@ func tagIssuesReviewed(repo *git.Repository, ghclient *github.Client, conf *Heck
 //       If no, do nothing
 //   If no, do nothing
 func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
+	prefix := conf.EnvPrefix
 	for {
 		time.Sleep(10 * time.Second)
 		nodesToDial, err := nodesFromSet(conf, "all")
@@ -1578,7 +1602,7 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 		for host, err := range errNodes {
 			log.Printf("errNodes: %s, %v", host, err)
 		}
-		commonTag, err := commonAncestorTag(lastApplyNodes, repo)
+		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo)
 		if err != nil {
 			log.Fatalf("Unable to find common tag: %v", err)
 			return
@@ -1593,7 +1617,7 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 			log.Fatalf("Unable to connect to github: %v", err)
 			return
 		}
-		nextTag, err := nextTag(commonTag, repo)
+		nextTag, err := nextTag(commonTag, prefix, repo)
 		if err != nil {
 			log.Fatalf("Unable to find next tag: %v", err)
 			return
@@ -1654,6 +1678,7 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 //      If yes, do nothing
 //  If no, do nothing
 func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
+	prefix := conf.EnvPrefix
 	for {
 		time.Sleep(10 * time.Second)
 		nodesToDial, err := nodesFromSet(conf, "all")
@@ -1665,7 +1690,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		defer cancel()
 		dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
 		lastApplyNodes, errUnknownRevNodes := nodeLastApply(dialedNodes, repo)
-		commonTag, err := commonAncestorTag(lastApplyNodes, repo)
+		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo)
 		if err != nil {
 			log.Fatalf("Unable to find common tag: %v", err)
 			return
@@ -1729,10 +1754,13 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 	}
 }
 
-func commonAncestorTag(nodes map[string]*Node, repo *git.Repository) (string, error) {
+func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Repository) (string, error) {
 	describeOpts, err := git.DefaultDescribeOptions()
 	if err != nil {
 		return "", err
+	}
+	if prefix != "" {
+		describeOpts.Pattern = fmt.Sprintf("%s/*", prefix)
 	}
 	formatOpts, err := git.DefaultDescribeFormatOptions()
 	formatOpts.AbbreviatedSize = 0
@@ -1766,27 +1794,54 @@ func commonAncestorTag(nodes map[string]*Node, repo *git.Repository) (string, er
 		return "", nil
 	}
 
-	tagSet := make([]*semver.Version, len(tagNodes))
-	tagCount := 0
+	tags := make([]string, 0, len(tagNodes))
 	for tag := range tagNodes {
-		v, err := semver.NewVersion(tag)
+		tags = append(tags, tag)
+	}
+	tagSet, err := sortedSemVers(tags, prefix)
+	if err != nil {
+		return "", err
+	}
+
+	// return the earliest version from the set, which should be the common
+	// ancestor tag for all nodes
+	return semverToOrig(tagSet[0], prefix), nil
+}
+
+func semverToOrig(tag *semver.Version, prefix string) string {
+	return fmt.Sprintf("%s%s", tagPrefix(prefix), tag.Original())
+}
+
+func tagToSemver(tag string, prefix string) (*semver.Version, error) {
+	return semver.NewVersion(strings.TrimPrefix(tag, tagPrefix(prefix)))
+}
+
+func tagPrefix(prefix string) string {
+	if prefix == "" {
+		return ""
+	} else {
+		return fmt.Sprintf("%s/", prefix)
+	}
+}
+
+func sortedSemVers(tags []string, prefix string) ([]*semver.Version, error) {
+	tagSet := make([]*semver.Version, 0, len(tags))
+	for _, tag := range tags {
+		v, err := tagToSemver(tag, prefix)
 		if err != nil {
-			return "", err
+			return []*semver.Version{}, err
 		}
-		tagSet[tagCount] = v
-		tagCount++
+		tagSet = append(tagSet, v)
 	}
 
 	sort.Sort(semver.Collection(tagSet))
 	log.Printf("Tag set: %v", tagSet)
-
-	// return the earliest version from the set, which should be the common
-	// ancestor tag for all nodes
-	return tagSet[0].Original(), nil
+	return tagSet, nil
 }
 
-func nextTag(priorTag string, repo *git.Repository) (string, error) {
-	tags, err := repo.Tags.ListWithMatch("v*")
+func nextTag(priorTag string, prefix string, repo *git.Repository) (string, error) {
+	tagMatch := fmt.Sprintf("%sv*", tagPrefix(prefix))
+	tags, err := repo.Tags.ListWithMatch(tagMatch)
 	if err != nil {
 		return "", err
 	}
@@ -1800,24 +1855,12 @@ func nextTag(priorTag string, repo *git.Repository) (string, error) {
 			annotatedTags = append(annotatedTags, tag)
 		}
 	}
-	tagSet := make([]*semver.Version, len(annotatedTags))
-	tagCount := 0
-	for _, tag := range annotatedTags {
-		v, err := semver.NewVersion(tag)
-		if err != nil {
-			return "", err
-		}
-		tagSet[tagCount] = v
-		tagCount++
-	}
-
-	sort.Sort(semver.Collection(tagSet))
-	log.Printf("Tag set: %v", tagSet)
+	tagSet, err := sortedSemVers(tags, prefix)
 
 	priorTagFound := false
 	var priorTagIndex int
 	for i := range tagSet {
-		if tagSet[i].Original() == priorTag {
+		if semverToOrig(tagSet[i], prefix) == priorTag {
 			priorTagFound = true
 			priorTagIndex = i
 		}
@@ -1827,7 +1870,7 @@ func nextTag(priorTag string, repo *git.Repository) (string, error) {
 	}
 	nextTagIndex := priorTagIndex + 1
 	if len(tagSet) > nextTagIndex {
-		nextTag := tagSet[nextTagIndex].Original()
+		nextTag := semverToOrig(tagSet[nextTagIndex], prefix)
 		log.Printf("Found next tag: %s", nextTag)
 		return nextTag, nil
 	} else {
