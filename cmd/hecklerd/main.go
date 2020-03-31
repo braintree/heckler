@@ -917,7 +917,10 @@ func closeMilestone(milestone string, ghclient *github.Client, conf *HecklerdCon
 func milestoneFromTag(milestone string, ghclient *github.Client, conf *HecklerdConf) (*github.Milestone, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	allMilestones, _, err := ghclient.Issues.ListMilestones(ctx, conf.RepoOwner, conf.Repo, nil)
+	milestoneOpts := &github.MilestoneListOptions{
+		State: "all",
+	}
+	allMilestones, _, err := ghclient.Issues.ListMilestones(ctx, conf.RepoOwner, conf.Repo, milestoneOpts)
 	if err != nil {
 		return nil, err
 	}
