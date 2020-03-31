@@ -1462,9 +1462,7 @@ func tagNewCommits(conf *HecklerdConf, repo *git.Repository) {
 		log.Fatalf("Unable to set describe opts: %v", err)
 	}
 	prefix := conf.EnvPrefix
-	if prefix != "" {
-		describeOpts.Pattern = fmt.Sprintf("%s/*", prefix)
-	}
+	describeOpts.Pattern = fmt.Sprintf("%sv*", tagPrefix(prefix))
 	result, err := headCommit.Describe(&describeOpts)
 	if err != nil {
 		log.Fatalf("Unable to describe: %v", err)
@@ -1782,9 +1780,7 @@ func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Reposito
 	if err != nil {
 		return "", err
 	}
-	if prefix != "" {
-		describeOpts.Pattern = fmt.Sprintf("%s/*", prefix)
-	}
+	describeOpts.Pattern = fmt.Sprintf("%sv*", tagPrefix(prefix))
 	formatOpts, err := git.DefaultDescribeFormatOptions()
 	formatOpts.AbbreviatedSize = 0
 	if err != nil {
