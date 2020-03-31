@@ -928,7 +928,7 @@ func milestoneFromTag(milestone string, ghclient *github.Client, conf *HecklerdC
 
 // Given a git oid this function returns the associated github issue, if it
 // exists
-func githubIssueFromCommit(ghclient *github.Client, oid git.Oid) (*github.Issue, error) {
+func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, prefix string) (*github.Issue, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	// TODO add app slug in query author:app/<slug> Can't get this api call to
@@ -940,6 +940,9 @@ func githubIssueFromCommit(ghclient *github.Client, oid git.Oid) (*github.Issue,
 	// }
 	// query := fmt.Sprintf("%s in:title author:app/%s", oid.String(), app.Slug)
 	query := fmt.Sprintf("%s in:title", oid.String())
+	if prefix != "" {
+		query += fmt.Sprintf(" %sin:title", issuePrefix(prefix))
+	}
 	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
 	if err != nil {
 		log.Fatal(err)
@@ -1045,9 +1048,10 @@ func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue
 
 func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit, templates *template.Template, logger *log.Logger) error {
 	ctx := context.Background()
+	prefix := conf.EnvPrefix
 
 	for _, gi := range commitLogIds {
-		issue, err := githubIssueFromCommit(ghclient, gi)
+		issue, err := githubIssueFromCommit(ghclient, gi, prefix)
 		if err != nil {
 			return err
 		}
@@ -1056,7 +1060,7 @@ func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogId
 			continue
 		}
 		githubIssue := &github.IssueRequest{
-			Title:    github.String(noopTitle(gi, conf.EnvPrefix)),
+			Title:    github.String(noopTitle(gi, prefix)),
 			Assignee: github.String(commits[gi].Author().Name),
 			Body:     github.String(commitToMarkdown(commits[gi], templates) + groupedResourcesToMarkdown(groupedCommits[gi], templates)),
 		}
@@ -1552,6 +1556,7 @@ func createTag(newTag string, conf *HecklerdConf, ghclient *github.Client, repo 
 func tagIssuesReviewed(repo *git.Repository, ghclient *github.Client, conf *HecklerdConf, priorTag string, nextTag string) (bool, error) {
 	var nextTagMilestone *github.Milestone
 	nextTagMilestone, err := milestoneFromTag(nextTag, ghclient, conf)
+	prefix := conf.EnvPrefix
 	if err != nil {
 		return false, err
 	}
@@ -1568,7 +1573,7 @@ func tagIssuesReviewed(repo *git.Repository, ghclient *github.Client, conf *Heck
 		return false, errors.New(fmt.Sprintf("No commits between versions: %s..%s", priorTag, nextTag))
 	}
 	for _, gi := range commitLogIds {
-		issue, err := githubIssueFromCommit(ghclient, gi)
+		issue, err := githubIssueFromCommit(ghclient, gi, prefix)
 		if err != nil {
 			return false, err
 		}
@@ -1670,7 +1675,7 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 			return
 		}
 		for _, gi := range commitLogIds {
-			issue, err := githubIssueFromCommit(ghclient, gi)
+			issue, err := githubIssueFromCommit(ghclient, gi, prefix)
 			if err != nil {
 				logger.Fatalf("Unable to determine if issues exists: %s", gi.String())
 				return
@@ -1746,7 +1751,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		}
 		allIssuesExist := true
 		for _, gi := range commitLogIds {
-			issue, err := githubIssueFromCommit(ghclient, gi)
+			issue, err := githubIssueFromCommit(ghclient, gi, prefix)
 			if err != nil {
 				logger.Fatalf("Unable to determine if issues exists: %s", gi.String())
 				return
