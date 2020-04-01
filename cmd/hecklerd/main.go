@@ -1376,7 +1376,7 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 		time.Sleep(10 * time.Second)
 		nodesToDial, err := nodesFromSet(conf, "all")
 		if err != nil {
-			logger.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
+			logger.Fatalf("Unable to load 'all' node set: %v", err)
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -1602,7 +1602,7 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 		time.Sleep(10 * time.Second)
 		nodesToDial, err := nodesFromSet(conf, "all")
 		if err != nil {
-			logger.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
+			logger.Fatalf("Unable to load 'all' node set: %v", err)
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -1702,7 +1702,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		time.Sleep(10 * time.Second)
 		nodesToDial, err := nodesFromSet(conf, "all")
 		if err != nil {
-			logger.Fatal("No node set specified for 'all'!")
+			logger.Fatalf("Unable to load 'all' node set: %v", err)
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
