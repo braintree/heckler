@@ -1702,7 +1702,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		time.Sleep(10 * time.Second)
 		nodesToDial, err := nodesFromSet(conf, "all")
 		if err != nil {
-			logger.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
+			logger.Fatal("No node set specified for 'all'!")
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
