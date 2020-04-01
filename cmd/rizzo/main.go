@@ -242,11 +242,14 @@ func puppetApply(oid string, noop bool, conf *RizzoConf) (*rizzopb.PuppetReport,
 	if noop {
 		puppetArgs = append(puppetArgs, "--noop")
 	}
+	// nice to lowest priority to avoid interferring with other apps, this could
+	// be done in Go via the syscall package but it is a bit cumbersome
+	puppetArgs = append([]string{"-n", "19", "puppet"}, puppetArgs...)
 	if path, ok := conf.Env["PATH"]; ok {
 		oldPath = os.Getenv("PATH")
 		os.Setenv("PATH", path)
 	}
-	cmd := exec.Command("puppet", puppetArgs...)
+	cmd := exec.Command("nice", puppetArgs...)
 	// Change to code dir, so hiera relative paths resolve
 	cmd.Dir = repoDir
 	env := os.Environ()
