@@ -684,7 +684,9 @@ func nodesFromSet(conf *HecklerdConf, nodeSetName string) ([]string, error) {
 	} else {
 		return nil, errors.New(fmt.Sprintf("nodeSetName '%s' not found in hecklerd config", nodeSetName))
 	}
+	// Change to code dir, so hiera relative paths resolve
 	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	cmd.Dir = stateDir + "/work_repo/puppetcode"
 	stdout, err := cmd.Output()
 	if err != nil {
 		return nil, err
@@ -2030,6 +2032,19 @@ func main() {
 		}
 	}()
 
+	_, err = gitutil.Pull("http://localhost:8080/puppetcode", stateDir+"/work_repo/puppetcode")
+	if err != nil {
+		log.Fatalf("Unable to fetch repo: %v", err)
+	}
+	go func() {
+		for {
+			_, err := gitutil.Pull("http://localhost:8080/puppetcode", stateDir+"/work_repo/puppetcode")
+			if err != nil {
+				log.Fatalf("Unable to fetch repo: %v", err)
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}()
 	go noopLoop(conf, repo, templates)
 	go milestoneLoop(conf, repo)
 	go applyLoop(conf, repo)
