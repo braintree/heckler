@@ -1055,8 +1055,10 @@ func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogId
 			continue
 		}
 		githubIssue := &github.IssueRequest{
-			Title:    github.String(noopTitle(gi, prefix)),
-			Assignee: github.String(commits[gi].Author().Name),
+			Title: github.String(noopTitle(gi, prefix)),
+			// TODO need to enforce github user IDs for commits, so that we always
+			// have a valid github user.
+			Assignee: github.String("lollipopman"),
 			Body:     github.String(commitToMarkdown(commits[gi], templates) + groupedResourcesToMarkdown(groupedCommits[gi], templates)),
 		}
 		ni, _, err := ghclient.Issues.Create(ctx, conf.RepoOwner, conf.Repo, githubIssue)
