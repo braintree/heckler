@@ -7,6 +7,9 @@ github_app_id: 7
 github_app_install_id: 11
 auto_tag_cron_schedule: "* * * * *"
 auto_close_issues: true
+# This is the number of nodes that can be missing when creating a noop for an
+# environment
+allowed_number_of_error_nodes: 1
 env_prefix: "dev"
 node_sets:
   all:

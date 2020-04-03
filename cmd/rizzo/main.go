@@ -25,12 +25,27 @@ import (
 
 var Version string
 
+type lockStatus int
+
+const (
+	lockUnknown lockStatus = iota
+	lockedByUser
+	lockedByAnother
+	unlocked
+)
+
 const (
 	port     = ":50051"
 	stateDir = "/var/lib/rizzo"
 	repoDir  = stateDir + "/repo/puppetcode"
 	lockPath = "/var/tmp/puppet.lock"
 )
+
+type lockState struct {
+	lockStatus
+	user    string
+	comment string
+}
 
 // server is used to implement rizzo.RizzoServer.
 type server struct {
@@ -98,65 +113,90 @@ func (s *server) PuppetLock(ctx context.Context, req *rizzopb.PuppetLockRequest)
 	log.Printf("PuppetLock: request received, %v", req)
 	var res *rizzopb.PuppetLockReport
 	res = new(rizzopb.PuppetLockReport)
-	err := puppetLock(req.User, req.Comment, req.Force)
+	lockState, err := puppetLock(req.User, req.Comment, req.Force)
 	if err != nil {
-		res.Locked = false
+		res.LockStatus = rizzopb.LockStatus_lock_unknown
 		res.Error = err.Error()
 	} else {
-		res.Locked = true
+		switch lockState.lockStatus {
+		case lockUnknown:
+			res.LockStatus = rizzopb.LockStatus_lock_unknown
+		case lockedByUser:
+			res.LockStatus = rizzopb.LockStatus_locked_by_user
+		case lockedByAnother:
+			res.LockStatus = rizzopb.LockStatus_locked_by_another
+		case unlocked:
+			res.LockStatus = rizzopb.LockStatus_unlocked
+		default:
+			log.Fatal("Unknown lockStatus!")
+		}
+		res.Comment = lockState.comment
+		res.User = lockState.user
 	}
 	log.Printf("PuppetLock: reply, %v", res)
 	return res, nil
 }
 
-func puppetLock(locker string, comment string, forceLock bool) error {
+func puppetLock(locker string, comment string, forceLock bool) (lockState, error) {
+	var li lockState
 	tmpfile, err := ioutil.TempFile("/var/tmp", "rizzoPuppetLockTmpFile.*")
 	if err != nil {
-		return err
+		return li, err
 	}
 	defer os.Remove(tmpfile.Name())
 
 	if _, err := tmpfile.WriteString(comment); err != nil {
-		return err
+		return li, err
 	}
 	if err := tmpfile.Close(); err != nil {
-		return err
+		return li, err
 	}
 
 	lu, err := luser.Lookup(locker)
 	if err != nil {
-		return err
+		return li, err
 	}
 
 	uid, err := strconv.Atoi(lu.Uid)
 	if err != nil {
-		return err
+		return li, err
 	}
 	gid, err := strconv.Atoi(lu.Gid)
 	if err != nil {
-		return err
+		return li, err
 	}
 	// Chown lock file so it is owned by locker user
 	os.Chown(tmpfile.Name(), uid, gid)
 
 	if forceLock {
-		return os.Rename(tmpfile.Name(), lockPath)
+		err = os.Rename(tmpfile.Name(), lockPath)
+		if err != nil {
+			return li, err
+		} else {
+			li.lockStatus = lockedByUser
+			return li, nil
+		}
 	}
 
 	err = renameAndCheck(tmpfile.Name(), lockPath)
 	if errors.Is(err, os.ErrExist) {
-		buf, err := ioutil.ReadFile(lockPath)
-		if err != nil {
-			return err
-		}
-		comment := strings.TrimRight(string(buf), "\n")
+		li.lockStatus = lockedByAnother
 		lockOwner, err := lockOwner()
 		if err != nil {
-			return err
+			return li, err
 		}
-		return errors.New(fmt.Sprintf("Already locked by %s, '%s'", lockOwner.Username, comment))
+		li.user = lockOwner.Username
+		li.comment, err = lockComment()
+		if err != nil {
+			return li, err
+		}
+		return li, nil
+	} else {
+		li.user = locker
+		li.comment = comment
+		li.lockStatus = lockedByUser
+		return li, nil
 	}
-	return err
 }
 
 func lockOwner() (*luser.User, error) {

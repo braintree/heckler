@@ -1,6 +1,13 @@
 syntax = "proto3";
 package rizzopb;
 
+enum Lock_status {
+	lock_unknown = 0;
+	locked_by_user = 1;
+	locked_by_another = 2;
+	unlocked = 3;
+}
+
 // The Rizzo service definition.
 service Rizzo {
   // applies a ref
@@ -91,8 +98,10 @@ message PuppetLockRequest {
 
 message PuppetLockReport {
   string host = 1;
-  bool locked = 2;
+  Lock_status lock_status = 2;
   string error = 3;
+  string user = 4;
+  string comment = 5;
 }
 
 message PuppetUnlockRequest {
