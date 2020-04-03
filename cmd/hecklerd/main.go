@@ -369,8 +369,8 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 			// diff is empty. Ideally we would not need this special case as the noop
 			// for an already applied commit should be empty, but we purposefully
 			// substitute the noop of the lastApply to subtract away perma-diffs, so
-			// those would show up without this special case. TODO: Assign
-			// perma-diffs to server owners?
+			// those would show up without this special case.
+			// TODO: Assign perma-diffs to server owners?
 			if commitAlreadyApplied(node.lastApply, gi, repo) {
 				node.commitDeltaResources[gi] = make(map[ResourceTitle]*deltaResource)
 			} else {
