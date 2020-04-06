@@ -956,7 +956,6 @@ func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, conf *HecklerdC
 	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
 	if err != nil {
 		log.Fatal(err)
-		return nil, err
 	}
 	if searchResults.GetTotal() == 0 {
 		return nil, nil
@@ -976,7 +975,6 @@ func clearMilestones(ghclient *github.Client, conf *HecklerdConf) error {
 	milestones, _, err := ghclient.Issues.ListMilestones(ctx, conf.RepoOwner, conf.Repo, milestoneOpts)
 	if err != nil {
 		log.Fatal(err)
-		return nil
 	}
 	var msTitle string
 	for _, ms := range milestones {
@@ -987,7 +985,6 @@ func clearMilestones(ghclient *github.Client, conf *HecklerdConf) error {
 			_, err := ghclient.Issues.DeleteMilestone(ctx, conf.RepoOwner, conf.Repo, *ms.Number)
 			if err != nil {
 				log.Fatal(err)
-				return nil
 			}
 			log.Printf("Deleted milestone: '%s'", msTitle)
 		}
@@ -1013,7 +1010,6 @@ func clearIssues(ghclient *github.Client, conf *HecklerdConf) error {
 	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
 	if err != nil {
 		log.Fatal(err)
-		return nil
 	}
 	// The rest API does not support deletion,
 	// https://github.community/t5/GitHub-API-Development-and/Delete-Issues-programmatically/td-p/29524,
@@ -1028,7 +1024,6 @@ func clearIssues(ghclient *github.Client, conf *HecklerdConf) error {
 			_, _, err := ghclient.Issues.Edit(ctx, conf.RepoOwner, conf.Repo, *issue.Number, issuePatch)
 			if err != nil {
 				log.Fatal(err)
-				return nil
 			}
 			log.Printf("Soft deleted issue: '%s'", *issue.Title)
 		}
@@ -1529,7 +1524,6 @@ func tagNewCommits(conf *HecklerdConf, repo *git.Repository) {
 	commitLogIds, _, err := commitLogIdList(repo, mostRecentTag, "master")
 	if err != nil {
 		logger.Fatalf("Unable to obtain commit log ids: %v", err)
-		return
 	}
 	if len(commitLogIds) == 0 {
 		logger.Printf("No new commits since last tag: '%s'", mostRecentTag)
@@ -1538,7 +1532,6 @@ func tagNewCommits(conf *HecklerdConf, repo *git.Repository) {
 	ghclient, _, err := githubConn(conf)
 	if err != nil {
 		logger.Fatalf("Unable to connect to github: %v", err)
-		return
 	}
 	mostRecentVersion, err := tagToSemver(mostRecentTag, prefix)
 	if err != nil {
@@ -1657,7 +1650,6 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 		nodesToDial, err := nodesFromSet(conf, "all")
 		if err != nil {
 			logger.Fatalf("Unable to load 'all' node set: %v", err)
-			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
@@ -1754,7 +1746,6 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		nodesToDial, err := nodesFromSet(conf, "all")
 		if err != nil {
 			logger.Fatalf("Unable to load 'all' node set: %v", err)
-			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
