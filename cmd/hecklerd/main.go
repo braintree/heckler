@@ -53,20 +53,21 @@ var Debug = false
 var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 
 type HecklerdConf struct {
-	Repo                      string             `yaml:"repo"`
-	RepoOwner                 string             `yaml:"repo_owner"`
-	GitHubDomain              string             `yaml:"github_domain"`
-	GitHubPrivateKeyPath      string             `yaml:"github_private_key_path"`
-	GitHubAppSlug             string             `yaml:"github_app_slug"`
-	GitHubAppId               int64              `yaml:"github_app_id"`
-	GitHubAppInstallId        int64              `yaml:"github_app_install_id"`
-	NodeSets                  map[string]NodeSet `yaml:"node_sets"`
-	AutoTagCronSchedule       string             `yaml:"auto_tag_cron_schedule"`
-	AutoCloseIssues           bool               `yaml:"auto_close_issues"`
-	EnvPrefix                 string             `yaml:"env_prefix"`
-	AllowedNumberOfErrorNodes int                `yaml:"allowed_number_of_error_nodes"`
-	GitServerMaxClients       int                `yaml:"git_server_max_clients"`
-	ManualMode                bool               `yaml:"manual_mode"`
+	Repo                       string             `yaml:"repo"`
+	RepoOwner                  string             `yaml:"repo_owner"`
+	GitHubDomain               string             `yaml:"github_domain"`
+	GitHubPrivateKeyPath       string             `yaml:"github_private_key_path"`
+	GitHubAppSlug              string             `yaml:"github_app_slug"`
+	GitHubAppId                int64              `yaml:"github_app_id"`
+	GitHubAppInstallId         int64              `yaml:"github_app_install_id"`
+	NodeSets                   map[string]NodeSet `yaml:"node_sets"`
+	AutoTagCronSchedule        string             `yaml:"auto_tag_cron_schedule"`
+	AutoCloseIssues            bool               `yaml:"auto_close_issues"`
+	EnvPrefix                  string             `yaml:"env_prefix"`
+	AllowedNumberOfErrorNodes  int                `yaml:"allowed_number_of_error_nodes"`
+	AllowedNumberOfLockedNodes int                `yaml:"allowed_number_of_locked_nodes"`
+	GitServerMaxClients        int                `yaml:"git_server_max_clients"`
+	ManualMode                 bool               `yaml:"manual_mode"`
 }
 
 type NodeSet struct {
@@ -1745,7 +1746,8 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	logger := log.New(os.Stdout, "[noopLoop] ", log.Lshortfile)
 	prefix := conf.EnvPrefix
-	nodeThresh := conf.AllowedNumberOfErrorNodes
+	errorThresh := conf.AllowedNumberOfErrorNodes
+	lockedThresh := conf.AllowedNumberOfLockedNodes
 	for {
 		time.Sleep(10 * time.Second)
 		nodesToDial, err := nodesFromSet(conf, "all")
@@ -1755,14 +1757,14 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-		if len(errDialNodes) > nodeThresh {
-			logger.Printf("Nodes which could not be dialed(%d) exceeds the threshold(%d), sleeping", len(errDialNodes), nodeThresh)
+		if len(errDialNodes) > errorThresh {
+			logger.Printf("Nodes which could not be dialed(%d) exceeds the threshold(%d), sleeping", len(errDialNodes), errorThresh)
 			closeNodes(dialedNodes)
 			continue
 		}
 		lastApplyNodes, errUnknownRevNodes := nodeLastApply(dialedNodes, repo, logger)
-		if len(errUnknownRevNodes) > nodeThresh {
-			logger.Printf("Unknown rev nodes(%d) exceeds the threshold(%d), sleeping", len(errUnknownRevNodes), nodeThresh)
+		if len(errUnknownRevNodes) > errorThresh {
+			logger.Printf("Unknown rev nodes(%d) exceeds the threshold(%d), sleeping", len(errUnknownRevNodes), errorThresh)
 			closeNodes(dialedNodes)
 			continue
 		}
@@ -1824,8 +1826,14 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		unlockReq := hecklerpb.HecklerUnlockRequest{
 			User: "root",
 		}
-		if len(errLockNodes) > nodeThresh {
-			logger.Printf("Nodes with errors when locking(%d) exceeds the threshold(%d), sleeping", len(errLockNodes), nodeThresh)
+		if len(errLockNodes) > errorThresh {
+			logger.Printf("Nodes with errors when locking(%d) exceeds the threshold(%d), sleeping", len(errLockNodes), errorThresh)
+			nodeUnlock(&unlockReq, lockedNodes)
+			closeNodes(dialedNodes)
+			continue
+		}
+		if len(lockedByAnotherNodes) > lockedThresh {
+			logger.Printf("Locked by another nodes(%d) exceeds the threshold(%d), sleeping", len(lockedByAnotherNodes), lockedThresh)
 			nodeUnlock(&unlockReq, lockedNodes)
 			closeNodes(dialedNodes)
 			continue
