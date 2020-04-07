@@ -1048,6 +1048,7 @@ func updateIssueMilestone(ghclient *github.Client, conf *HecklerdConf, issue *gi
 	return err
 }
 
+// TODO: add comment with reason for closing
 func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue) error {
 	issuePatch := &github.IssueRequest{
 		State: github.String("closed"),
