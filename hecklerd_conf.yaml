@@ -11,6 +11,7 @@ auto_close_issues: true
 # environment
 allowed_number_of_error_nodes: 1
 env_prefix: "dev"
+manual_mode: false
 git_server_max_clients: 1
 node_sets:
   all:

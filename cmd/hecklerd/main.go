@@ -66,6 +66,7 @@ type HecklerdConf struct {
 	EnvPrefix                 string             `yaml:"env_prefix"`
 	AllowedNumberOfErrorNodes int                `yaml:"allowed_number_of_error_nodes"`
 	GitServerMaxClients       int                `yaml:"git_server_max_clients"`
+	ManualMode                bool               `yaml:"manual_mode"`
 }
 
 type NodeSet struct {
@@ -2121,19 +2122,26 @@ func main() {
 			time.Sleep(5 * time.Second)
 		}
 	}()
-	go noopLoop(conf, repo, templates)
-	go milestoneLoop(conf, repo)
-	go applyLoop(conf, repo)
-	if conf.AutoTagCronSchedule != "" {
-		c := cron.New()
-		c.AddFunc(
-			conf.AutoTagCronSchedule,
-			func() {
-				tagNewCommits(conf, repo)
-			},
-		)
-		c.Start()
-		defer c.Stop()
+
+	if conf.ManualMode {
+		log.Println("Manual mode: not starting noop, milestone, apply, & tag loops")
+	} else {
+		log.Println("Starting noop, milestone, & apply loops")
+		go noopLoop(conf, repo, templates)
+		go milestoneLoop(conf, repo)
+		go applyLoop(conf, repo)
+		if conf.AutoTagCronSchedule != "" {
+			log.Println("Starting tag loop")
+			c := cron.New()
+			c.AddFunc(
+				conf.AutoTagCronSchedule,
+				func() {
+					tagNewCommits(conf, repo)
+				},
+			)
+			c.Start()
+			defer c.Stop()
+		}
 	}
 
 	// XXX any reason to make this a separate goroutine?
