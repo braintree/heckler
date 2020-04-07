@@ -28,6 +28,7 @@ type GitCGIServer struct {
 	ShutdownTimeout time.Duration
 	MustClose       bool
 	httpServer      *http.Server
+	MaxClients      int
 }
 
 func (s *GitCGIServer) Serve() error {
@@ -47,7 +48,11 @@ func (s *GitCGIServer) Serve() error {
 
 	s.URIPrefix = subtreePath(s.URIPrefix)
 	mux := http.NewServeMux()
-	mux.HandleFunc(s.URIPrefix, s.getHandler())
+	if s.MaxClients > 0 {
+		mux.HandleFunc(s.URIPrefix, limitNumClients(s.getHandler(), s.MaxClients))
+	} else {
+		mux.HandleFunc(s.URIPrefix, s.getHandler())
+	}
 
 	if s.CertFile != "" {
 		return s.serveTLS(mux)
@@ -168,5 +173,19 @@ func (s *GitCGIServer) gitBackend(w http.ResponseWriter, r *http.Request, userna
 
 	if stdErr.Len() > 0 {
 		log.Println("[backend]", stdErr.String())
+	}
+}
+
+// https://eli.thegreenplace.net/2019/on-concurrency-in-go-http-servers/
+// limitNumClients is HTTP handling middleware that ensures no more than
+// maxClients requests are passed concurrently to the given handler f.
+func limitNumClients(f http.HandlerFunc, maxClients int) http.HandlerFunc {
+	// Counting semaphore using a buffered channel
+	sema := make(chan struct{}, maxClients)
+
+	return func(w http.ResponseWriter, req *http.Request) {
+		sema <- struct{}{}
+		defer func() { <-sema }()
+		f(w, req)
 	}
 }

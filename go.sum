@@ -52,6 +52,12 @@ github.com/libgit2/git2go v0.0.0-20191210224138-ba1b5f0c23b3 h1:3po85N78NcPO4mst
 github.com/libgit2/git2go v0.0.0-20191210224138-ba1b5f0c23b3/go.mod h1:hTb4obAjQDTd5qtX3EHWun1t78BEUgXGleuEJL9A0fo=
 github.com/lollipopman/git-cgi-server v1.0.2-0.20200205213042-56a063d18d5b h1:y8dinKXoF3ziWHMJhcmomp8xW5X3w/jZaqY+iyFTDqQ=
 github.com/lollipopman/git-cgi-server v1.0.2-0.20200205213042-56a063d18d5b/go.mod h1:Z10JAW/nvQHhoWaUp51zkT8n8r3epXSusDQbIoV7BRM=
+github.com/lollipopman/git-cgi-server v1.0.2-0.20200407140301-ba8a58aeea6f h1:VBXgSeQdmROl9XugquV93qHi7xfnDZIzlZgDCbYfWqs=
+github.com/lollipopman/git-cgi-server v1.0.2-0.20200407140301-ba8a58aeea6f/go.mod h1:Z10JAW/nvQHhoWaUp51zkT8n8r3epXSusDQbIoV7BRM=
+github.com/lollipopman/git-cgi-server v1.0.2-0.20200407141914-f050c27fc404 h1:ALF2rXC/dpm0JVs/JhyueawOYKeRmXgXBP0Bg8tUMjs=
+github.com/lollipopman/git-cgi-server v1.0.2-0.20200407141914-f050c27fc404/go.mod h1:Z10JAW/nvQHhoWaUp51zkT8n8r3epXSusDQbIoV7BRM=
+github.com/lollipopman/git-cgi-server v1.0.2-0.20200407142400-d6c3040ae76f h1:NhvVnOEdytQHTU6PBhoGy4aiY2ymccQkX46Ru5O93JA=
+github.com/lollipopman/git-cgi-server v1.0.2-0.20200407142400-d6c3040ae76f/go.mod h1:Z10JAW/nvQHhoWaUp51zkT8n8r3epXSusDQbIoV7BRM=
 github.com/lollipopman/luser v0.0.0-20200226194359-0e64908ec951 h1:CRgIONjP5sl5XWQo0uBpdmXBfMzJoZ6K4aalOgX7FiY=
 github.com/lollipopman/luser v0.0.0-20200226194359-0e64908ec951/go.mod h1:GN/xJHCt6hZVn/qByjyUBFZkTe1IsAz0fXdfimYINfo=
 github.com/mitchellh/copystructure v1.0.0 h1:Laisrj+bAB6b/yJwB5Bt3ITZhGJdqmxquMKeZ+mmkFQ=

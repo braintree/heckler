@@ -65,6 +65,7 @@ type HecklerdConf struct {
 	AutoCloseIssues           bool               `yaml:"auto_close_issues"`
 	EnvPrefix                 string             `yaml:"env_prefix"`
 	AllowedNumberOfErrorNodes int                `yaml:"allowed_number_of_error_nodes"`
+	GitServerMaxClients       int                `yaml:"git_server_max_clients"`
 }
 
 type NodeSet struct {
@@ -2056,6 +2057,7 @@ func main() {
 	gitServer.ProjectRoot = stateDir + "/served_repo"
 	gitServer.Addr = defaultAddr
 	gitServer.ShutdownTimeout = shutdownTimeout
+	gitServer.MaxClients = conf.GitServerMaxClients
 
 	idleConnsClosed := make(chan struct{})
 	done := make(chan bool, 1)
