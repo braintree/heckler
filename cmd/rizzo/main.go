@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
 	"github.braintreeps.com/lollipopman/heckler/internal/rizzopb"
@@ -340,7 +341,7 @@ func main() {
 	var rizzoConfPath string
 	var file *os.File
 	var data []byte
-	var rizzoConf *RizzoConf
+	var conf *RizzoConf
 	var clearState bool
 	var printVersion bool
 
@@ -369,8 +370,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Cannot read config: %v", err)
 	}
-	rizzoConf = new(RizzoConf)
-	err = yaml.Unmarshal([]byte(data), rizzoConf)
+	conf = new(RizzoConf)
+	err = yaml.Unmarshal([]byte(data), conf)
 	if err != nil {
 		log.Fatalf("Cannot unmarshal config: %v", err)
 	}
@@ -381,13 +382,29 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Clone a copy of the repo on startup so that future fetches are quicker.
+	repoUrl := "http://" + conf.HecklerHost + ":8080/puppetcode"
+	repoPulled := false
+	for repoPulled == false {
+		log.Printf("Pulling: %s", repoUrl)
+		_, err := gitutil.Pull(repoUrl, repoDir)
+		if err != nil {
+			sleepDur := 10 * time.Second
+			log.Printf("Pull error, trying again after sleeping for %s: %v", sleepDur, err)
+			time.Sleep(sleepDur)
+			continue
+		}
+		repoPulled = true
+		log.Println("Pull Complete")
+	}
+
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
 	server := new(server)
-	server.conf = rizzoConf
+	server.conf = conf
 	rizzopb.RegisterRizzoServer(s, server)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
