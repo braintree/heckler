@@ -341,6 +341,7 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 			if rprt, err = loadNoop(nodeCommitToNoop, node, revdir, repo, logger); err == nil {
 				nodes[node.host].commitReports[nodeCommitToNoop] = rprt
 			} else if os.IsNotExist(err) {
+				logger.Printf("Requesting noop %s@%s", node.host, nodeCommitToNoop.String())
 				par := rizzopb.PuppetApplyRequest{Rev: nodeCommitToNoop.String(), Noop: true}
 				go hecklerApply(node.rizzoClient, puppetReportChan, par)
 				noopRequests++
@@ -349,6 +350,9 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 			}
 		}
 
+		if noopRequests > 0 {
+			logger.Printf("Waiting for %d outstanding noop requests", noopRequests)
+		}
 		for j := 0; j < noopRequests; j++ {
 			newRprt := normalizeReport(<-puppetReportChan)
 			logger.Printf("Received noop: %s@%s", newRprt.Host, newRprt.ConfigurationVersion)
@@ -1314,7 +1318,7 @@ func hecklerLastApply(node *Node, c chan<- rizzopb.PuppetReport, logger *log.Log
 	defer cancel()
 	r, err := node.rizzoClient.PuppetLastApply(ctx, &plar)
 	if err != nil {
-		logger.Printf("Puppet lastApply error substituting an empty report, %v", err)
+		logger.Printf("Puppet lastApply error on %s substituting an empty report, %v", node.host, err)
 		c <- rizzopb.PuppetReport{
 			Host: node.host,
 		}
@@ -1343,8 +1347,7 @@ func nodeLastApply(nodes map[string]*Node, repo *git.Repository, logger *log.Log
 		}
 		obj, err = repo.RevparseSingle(r.ConfigurationVersion)
 		if err != nil {
-			logger.Printf("Unable to revparse ConfigurationVersion, '%s', for host %s: %v", r.ConfigurationVersion, r.Host, err)
-			errNodes[r.Host] = ErrLastApplyUnknown
+			errNodes[r.Host] = fmt.Errorf("Unable to revparse ConfigurationVersion, %s@%s: %v %w", r.ConfigurationVersion, r.Host, err, ErrLastApplyUnknown)
 			continue
 		}
 		if node, ok := nodes[r.Host]; ok {
@@ -1770,6 +1773,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			closeNodes(dialedNodes)
 			continue
 		}
+		logger.Printf("Found common tag: %s", commonTag)
 		errNodes := make(map[string]error)
 		for host, err := range errDialNodes {
 			errNodes[host] = err
