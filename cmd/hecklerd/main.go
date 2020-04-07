@@ -1083,7 +1083,13 @@ func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogId
 			logger.Fatal(err)
 		}
 		logger.Printf("Successfully created new issue: '%v'", *ni.Title)
-		if conf.AutoCloseIssues {
+		if len(groupedCommits[gi]) == 0 {
+			logger.Println("No noop output marking issue as 'closed'")
+			err := closeIssue(ghclient, conf, ni)
+			if err != nil {
+				logger.Fatal(err)
+			}
+		} else if conf.AutoCloseIssues {
 			logger.Println("Auto close set, marking issue as 'closed'")
 			err := closeIssue(ghclient, conf, ni)
 			if err != nil {
