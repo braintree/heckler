@@ -1010,7 +1010,7 @@ func issuePrefix(prefix string) string {
 func clearIssues(ghclient *github.Client, conf *HecklerdConf) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*100)
 	defer cancel()
-	query := fmt.Sprintf("author:app/%s", conf.GitHubAppSlug)
+	query := fmt.Sprintf("author:app/%s noop in:title", conf.GitHubAppSlug)
 	if conf.EnvPrefix != "" {
 		query += fmt.Sprintf(" %sin:title", issuePrefix(conf.EnvPrefix))
 	}
