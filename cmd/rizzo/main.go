@@ -144,6 +144,10 @@ func puppetLock(locker string, comment string, forceLock bool) (lockState, error
 	if err != nil {
 		return li, err
 	}
+	err = tmpfile.Chmod(0644)
+	if err != nil {
+		return li, err
+	}
 	defer os.Remove(tmpfile.Name())
 
 	if _, err := tmpfile.WriteString(comment); err != nil {
