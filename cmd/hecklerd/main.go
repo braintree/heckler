@@ -235,6 +235,7 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 }
 
 func loadNoop(commit git.Oid, node *Node, revdir string, repo *git.Repository, logger *log.Logger) (*rizzopb.PuppetReport, error) {
+	emptyReport := new(rizzopb.PuppetReport)
 	// perma-diff: Substitute an empty puppet noop report if the commit is
 	// already applied, however for the lastApplied commit we do want to use the
 	// noop report so we can use the noop diff to subtract away perma-diffs from
@@ -245,7 +246,7 @@ func loadNoop(commit git.Oid, node *Node, revdir string, repo *git.Repository, l
 	}
 	if descendant {
 		logger.Printf("Commit already applied, substituting an empty noop: %s@%s", node.host, commit.String())
-		return new(rizzopb.PuppetReport), nil
+		return emptyReport, nil
 	}
 
 	reportPath := revdir + "/" + node.host + "/" + commit.String() + ".json"
