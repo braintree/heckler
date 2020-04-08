@@ -5,7 +5,6 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Restart=on-failure
 ExecStart=/usr/bin/rizzo
 
 [Install]
