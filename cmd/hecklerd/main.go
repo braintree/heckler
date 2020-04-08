@@ -1829,6 +1829,8 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			logger.Println("All issues exist, sleeping")
 			closeNodes(dialedNodes)
 			continue
+		} else {
+			logger.Println("Some issues do not exist on github, nooping range")
 		}
 		lockReq := hecklerpb.HecklerLockRequest{
 			User:    "root",
