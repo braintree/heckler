@@ -165,11 +165,11 @@ func Pull(url string, destDir string) (*git.Repository, error) {
 	}
 	repo, err := CloneOrOpen(url, destDir, cloneOptions)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("CloneOrOpen failed: %w", err)
 	}
 	err = FastForward(repo, cloneOptions.FetchOptions)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("FastForward failed: %w", err)
 	}
 	return repo, nil
 }
