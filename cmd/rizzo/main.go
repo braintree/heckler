@@ -61,13 +61,12 @@ func (s *server) PuppetApply(ctx context.Context, req *rizzopb.PuppetApplyReques
 
 	log.Printf("Received: %v", req.Rev)
 
-	// pull
-	repo, err := gitutil.Pull("http://"+s.conf.HecklerHost+":8080/puppetcode", repoDir)
+	repoUrl := "http://" + s.conf.HecklerHost + ":8080/puppetcode"
+	repo, err := gitutil.PullBranch(repoUrl, "master", repoDir)
 	if err != nil {
-		log.Printf("Pull error: %v", err)
 		return &rizzopb.PuppetReport{}, err
 	}
-	log.Println("Pull Complete")
+	log.Println("PullBranch Complete")
 
 	// checkout
 	oid, err = gitutil.Checkout(req.Rev, repo)
@@ -391,7 +390,7 @@ func main() {
 	repoPulled := false
 	for repoPulled == false {
 		log.Printf("Pulling: %s", repoUrl)
-		_, err := gitutil.Pull(repoUrl, repoDir)
+		_, err := gitutil.PullBranch(repoUrl, "master", repoDir)
 		if err != nil {
 			sleepDur := 10 * time.Second
 			log.Printf("Pull error, trying again after sleeping for %s: %v", sleepDur, err)

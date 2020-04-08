@@ -174,6 +174,32 @@ func Pull(url string, destDir string) (*git.Repository, error) {
 	return repo, nil
 }
 
+func PullBranch(url string, branch string, destDir string) (*git.Repository, error) {
+	cloneOptions := &git.CloneOptions{
+		FetchOptions: &git.FetchOptions{
+			UpdateFetchhead: true,
+			DownloadTags:    git.DownloadTagsAll,
+		},
+	}
+	err := os.MkdirAll(filepath.Dir(destDir), 0775)
+	if err != nil {
+		return nil, err
+	}
+	repo, err := CloneOrOpen(url, destDir, cloneOptions)
+	if err != nil {
+		return nil, fmt.Errorf("CloneOrOpen failed: %w", err)
+	}
+	_, err = Checkout(branch, repo)
+	if err != nil {
+		return nil, fmt.Errorf("Checkout failed: %w", err)
+	}
+	err = FastForward(repo, cloneOptions.FetchOptions)
+	if err != nil {
+		return nil, fmt.Errorf("FastForward failed: %w", err)
+	}
+	return repo, nil
+}
+
 func RevparseToCommit(rev string, repo *git.Repository) (*git.Commit, error) {
 	obj, err := repo.RevparseSingle(rev)
 	if err != nil {
