@@ -1,6 +1,5 @@
 [Unit]
 Documentation=https://github.braintreeps.com/lollipopman/heckler
-Description=Heckler daemon which runs on every node
 Before=multi-user.target
 After=network-online.target
 Wants=network-online.target
