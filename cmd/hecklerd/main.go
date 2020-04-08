@@ -347,7 +347,7 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 			} else if os.IsNotExist(err) {
 				logger.Printf("Requesting noop %s@%s", node.host, nodeCommitToNoop.String())
 				par := rizzopb.PuppetApplyRequest{Rev: nodeCommitToNoop.String(), Noop: true}
-				go hecklerApply(node.rizzoClient, puppetReportChan, par)
+				go hecklerApply(node, puppetReportChan, par)
 				noopRequests++
 			} else {
 				logger.Fatalf("Unable to load noop: %v", err)
@@ -654,18 +654,22 @@ func normalizeLogs(Logs []*rizzopb.Log) []*rizzopb.Log {
 	return newLogs
 }
 
-func hecklerApply(rc rizzopb.RizzoClient, c chan<- rizzopb.PuppetReport, par rizzopb.PuppetApplyRequest) {
+func hecklerApply(node *Node, c chan<- rizzopb.PuppetReport, par rizzopb.PuppetApplyRequest) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
 	defer cancel()
-	r, err := rc.PuppetApply(ctx, &par)
+	r, err := node.rizzoClient.PuppetApply(ctx, &par)
 	if err != nil {
+		log.Printf("Error: hecklerApply error on %s, returning any empty report: %v", node.host, err)
 		c <- rizzopb.PuppetReport{}
+		return
 	}
 	if ctx.Err() != nil {
-		log.Printf("ERROR: Context error: %v", ctx.Err())
+		log.Printf("Error: heckelrApply context error on %s, returning an empty report: %v", node.host, ctx.Err())
 		c <- rizzopb.PuppetReport{}
+		return
 	}
 	c <- *r
+	return
 }
 
 func parseTemplates() *template.Template {
@@ -785,7 +789,7 @@ func applyNodes(lockedNodes map[string]*Node, forceApply bool, noop bool, rev st
 	par := rizzopb.PuppetApplyRequest{Rev: rev, Noop: noop}
 	puppetReportChan := make(chan rizzopb.PuppetReport)
 	for _, node := range nodesToApply {
-		go hecklerApply(node.rizzoClient, puppetReportChan, par)
+		go hecklerApply(node, puppetReportChan, par)
 	}
 
 	errApplyNodes := make(map[string]error)
