@@ -18,7 +18,11 @@ func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptio
 		log.Printf("Cloning %s to %s\n", remoteUrl, cloneDir)
 		repo, err = git.Clone(remoteUrl, cloneDir, cloneOptions)
 		if err != nil {
-			return nil, err
+			// A failed initial clone sometimes leaves the respository in a state
+			// that is difficult to recover from, so rather then solving those corner
+			// cases, just remove the failed clone directory
+			os.RemoveAll(cloneDir)
+			return nil, fmt.Errorf("Clone failed: %w", err)
 		}
 	} else {
 		repo, err = git.OpenRepository(cloneDir)
