@@ -15,7 +15,6 @@ func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptio
 	var err error
 
 	if _, err = os.Stat(cloneDir); os.IsNotExist(err) {
-		log.Printf("Cloning %s to %s\n", remoteUrl, cloneDir)
 		repo, err = git.Clone(remoteUrl, cloneDir, cloneOptions)
 		if err != nil {
 			// A failed initial clone sometimes leaves the respository in a state
@@ -77,7 +76,6 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 	}
 
 	if (analysis & git.MergeAnalysisFastForward) == 0 {
-		log.Println("Not a fast forward, bailing")
 		return errors.New("Not a fast forward, bailing")
 	}
 
@@ -130,7 +128,6 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 		return err
 	}
 
-	log.Println("FastForward Complete")
 	return nil
 }
 
@@ -230,7 +227,6 @@ func RevparseToCommit(rev string, repo *git.Repository) (*git.Commit, error) {
 func Checkout(rev string, repo *git.Repository) (string, error) {
 	var err error
 
-	log.Printf("Rev: %v\n", rev)
 	commit, err := RevparseToCommit(rev, repo)
 	if err != nil {
 		log.Fatal(err)
