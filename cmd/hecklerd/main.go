@@ -96,6 +96,12 @@ type nodeResult struct {
 	err  error
 }
 
+type applyResult struct {
+	host   string
+	report rizzopb.PuppetReport
+	err    error
+}
+
 type deltaResource struct {
 	Title      ResourceTitle
 	Type       string
@@ -294,11 +300,11 @@ func marshalReport(rprt rizzopb.PuppetReport, revdir string, commit git.Oid) err
 	return nil
 }
 
-func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, repo *git.Repository, logger *log.Logger) (map[git.Oid][]*groupedResource, error) {
+func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, repo *git.Repository, logger *log.Logger) (map[git.Oid][]*groupedResource, map[string]error, error) {
 	var err error
-	puppetReportChan := make(chan rizzopb.PuppetReport)
 	var commitsToNoop []git.Oid
 
+	errNoopNodes := make(map[string]error)
 	revdir := fmt.Sprintf(stateDir+"/noops/%s..%s", beginRev, endRev)
 
 	os.MkdirAll(revdir, 077)
@@ -320,7 +326,7 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 
 	beginCommit, err := gitutil.RevparseToCommit(beginRev, repo)
 	if err != nil {
-		return nil, err
+		return nil, errNoopNodes, err
 	}
 	beginCommitId := *beginCommit.Id()
 
@@ -329,6 +335,7 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 	commitsToNoop = append(commitsToNoop, beginCommitId)
 
 	var nodeCommitToNoop git.Oid
+	puppetReportChan := make(chan applyResult)
 	for i, commitToNoop := range commitsToNoop {
 		logger.Printf("Nooping: %s (%d of %d)", commitToNoop.String(), i+1, len(commitsToNoop))
 		noopRequests = 0
@@ -347,7 +354,7 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 			} else if os.IsNotExist(err) {
 				logger.Printf("Requesting noop %s@%s", node.host, nodeCommitToNoop.String())
 				par := rizzopb.PuppetApplyRequest{Rev: nodeCommitToNoop.String(), Noop: true}
-				go hecklerApply(node, puppetReportChan, par, logger)
+				go hecklerApply(node, puppetReportChan, par)
 				noopRequests++
 			} else {
 				logger.Fatalf("Unable to load noop: %v", err)
@@ -358,8 +365,15 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 			logger.Printf("Waiting for %d outstanding noop requests", noopRequests)
 		}
 		for j := 0; j < noopRequests; j++ {
-			newRprt := normalizeReport(<-puppetReportChan)
-			logger.Printf("Received noop: %s@%s", newRprt.Host, newRprt.ConfigurationVersion)
+			r := <-puppetReportChan
+			if r.err != nil {
+				errNoopNodes[r.host] = fmt.Errorf("Noop failed for %s: %w", r.host, r.err)
+				logger.Println(errNoopNodes[r.host])
+				delete(nodes, r.host)
+				continue
+			}
+			newRprt := normalizeReport(r.report)
+			logger.Printf("Received noop, %d outstanding: %s@%s", (noopRequests - j - 1), newRprt.Host, newRprt.ConfigurationVersion)
 			commitId, err := git.NewOid(newRprt.ConfigurationVersion)
 			if err != nil {
 				logger.Fatalf("Unable to marshal report: %v", err)
@@ -397,7 +411,7 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 			}
 		}
 	}
-	return groupedCommits, nil
+	return groupedCommits, errNoopNodes, nil
 }
 
 func priorEvent(event *rizzopb.Event, resourceTitleStr string, priorCommitNoops []*rizzopb.PuppetReport) bool {
@@ -654,21 +668,31 @@ func normalizeLogs(Logs []*rizzopb.Log) []*rizzopb.Log {
 	return newLogs
 }
 
-func hecklerApply(node *Node, c chan<- rizzopb.PuppetReport, par rizzopb.PuppetApplyRequest, logger *log.Logger) {
+func hecklerApply(node *Node, c chan<- applyResult, par rizzopb.PuppetApplyRequest) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
 	defer cancel()
 	r, err := node.rizzoClient.PuppetApply(ctx, &par)
 	if err != nil {
-		logger.Printf("Error: hecklerApply error on %s, returning any empty report: %v", node.host, err)
-		c <- rizzopb.PuppetReport{}
+		c <- applyResult{
+			host:   node.host,
+			report: rizzopb.PuppetReport{},
+			err:    fmt.Errorf("hecklerApply error from %s, returning any empty report: %w", node.host, err),
+		}
 		return
 	}
 	if ctx.Err() != nil {
-		logger.Printf("Error: heckelrApply context error on %s, returning an empty report: %v", node.host, ctx.Err())
-		c <- rizzopb.PuppetReport{}
+		c <- applyResult{
+			host:   node.host,
+			report: rizzopb.PuppetReport{},
+			err:    fmt.Errorf("hecklerApply context error from %s, returning any empty report: %w", node.host, ctx.Err()),
+		}
 		return
 	}
-	c <- *r
+	c <- applyResult{
+		host:   node.host,
+		report: *r,
+		err:    nil,
+	}
 	return
 }
 
@@ -787,27 +811,26 @@ func applyNodes(lockedNodes map[string]*Node, forceApply bool, noop bool, rev st
 		}
 	}
 	par := rizzopb.PuppetApplyRequest{Rev: rev, Noop: noop}
-	puppetReportChan := make(chan rizzopb.PuppetReport)
+	puppetReportChan := make(chan applyResult)
 	for _, node := range nodesToApply {
-		go hecklerApply(node, puppetReportChan, par, logger)
+		go hecklerApply(node, puppetReportChan, par)
 	}
 
 	errApplyNodes := make(map[string]error)
 	appliedNodes = make([]string, 0)
 	for range nodesToApply {
 		r := <-puppetReportChan
-		if cmp.Equal(r, rizzopb.PuppetReport{}) {
-			logger.Fatalf("Received an empty report")
-		} else if r.Status == "failed" {
-			logger.Printf("ERROR: Apply failed, %s@%s", r.Host, r.ConfigurationVersion)
-			errApplyNodes[r.Host] = errors.New("Apply failed")
+		if r.err != nil {
+			errApplyNodes[r.host] = fmt.Errorf("Apply failed: %w", r.err)
+		} else if r.report.Status == "failed" {
+			errApplyNodes[r.report.Host] = fmt.Errorf("Apply status=failed, %s@%s", r.report.Host, r.report.ConfigurationVersion)
 		} else {
 			if noop {
-				logger.Printf("Nooped: %s@%s", r.Host, r.ConfigurationVersion)
+				logger.Printf("Nooped: %s@%s", r.report.Host, r.report.ConfigurationVersion)
 			} else {
-				logger.Printf("Applied: %s@%s", r.Host, r.ConfigurationVersion)
+				logger.Printf("Applied: %s@%s", r.report.Host, r.report.ConfigurationVersion)
 			}
-			appliedNodes = append(appliedNodes, r.Host)
+			appliedNodes = append(appliedNodes, r.report.Host)
 		}
 	}
 	errNodes = make(map[string]error)
@@ -842,7 +865,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	if err != nil {
 		return nil, err
 	}
-	groupedCommits, err := noopCommitRange(lockedNodes, req.BeginRev, req.EndRev, commitLogIds, commits, hs.repo, logger)
+	groupedCommits, errNoopNodes, err := noopCommitRange(lockedNodes, req.BeginRev, req.EndRev, commitLogIds, commits, hs.repo, logger)
 	if err != nil {
 		nodeUnlock(&unlockReq, lockedNodes)
 		return nil, err
@@ -860,6 +883,9 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 		rprt.NodeErrors[host] = err.Error()
 	}
 	for host, err := range errUnknownRevNodes {
+		rprt.NodeErrors[host] = err.Error()
+	}
+	for host, err := range errNoopNodes {
 		rprt.NodeErrors[host] = err.Error()
 	}
 	for host, lockState := range lockedByAnotherNodes {
@@ -1760,6 +1786,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 	prefix := conf.EnvPrefix
 	errorThresh := conf.AllowedNumberOfErrorNodes
 	lockedThresh := conf.AllowedNumberOfLockedNodes
+	errNodesTotal := 0
 	for {
 		time.Sleep(10 * time.Second)
 		nodesToDial, err := nodesFromSet(conf, "all")
@@ -1775,8 +1802,9 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			continue
 		}
 		lastApplyNodes, errUnknownRevNodes := nodeLastApply(dialedNodes, repo, logger)
-		if len(errUnknownRevNodes) > errorThresh {
-			logger.Printf("Unknown rev nodes(%d) exceeds the threshold(%d), sleeping", len(errUnknownRevNodes), errorThresh)
+		errNodesTotal += len(errUnknownRevNodes)
+		if errNodesTotal > errorThresh {
+			logger.Printf("Unknown rev nodes(%d) exceeds the threshold(%d), sleeping", errNodesTotal, errorThresh)
 			closeNodes(dialedNodes)
 			continue
 		}
@@ -1840,8 +1868,9 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		unlockReq := hecklerpb.HecklerUnlockRequest{
 			User: "root",
 		}
-		if len(errLockNodes) > errorThresh {
-			logger.Printf("Nodes with errors when locking(%d) exceeds the threshold(%d), sleeping", len(errLockNodes), errorThresh)
+		errNodesTotal += len(errLockNodes)
+		if errNodesTotal > errorThresh {
+			logger.Printf("Nodes with errors when locking(%d) exceeds the threshold(%d), sleeping", errNodesTotal, errorThresh)
 			nodeUnlock(&unlockReq, lockedNodes)
 			closeNodes(dialedNodes)
 			continue
@@ -1855,18 +1884,26 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		for host, lockState := range lockedByAnotherNodes {
 			log.Printf("lockedByAnother: %s, %v", host, lockState)
 		}
-		groupedCommits, err := noopCommitRange(lockedNodes, commonTag, "master", commitLogIds, commits, repo, logger)
+		groupedCommits, errNoopNodes, err := noopCommitRange(lockedNodes, commonTag, "master", commitLogIds, commits, repo, logger)
 		if err != nil {
 			nodeUnlock(&unlockReq, lockedNodes)
 			logger.Fatalf("Unable to group commits: %v", err)
 		}
+		errNodesTotal += len(errNoopNodes)
+		if errNodesTotal > errorThresh {
+			logger.Printf("Nodes with errors when nooping(%d) exceeds the threshold(%d), sleeping", errNodesTotal, errorThresh)
+			nodeUnlock(&unlockReq, lockedNodes)
+			closeNodes(dialedNodes)
+			continue
+		}
 		nodeUnlock(&unlockReq, lockedNodes)
+		closeNodes(dialedNodes)
 		err = githubCreateIssues(ghclient, conf, commitLogIds, groupedCommits, commits, templates, logger)
 		if err != nil {
-			logger.Fatalf("Unable to create github issues: %v", err)
+			logger.Printf("Unable to create github issues, sleeping: %v", err)
+			continue
 		}
 		logger.Println("Nooping complete, sleeping")
-		closeNodes(dialedNodes)
 	}
 }
 
