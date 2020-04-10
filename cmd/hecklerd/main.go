@@ -1132,7 +1132,7 @@ func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogId
 			continue
 		}
 		githubIssue := &github.IssueRequest{
-			Title: github.String(noopTitle(gi, prefix)),
+			Title: github.String(noopTitle(gi, commits, prefix)),
 			// TODO need to enforce github user IDs for commits, so that we always
 			// have a valid github user.
 			Assignee: github.String("lollipopman"),
@@ -1160,8 +1160,8 @@ func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogId
 	return nil
 }
 
-func noopTitle(gi git.Oid, prefix string) string {
-	return fmt.Sprintf("%sPuppet noop output for commit: %s", issuePrefix(prefix), gi.String())
+func noopTitle(gi git.Oid, commits map[git.Oid]*git.Commit, prefix string) string {
+	return fmt.Sprintf("%sPuppet noop output for commit: %s - '%s'", issuePrefix(prefix), gi.String(), commits[gi].Summary())
 }
 
 func markdownOutput(conf *HecklerdConf, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, groupedCommits map[git.Oid][]*groupedResource, templates *template.Template) string {
@@ -1171,7 +1171,7 @@ func markdownOutput(conf *HecklerdConf, commitLogIds []git.Oid, commits map[git.
 			log.Printf("Skipping %s, no noop output", gi.String())
 			continue
 		}
-		output += fmt.Sprintf("## %s\n\n", noopTitle(gi, conf.EnvPrefix))
+		output += fmt.Sprintf("## %s\n\n", noopTitle(gi, commits, conf.EnvPrefix))
 		output += commitToMarkdown(commits[gi], templates)
 		output += groupedResourcesToMarkdown(groupedCommits[gi], templates)
 	}
