@@ -1161,7 +1161,7 @@ func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogId
 }
 
 func noopTitle(gi git.Oid, commits map[git.Oid]*git.Commit, prefix string) string {
-	return fmt.Sprintf("%sPuppet noop output for commit: %s - '%s'", issuePrefix(prefix), gi.String(), commits[gi].Summary())
+	return fmt.Sprintf("%sPuppet noop output for commit: %s - %s", issuePrefix(prefix), gi.String(), commits[gi].Summary())
 }
 
 func markdownOutput(conf *HecklerdConf, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, groupedCommits map[git.Oid][]*groupedResource, templates *template.Template) string {

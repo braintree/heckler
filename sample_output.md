@@ -1,4 +1,4 @@
-## Puppet noop output for commit: af88d24a1cde772061df87d1610db4efc81f7adf - 'stop nginx on fozzie & add episode one'
+## Puppet noop output for commit: af88d24a1cde772061df87d1610db4efc81f7adf - stop nginx on fozzie & add episode one
 
 ### Commit [af88d24a1cde772061df87d1610db4efc81f7adf](https://github.braintreeps.com/lollipopman/muppetshow/commit/af88d24a1cde772061df87d1610db4efc81f7adf)
 
@@ -74,7 +74,7 @@
     - *Current State:* running
     - *Desired State:* stopped
 
-## Puppet noop output for commit: 5d4fbde284e0a73ef5038eac28f76015f3ea8ecf - 'finish the muppet show lyrics'
+## Puppet noop output for commit: 5d4fbde284e0a73ef5038eac28f76015f3ea8ecf - finish the muppet show lyrics
 
 ### Commit [5d4fbde284e0a73ef5038eac28f76015f3ea8ecf](https://github.braintreeps.com/lollipopman/muppetshow/commit/5d4fbde284e0a73ef5038eac28f76015f3ea8ecf)
 
@@ -152,7 +152,7 @@
     - *Logs:*
         - Would have triggered 'refresh' from 1 event
 
-## Puppet noop output for commit: bf5954f7a38a27787e57ca4ad9ea011eb6e708bc - 'add some fun diversions'
+## Puppet noop output for commit: bf5954f7a38a27787e57ca4ad9ea011eb6e708bc - add some fun diversions
 
 ### Commit [bf5954f7a38a27787e57ca4ad9ea011eb6e708bc](https://github.braintreeps.com/lollipopman/muppetshow/commit/bf5954f7a38a27787e57ca4ad9ea011eb6e708bc)
 
@@ -178,7 +178,7 @@
     - *Current State:* purged
     - *Desired State:* present
 
-## Puppet noop output for commit: d155b74cd49a4911a0a302b01c5fee72264cfa8b - 'add kermit user, modify sail input'
+## Puppet noop output for commit: d155b74cd49a4911a0a302b01c5fee72264cfa8b - add kermit user, modify sail input
 
 ### Commit [d155b74cd49a4911a0a302b01c5fee72264cfa8b](https://github.braintreeps.com/lollipopman/muppetshow/commit/d155b74cd49a4911a0a302b01c5fee72264cfa8b)
 
@@ -224,7 +224,7 @@
     - *Current State:* absent
     - *Desired State:* present
 
-## Puppet noop output for commit: 8372dfd3a2cc3744a0e4cba1f01efbdb84571b84 - 'New Movie'
+## Puppet noop output for commit: 8372dfd3a2cc3744a0e4cba1f01efbdb84571b84 - New Movie
 
 ### Commit [8372dfd3a2cc3744a0e4cba1f01efbdb84571b84](https://github.braintreeps.com/lollipopman/muppetshow/commit/8372dfd3a2cc3744a0e4cba1f01efbdb84571b84)
 
@@ -242,7 +242,7 @@
     - *Current State:* absent
     - *Desired State:* present
 
-## Puppet noop output for commit: 168b9f347a2b5f6ee18f97cc1ddf4f2c6fc79961 - 'Gonzo'
+## Puppet noop output for commit: 168b9f347a2b5f6ee18f97cc1ddf4f2c6fc79961 - Gonzo
 
 ### Commit [168b9f347a2b5f6ee18f97cc1ddf4f2c6fc79961](https://github.braintreeps.com/lollipopman/muppetshow/commit/168b9f347a2b5f6ee18f97cc1ddf4f2c6fc79961)
 
