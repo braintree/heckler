@@ -1565,6 +1565,33 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 	}
 }
 
+func unlockAll(conf *HecklerdConf, logger *log.Logger) {
+	nodesToDial, err := nodesFromSet(conf, "all", logger)
+	if err != nil {
+		logger.Fatalf("Unable to load 'all' node set: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
+	unlockReq := hecklerpb.HecklerUnlockRequest{
+		User: "root",
+	}
+	unlockedNodes, errUnlockNodes := nodeUnlock(&unlockReq, dialedNodes)
+	errNodes := make(map[string]error)
+	for host, err := range errDialNodes {
+		errNodes[host] = err
+	}
+	for host, err := range errUnlockNodes {
+		errNodes[host] = err
+	}
+	for host, _ := range unlockedNodes {
+		logger.Printf("Unlocked: %s", host)
+	}
+	for host, err := range errNodes {
+		logger.Printf("errNodes: %s, %v", host, err)
+	}
+}
+
 // Are their commits beyond the last tag?
 // 	If yes, create a new tag
 // If no, do nothing
@@ -2085,6 +2112,7 @@ func main() {
 	var clearGitHub bool
 	var printVersion bool
 	templates := parseTemplates()
+	logger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
 
 	flag.BoolVar(&clearState, "clear", false, "Clear local state, e.g. puppet code repo")
 	flag.BoolVar(&clearGitHub, "ghclear", false, "Clear remote github state, e.g. issues & milestones")
@@ -2101,30 +2129,30 @@ func main() {
 	} else if _, err := os.Stat("hecklerd_conf.yaml"); err == nil {
 		hecklerdConfPath = "hecklerd_conf.yaml"
 	} else {
-		log.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
+		logger.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
 	}
 	file, err = os.Open(hecklerdConfPath)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
 	}
 	defer file.Close()
 	data, err = ioutil.ReadAll(file)
 	if err != nil {
-		log.Fatalf("Cannot read config: %v", err)
+		logger.Fatalf("Cannot read config: %v", err)
 	}
 	conf = new(HecklerdConf)
 	err = yaml.Unmarshal([]byte(data), conf)
 	if err != nil {
-		log.Fatalf("Cannot unmarshal config: %v", err)
+		logger.Fatalf("Cannot unmarshal config: %v", err)
 	}
 
 	if clearState && clearGitHub {
-		log.Println("clear & ghclear are mutually exclusive")
+		logger.Println("clear & ghclear are mutually exclusive")
 		os.Exit(1)
 	}
 
 	if clearState {
-		log.Printf("Removing state directory: %v", stateDir)
+		logger.Printf("Removing state directory: %v", stateDir)
 		os.RemoveAll(stateDir)
 		os.Exit(0)
 	}
@@ -2132,14 +2160,14 @@ func main() {
 	if clearGitHub {
 		err = clearGithub(conf)
 		if err != nil {
-			log.Fatalf("Unable to clear GitHub: %v", err)
+			logger.Fatalf("Unable to clear GitHub: %v", err)
 		}
 		os.Exit(0)
 	}
 
 	repo, err := fetchRepo(conf)
 	if err != nil {
-		log.Fatalf("Unable to fetch repo to serve: %v", err)
+		logger.Fatalf("Unable to fetch repo to serve: %v", err)
 	}
 
 	gitServer := &gitcgiserver.GitCGIServer{}
@@ -2154,30 +2182,32 @@ func main() {
 
 	// background polling git fetch
 	go func() {
+		logger := log.New(os.Stdout, "[GitFetchBare] ", log.Lshortfile)
 		for {
 			time.Sleep(5 * time.Second)
 			if Debug {
-				log.Println("Updating repo..")
+				logger.Println("Updating repo..")
 			}
 			_, err = fetchRepo(conf)
 			if err != nil {
-				log.Fatalf("Unable to fetch repo: %v", err)
+				logger.Fatalf("Unable to fetch repo: %v", err)
 			}
 		}
 	}()
 
 	// git server
 	go func() {
-		log.Printf("Starting Git HTTP server on %s", gitServer.Addr)
+		logger := log.New(os.Stdout, "[GitServer] ", log.Lshortfile)
+		logger.Printf("Starting Git HTTP server on %s", gitServer.Addr)
 		if err := gitServer.Serve(); err != nil && err != http.ErrServerClosed {
-			log.Println("Git HTTP server error:", err)
+			logger.Println("Git HTTP server error:", err)
 		}
 		<-idleConnsClosed
 	}()
 
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		logger.Fatalf("failed to listen: %v", err)
 	}
 	grpcServer := grpc.NewServer()
 	hecklerServer := new(hecklerServer)
@@ -2188,9 +2218,10 @@ func main() {
 
 	// grpc server
 	go func() {
-		log.Printf("Starting GRPC HTTP server on %v", port)
+		logger := log.New(os.Stdout, "[GrpcServer] ", log.Lshortfile)
+		logger.Printf("Starting GRPC HTTP server on %v", port)
 		if err := grpcServer.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
+			logger.Fatalf("failed to serve: %v", err)
 		}
 	}()
 
@@ -2200,27 +2231,30 @@ func main() {
 	time.Sleep(1 * time.Second)
 	_, err = gitutil.Pull("http://localhost:8080/puppetcode", stateDir+"/work_repo/puppetcode")
 	if err != nil {
-		log.Fatalf("Unable to fetch repo: %v", err)
+		logger.Fatalf("Unable to fetch repo: %v", err)
 	}
 	go func() {
+		logger := log.New(os.Stdout, "[GitFetchWork] ", log.Lshortfile)
 		for {
 			_, err := gitutil.Pull("http://localhost:8080/puppetcode", stateDir+"/work_repo/puppetcode")
 			if err != nil {
-				log.Fatalf("Unable to fetch repo: %v", err)
+				logger.Fatalf("Unable to fetch repo: %v", err)
 			}
 			time.Sleep(5 * time.Second)
 		}
 	}()
 
 	if conf.ManualMode {
-		log.Println("Manual mode: not starting noop, milestone, apply, & tag loops")
+		logger.Println("Manual mode: not starting noop, milestone, apply, & tag loops")
 	} else {
-		log.Println("Starting noop, milestone, & apply loops")
+		logger.Println("Unlocking 'all' in case they are locked, from a segfault")
+		unlockAll(conf, logger)
+		logger.Println("Starting noop, milestone, & apply loops")
 		go noopLoop(conf, repo, templates)
 		go milestoneLoop(conf, repo)
 		go applyLoop(conf, repo)
 		if conf.AutoTagCronSchedule != "" {
-			log.Println("Starting tag loop")
+			logger.Println("Starting tag loop")
 			c := cron.New()
 			c.AddFunc(
 				conf.AutoTagCronSchedule,
@@ -2237,13 +2271,13 @@ func main() {
 	go func() {
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-		log.Printf("Received %s", <-sigs)
+		logger.Printf("Received %s", <-sigs)
 		if err := gitServer.Shutdown(context.Background()); err != nil {
-			log.Printf("HTTP server shutdown error: %v", err)
+			logger.Printf("HTTP server shutdown error: %v", err)
 		}
 		close(idleConnsClosed)
 		grpcServer.GracefulStop()
-		log.Println("Heckler Shutdown")
+		logger.Println("Heckler Shutdown")
 		done <- true
 	}()
 
