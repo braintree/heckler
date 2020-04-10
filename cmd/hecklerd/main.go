@@ -71,7 +71,8 @@ type HecklerdConf struct {
 }
 
 type NodeSet struct {
-	Cmd []string `yaml:"cmd"`
+	Cmd       []string `yaml:"cmd"`
+	Blacklist []string `yaml:"blacklist"`
 }
 
 // hecklerServer is used to implement heckler.HecklerServer
@@ -706,25 +707,24 @@ func parseTemplates() *template.Template {
 	return template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob(templatesPath))
 }
 
-func reqNodes(conf *HecklerdConf, nodes []string, nodeSetName string) ([]string, error) {
+func reqNodes(conf *HecklerdConf, nodes []string, nodeSetName string, logger *log.Logger) ([]string, error) {
 	if len(nodes) > 0 {
 		return nodes, nil
 	}
-	return nodesFromSet(conf, nodeSetName)
+	return nodesFromSet(conf, nodeSetName, logger)
 }
 
-func nodesFromSet(conf *HecklerdConf, nodeSetName string) ([]string, error) {
+func nodesFromSet(conf *HecklerdConf, nodeSetName string, logger *log.Logger) ([]string, error) {
 	if nodeSetName == "" {
 		return nil, errors.New("Empty nodeSetName provided")
 	}
-	var cmdArgs []string
-	if nodeSet, ok := conf.NodeSets[nodeSetName]; ok {
-		cmdArgs = nodeSet.Cmd
-	} else {
+	var nodeSet NodeSet
+	var ok bool
+	if nodeSet, ok = conf.NodeSets[nodeSetName]; !ok {
 		return nil, errors.New(fmt.Sprintf("nodeSetName '%s' not found in hecklerd config", nodeSetName))
 	}
 	// Change to code dir, so hiera relative paths resolve
-	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	cmd := exec.Command(nodeSet.Cmd[0], nodeSet.Cmd[1:]...)
 	cmd.Dir = stateDir + "/work_repo/puppetcode"
 	stdout, err := cmd.Output()
 	if err != nil {
@@ -736,15 +736,43 @@ func nodesFromSet(conf *HecklerdConf, nodeSetName string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(nodes) == 0 {
-		return nil, errors.New(fmt.Sprintf("Cmd '%s' produced zero nodes", cmd))
+
+	regexes := make([]*regexp.Regexp, 0)
+	for _, sregex := range nodeSet.Blacklist {
+		regex, err := regexp.Compile(sregex)
+		if err != nil {
+			return nil, err
+		}
+		regexes = append(regexes, regex)
 	}
-	return nodes, nil
+
+	filteredNodes := make([]string, 0)
+	blacklistedNodes := make([]string, 0)
+	for _, node := range nodes {
+		blacklisted := false
+		for _, regex := range regexes {
+			if regex.MatchString(node) {
+				blacklisted = true
+				break
+			}
+		}
+		if blacklisted {
+			blacklistedNodes = append(blacklistedNodes, node)
+		} else {
+			filteredNodes = append(filteredNodes, node)
+		}
+	}
+
+	if len(filteredNodes) == 0 {
+		return nil, errors.New(fmt.Sprintf("Node set '%s': '%v' produced zero nodes", nodeSetName, nodeSet))
+	}
+	logger.Printf("Node set '%s' loaded, nodes (%d), blacklisted nodes (%d): %v", nodeSetName, len(filteredNodes), len(blacklistedNodes), blacklistedNodes)
+	return filteredNodes, nil
 }
 
 func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.HecklerApplyRequest) (*hecklerpb.HecklerApplyReport, error) {
 	logger := log.New(os.Stdout, "[HecklerApply] ", log.Lshortfile)
-	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet)
+	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -845,7 +873,7 @@ func applyNodes(lockedNodes map[string]*Node, forceApply bool, noop bool, rev st
 
 func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.HecklerNoopRangeRequest) (*hecklerpb.HecklerNoopRangeReport, error) {
 	logger := log.New(os.Stdout, "[HecklerNoopRange] ", log.Lshortfile)
-	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet)
+	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -1185,7 +1213,7 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource, templates *
 
 func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.HecklerStatusRequest) (*hecklerpb.HecklerStatusReport, error) {
 	logger := log.New(os.Stdout, "[HecklerStatus] ", log.Lshortfile)
-	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet)
+	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -1207,7 +1235,8 @@ func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.Heckl
 	return hsr, nil
 }
 func (hs *hecklerServer) HecklerUnlock(ctx context.Context, req *hecklerpb.HecklerUnlockRequest) (*hecklerpb.HecklerUnlockReport, error) {
-	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet)
+	logger := log.New(os.Stdout, "[HecklerUnlock] ", log.Lshortfile)
+	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -1279,7 +1308,8 @@ func hecklerUnlock(host string, rc rizzopb.RizzoClient, req rizzopb.PuppetUnlock
 }
 
 func (hs *hecklerServer) HecklerLock(ctx context.Context, req *hecklerpb.HecklerLockRequest) (*hecklerpb.HecklerLockReport, error) {
-	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet)
+	logger := log.New(os.Stdout, "[HecklerLock] ", log.Lshortfile)
+	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -1454,7 +1484,7 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 	prefix := conf.EnvPrefix
 	for {
 		time.Sleep(10 * time.Second)
-		nodesToDial, err := nodesFromSet(conf, "all")
+		nodesToDial, err := nodesFromSet(conf, "all", logger)
 		if err != nil {
 			logger.Fatalf("Unable to load 'all' node set: %v", err)
 		}
@@ -1691,7 +1721,7 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 	prefix := conf.EnvPrefix
 	for {
 		time.Sleep(10 * time.Second)
-		nodesToDial, err := nodesFromSet(conf, "all")
+		nodesToDial, err := nodesFromSet(conf, "all", logger)
 		if err != nil {
 			logger.Fatalf("Unable to load 'all' node set: %v", err)
 		}
@@ -1789,7 +1819,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 	errNodesTotal := 0
 	for {
 		time.Sleep(10 * time.Second)
-		nodesToDial, err := nodesFromSet(conf, "all")
+		nodesToDial, err := nodesFromSet(conf, "all", logger)
 		if err != nil {
 			logger.Fatalf("Unable to load 'all' node set: %v", err)
 		}

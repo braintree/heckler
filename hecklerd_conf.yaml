@@ -17,3 +17,5 @@ git_server_max_clients: 1
 node_sets:
   all:
     cmd: ['jq', '-n', '--arg', 'nodes', 'fozzie.example.com statler.example.com waldorf.example.com', '$nodes | split(" ")']
+    # blacklist:
+    #   - '^fozzie.*$'
