@@ -47,6 +47,7 @@ const (
 	shutdownTimeout = time.Second * 5
 	port            = ":50052"
 	stateDir        = "/var/lib/hecklerd"
+	noopDir         = stateDir + "/noops"
 )
 
 var Debug = false
@@ -241,7 +242,7 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 	return commitLogIds, commits, nil
 }
 
-func loadNoop(commit git.Oid, node *Node, revdir string, repo *git.Repository, logger *log.Logger) (*rizzopb.PuppetReport, error) {
+func loadNoop(commit git.Oid, node *Node, noopDir string, repo *git.Repository, logger *log.Logger) (*rizzopb.PuppetReport, error) {
 	emptyReport := new(rizzopb.PuppetReport)
 	// perma-diff: Substitute an empty puppet noop report if the commit is
 	// already applied, however for the lastApplied commit we do want to use the
@@ -256,7 +257,7 @@ func loadNoop(commit git.Oid, node *Node, revdir string, repo *git.Repository, l
 		return emptyReport, nil
 	}
 
-	reportPath := revdir + "/" + node.host + "/" + commit.String() + ".json"
+	reportPath := noopDir + "/" + node.host + "/" + commit.String() + ".json"
 	if _, err := os.Stat(reportPath); err != nil {
 		return nil, err
 	} else {
@@ -288,8 +289,8 @@ func normalizeReport(rprt rizzopb.PuppetReport) rizzopb.PuppetReport {
 	return rprt
 }
 
-func marshalReport(rprt rizzopb.PuppetReport, revdir string, commit git.Oid) error {
-	reportPath := revdir + "/" + rprt.Host + "/" + commit.String() + ".json"
+func marshalReport(rprt rizzopb.PuppetReport, noopDir string, commit git.Oid) error {
+	reportPath := noopDir + "/" + rprt.Host + "/" + commit.String() + ".json"
 	data, err := json.Marshal(rprt)
 	if err != nil {
 		return err
@@ -301,41 +302,26 @@ func marshalReport(rprt rizzopb.PuppetReport, revdir string, commit git.Oid) err
 	return nil
 }
 
-func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, repo *git.Repository, logger *log.Logger) (map[git.Oid][]*groupedResource, map[string]error, error) {
+func noopCommit(nodes map[string]*Node, commit *git.Commit, repo *git.Repository, logger *log.Logger) ([]*groupedResource, map[string]error, error) {
 	var err error
-	var commitsToNoop []git.Oid
-
-	errNoopNodes := make(map[string]error)
-	revdir := fmt.Sprintf(stateDir+"/noops/%s..%s", beginRev, endRev)
-
-	os.MkdirAll(revdir, 077)
+	noopDir := stateDir + "/noops"
+	os.MkdirAll(noopDir, 0755)
 	for host, _ := range nodes {
-		os.Mkdir(revdir+"/"+host, 077)
+		os.Mkdir(noopDir+"/"+host, 0755)
 	}
 
-	var groupedCommits map[git.Oid][]*groupedResource
+	commitsToNoop := make([]git.Oid, 0)
+	commitsToNoop = append(commitsToNoop, *commit.Id())
 
-	groupedCommits = make(map[git.Oid][]*groupedResource)
-
-	for _, node := range nodes {
-		node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
-		node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
+	parentCount := commit.ParentCount()
+	for i := uint(0); i < parentCount; i++ {
+		commitsToNoop = append(commitsToNoop, *commit.ParentId(i))
 	}
-
-	var noopRequests int
-	var rprt *rizzopb.PuppetReport
-
-	beginCommit, err := gitutil.RevparseToCommit(beginRev, repo)
-	if err != nil {
-		return nil, errNoopNodes, err
-	}
-	beginCommitId := *beginCommit.Id()
-
-	commitsToNoop = make([]git.Oid, len(commitLogIds))
-	copy(commitsToNoop, commitLogIds)
-	commitsToNoop = append(commitsToNoop, beginCommitId)
 
 	var nodeCommitToNoop git.Oid
+	var noopRequests int
+	var rprt *rizzopb.PuppetReport
+	errNoopNodes := make(map[string]error)
 	puppetReportChan := make(chan applyResult)
 	for i, commitToNoop := range commitsToNoop {
 		logger.Printf("Nooping: %s (%d of %d)", commitToNoop.String(), i+1, len(commitsToNoop))
@@ -345,12 +331,12 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 			// subtract away perma-diffs from children. Typically the lastApply is
 			// the beginRev, but if someone has applied a newer commit on the host we
 			// need to use the noop from the lastApplied commit.
-			if commitToNoop == beginCommitId {
+			if commitToNoop != *commit.Id() && commitAlreadyApplied(node.lastApply, commitToNoop, repo) {
 				nodeCommitToNoop = node.lastApply
 			} else {
 				nodeCommitToNoop = commitToNoop
 			}
-			if rprt, err = loadNoop(nodeCommitToNoop, node, revdir, repo, logger); err == nil {
+			if rprt, err = loadNoop(nodeCommitToNoop, node, noopDir, repo, logger); err == nil {
 				nodes[node.host].commitReports[nodeCommitToNoop] = rprt
 			} else if os.IsNotExist(err) {
 				logger.Printf("Requesting noop %s@%s", node.host, nodeCommitToNoop.String())
@@ -362,10 +348,8 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 			}
 		}
 
-		if noopRequests > 0 {
-			logger.Printf("Waiting for %d outstanding noop requests", noopRequests)
-		}
 		for j := 0; j < noopRequests; j++ {
+			logger.Printf("Waiting for %d outstanding noop requests", noopRequests-j)
 			r := <-puppetReportChan
 			if r.err != nil {
 				errNoopNodes[r.host] = fmt.Errorf("Noop failed for %s: %w", r.host, r.err)
@@ -374,13 +358,13 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 				continue
 			}
 			newRprt := normalizeReport(r.report)
-			logger.Printf("Received noop, %d outstanding: %s@%s", (noopRequests - j - 1), newRprt.Host, newRprt.ConfigurationVersion)
+			logger.Printf("Received noop: %s@%s", newRprt.Host, newRprt.ConfigurationVersion)
 			commitId, err := git.NewOid(newRprt.ConfigurationVersion)
 			if err != nil {
 				logger.Fatalf("Unable to marshal report: %v", err)
 			}
 			nodes[newRprt.Host].commitReports[*commitId] = &newRprt
-			err = marshalReport(newRprt, revdir, *commitId)
+			err = marshalReport(newRprt, noopDir, *commitId)
 			if err != nil {
 				logger.Fatalf("Unable to marshal report: %v", err)
 			}
@@ -388,31 +372,28 @@ func noopCommitRange(nodes map[string]*Node, beginRev, endRev string, commitLogI
 	}
 
 	for host, node := range nodes {
-		for _, gi := range commitLogIds {
-			logger.Printf("Creating delta resource: %s@%s", host, gi.String())
-			// perma-diff: If the commit is already applied we can assume that the
-			// diff is empty. Ideally we would not need this special case as the noop
-			// for an already applied commit should be empty, but we purposefully
-			// substitute the noop of the lastApply to subtract away perma-diffs, so
-			// those would show up without this special case.
-			// TODO: Assign perma-diffs to server owners?
-			if commitAlreadyApplied(node.lastApply, gi, repo) {
-				node.commitDeltaResources[gi] = make(map[ResourceTitle]*deltaResource)
-			} else {
-				node.commitDeltaResources[gi] = deltaNoop(node.commitReports[gi], commitParentReports(*commits[gi], node.lastApply, node.commitReports, repo, logger))
-			}
+		logger.Printf("Creating delta resource: %s@%s", host, commit.Id().String())
+		// perma-diff: If the commit is already applied we can assume that the
+		// diff is empty. Ideally we would not need this special case as the noop
+		// for an already applied commit should be empty, but we purposefully
+		// substitute the noop of the lastApply to subtract away perma-diffs, so
+		// those would show up without this special case.
+		// TODO: Assign perma-diffs to server owners?
+		if commitAlreadyApplied(node.lastApply, *commit.Id(), repo) {
+			node.commitDeltaResources[*commit.Id()] = make(map[ResourceTitle]*deltaResource)
+		} else {
+			node.commitDeltaResources[*commit.Id()] = deltaNoop(node.commitReports[*commit.Id()], commitParentReports(*commit, node.lastApply, node.commitReports, repo, logger))
 		}
 	}
 
-	for _, gi := range commitLogIds {
-		logger.Printf("Grouping: %s", gi.String())
-		for _, node := range nodes {
-			for _, nodeDeltaRes := range node.commitDeltaResources[gi] {
-				groupedCommits[gi] = append(groupedCommits[gi], groupResources(gi, nodeDeltaRes, nodes))
-			}
+	logger.Printf("Grouping: %s", commit.Id().String())
+	groupedCommit := make([]*groupedResource, 0)
+	for _, node := range nodes {
+		for _, nodeDeltaRes := range node.commitDeltaResources[*commit.Id()] {
+			groupedCommit = append(groupedCommit, groupResources(*commit.Id(), nodeDeltaRes, nodes))
 		}
 	}
-	return groupedCommits, errNoopNodes, nil
+	return groupedCommit, errNoopNodes, nil
 }
 
 func priorEvent(event *rizzopb.Event, resourceTitleStr string, priorCommitNoops []*rizzopb.PuppetReport) bool {
@@ -893,17 +874,28 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	if err != nil {
 		return nil, err
 	}
-	groupedCommits, errNoopNodes, err := noopCommitRange(lockedNodes, req.BeginRev, req.EndRev, commitLogIds, commits, hs.repo, logger)
-	if err != nil {
-		nodeUnlock(&unlockReq, lockedNodes)
-		return nil, err
+	for _, node := range lockedNodes {
+		node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
+		node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
+	}
+	rprt := new(hecklerpb.HecklerNoopRangeReport)
+	rprt.NodeErrors = make(map[string]string)
+	groupedCommits := make(map[git.Oid][]*groupedResource)
+	for gi, commit := range commits {
+		groupedCommit, errNoopNodes, err := noopCommit(lockedNodes, commit, hs.repo, logger)
+		if err != nil {
+			nodeUnlock(&unlockReq, lockedNodes)
+			return nil, err
+		}
+		for host, err := range errNoopNodes {
+			rprt.NodeErrors[host] = err.Error()
+		}
+		groupedCommits[gi] = groupedCommit
 	}
 	nodeUnlock(&unlockReq, lockedNodes)
-	rprt := new(hecklerpb.HecklerNoopRangeReport)
 	if req.OutputFormat == hecklerpb.OutputFormat_markdown {
 		rprt.Output = markdownOutput(hs.conf, commitLogIds, commits, groupedCommits, hs.templates)
 	}
-	rprt.NodeErrors = make(map[string]string)
 	for host, err := range errDialNodes {
 		rprt.NodeErrors[host] = err.Error()
 	}
@@ -911,9 +903,6 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 		rprt.NodeErrors[host] = err.Error()
 	}
 	for host, err := range errUnknownRevNodes {
-		rprt.NodeErrors[host] = err.Error()
-	}
-	for host, err := range errNoopNodes {
 		rprt.NodeErrors[host] = err.Error()
 	}
 	for host, lockState := range lockedByAnotherNodes {
@@ -1941,10 +1930,25 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		for host, lockState := range lockedByAnotherNodes {
 			log.Printf("lockedByAnother: %s, %v", host, lockState)
 		}
-		groupedCommits, errNoopNodes, err := noopCommitRange(lockedNodes, commonTag, "master", commitLogIds, commits, repo, logger)
-		if err != nil {
-			nodeUnlock(&unlockReq, lockedNodes)
-			logger.Fatalf("Unable to group commits: %v", err)
+		for _, node := range lockedNodes {
+			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
+			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
+		}
+		groupedCommits := make(map[git.Oid][]*groupedResource)
+		errNoopNodes := make(map[string]error)
+		for gi, commit := range commits {
+			groupedCommit, errCommitNoopNodes, err := noopCommit(lockedNodes, commit, repo, logger)
+			if err != nil {
+				logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
+				nodeUnlock(&unlockReq, lockedNodes)
+				closeNodes(dialedNodes)
+				continue
+			}
+			// This masks previous node errors, but that is probably fine?
+			for host, err := range errCommitNoopNodes {
+				errNoopNodes[host] = err
+			}
+			groupedCommits[gi] = groupedCommit
 		}
 		errNodesTotal += len(errNoopNodes)
 		if errNodesTotal > errorThresh {
