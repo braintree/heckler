@@ -12,6 +12,9 @@ AUTHORS=(
   [5]='lollipopman <hathaway@paypal.com>'
   [6]='lollipopman <hathaway@paypal.com>'
   [7]='lollipopman <hathaway@paypal.com>'
+  [8]='lollipopman <hathaway@paypal.com>'
+  [9]='lollipopman <hathaway@paypal.com>'
+  [10]='lollipopman <hathaway@paypal.com>'
 )
 
 MSGS=(
@@ -40,6 +43,9 @@ add sl to statler & waldorf
 add kermit user and muppetshow group
 modify the input to the sail game
 '
+  [8]='More Statler'
+  [9]='Even more Statler'
+  [10]='add gonzo user'
 )
 
 REPO='muppetshow'
@@ -81,11 +87,19 @@ for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
   git add nodes.pp
   git commit --author "${AUTHORS[$commit]}" -F - <<<"${MSGS[commit]}"
   if ((commit == 1)); then
-    git tag v1 -m 'v1'
+    git tag v1 -m 'Release v1'
+  fi
+  if ((commit == 7)); then
+    git merge -m 'Take Manhattan' manhattan
+    git tag v2 -m 'Release v2'
+  fi
+  if ((commit == 9)); then
+    git tag v3 -m 'Release v3'
+  fi
+  if ((commit == 10)); then
+    git tag v4 -m 'Release v4'
   fi
 done
-git merge -m manhattan manhattan
-git tag v2 -m 'v2'
 
 git remote add origin git@github.braintreeps.com:lollipopman/muppetshow.git
 git push -fu origin master
