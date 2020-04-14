@@ -283,6 +283,8 @@ func puppetApply(oid string, noop bool, conf *RizzoConf) (*rizzopb.PuppetReport,
 	}
 	puppetArgs := make([]string, len(conf.PuppetCmd.Args))
 	copy(puppetArgs, conf.PuppetCmd.Args)
+	puppetArgs = append(puppetArgs, "--diff=diff")
+	puppetArgs = append(puppetArgs, "--diff_args='--unified --color=never")
 	if noop {
 		puppetArgs = append(puppetArgs, "--noop")
 	}
