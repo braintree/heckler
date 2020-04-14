@@ -753,6 +753,10 @@ func nodesFromSet(conf *HecklerdConf, nodeSetName string, logger *log.Logger) ([
 
 func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.HecklerApplyRequest) (*hecklerpb.HecklerApplyReport, error) {
 	logger := log.New(os.Stdout, "[HecklerApply] ", log.Lshortfile)
+	commit, err := gitutil.RevparseToCommit(req.Rev, hs.repo)
+	if err != nil {
+		return nil, err
+	}
 	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
@@ -768,7 +772,6 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 		User: req.User,
 	}
 	defer nodeUnlock(&unlockReq, lockedNodes)
-	appliedNodes, beyondRevNodes, errApplyNodes := applyNodes(lockedNodes, req.Force, req.Noop, req.Rev, hs.repo, logger)
 	errNodes := make(map[string]error)
 	for host, err := range errDialNodes {
 		errNodes[host] = err
@@ -776,21 +779,41 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 	for host, err := range errLockNodes {
 		errNodes[host] = err
 	}
-	for host, err := range errApplyNodes {
-		errNodes[host] = err
-	}
 	har := new(hecklerpb.HecklerApplyReport)
+	if req.Noop {
+		lastApplyNodes, errUnknownRevNodes := nodeLastApply(lockedNodes, hs.repo, logger)
+		for host, err := range errUnknownRevNodes {
+			errNodes[host] = err
+		}
+		for _, node := range lastApplyNodes {
+			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
+			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
+		}
+		groupedCommit, errNoopNodes, err := noopCommit(lastApplyNodes, commit, hs.repo, logger)
+		if err != nil {
+			return nil, err
+		}
+		for host, err := range errNoopNodes {
+			errNodes[host] = err
+		}
+		har.Output = commitToMarkdown(hs.conf, commit, groupedCommit, hs.templates)
+	} else {
+		appliedNodes, beyondRevNodes, errApplyNodes := applyNodes(lockedNodes, req.Force, req.Noop, req.Rev, hs.repo, logger)
+		for host, err := range errApplyNodes {
+			errNodes[host] = err
+		}
+		if req.Force {
+			har.Output = fmt.Sprintf("Applied nodes: %d; Error nodes: %d", len(appliedNodes), len(errNodes))
+		} else {
+			har.Output = fmt.Sprintf("Applied nodes: %d; Beyond rev nodes: %d; Error nodes: %d", len(appliedNodes), len(beyondRevNodes), len(errNodes))
+		}
+	}
 	har.NodeErrors = make(map[string]string)
 	for host, err := range errNodes {
 		har.NodeErrors[host] = err.Error()
 	}
 	for host, lockState := range lockedByAnotherNodes {
 		har.NodeErrors[host] = lockState
-	}
-	if req.Force {
-		har.Output = fmt.Sprintf("Applied nodes: %d; Error nodes: %d", len(appliedNodes), len(errNodes))
-	} else {
-		har.Output = fmt.Sprintf("Applied nodes: %d; Beyond rev nodes: %d; Error nodes: %d", len(appliedNodes), len(beyondRevNodes), len(errNodes))
 	}
 	return har, nil
 }
@@ -894,7 +917,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	}
 	nodeUnlock(&unlockReq, lockedNodes)
 	if req.OutputFormat == hecklerpb.OutputFormat_markdown {
-		rprt.Output = markdownOutput(hs.conf, commitLogIds, commits, groupedCommits, hs.templates)
+		rprt.Output = commitRangeToMarkdown(hs.conf, commitLogIds, commits, groupedCommits, hs.templates)
 	}
 	for host, err := range errDialNodes {
 		rprt.NodeErrors[host] = err.Error()
@@ -1123,7 +1146,7 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 		// TODO need to enforce github user IDs for commits, so that we always
 		// have a valid github user.
 		Assignee: github.String("lollipopman"),
-		Body:     github.String(commitToMarkdown(commit, conf, templates) + groupedResourcesToMarkdown(groupedCommit, templates)),
+		Body:     github.String(commitBodyToMarkdown(commit, conf, templates) + groupedResourcesToMarkdown(groupedCommit, templates)),
 	}
 	ni, _, err := ghclient.Issues.Create(ctx, conf.RepoOwner, conf.Repo, githubIssue)
 	if err != nil {
@@ -1150,21 +1173,23 @@ func noopTitle(commit *git.Commit, prefix string) string {
 	return fmt.Sprintf("%sPuppet noop output for commit: %s - %s", issuePrefix(prefix), commit.Id().String(), commit.Summary())
 }
 
-func markdownOutput(conf *HecklerdConf, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, groupedCommits map[git.Oid][]*groupedResource, templates *template.Template) string {
+func commitRangeToMarkdown(conf *HecklerdConf, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, groupedCommits map[git.Oid][]*groupedResource, templates *template.Template) string {
 	var output string
 	for _, gi := range commitLogIds {
-		if len(groupedCommits[gi]) == 0 {
-			log.Printf("Skipping %s, no noop output", gi.String())
-			continue
-		}
-		output += fmt.Sprintf("## %s\n\n", noopTitle(commits[gi], conf.EnvPrefix))
-		output += commitToMarkdown(commits[gi], conf, templates)
-		output += groupedResourcesToMarkdown(groupedCommits[gi], templates)
+		output += commitToMarkdown(conf, commits[gi], groupedCommits[gi], templates)
 	}
 	return output
 }
 
-func commitToMarkdown(commit *git.Commit, conf *HecklerdConf, templates *template.Template) string {
+func commitToMarkdown(conf *HecklerdConf, commit *git.Commit, groupedCommit []*groupedResource, templates *template.Template) string {
+	var output string
+	output += fmt.Sprintf("## %s\n\n", noopTitle(commit, conf.EnvPrefix))
+	output += commitBodyToMarkdown(commit, conf, templates)
+	output += groupedResourcesToMarkdown(groupedCommit, templates)
+	return output
+}
+
+func commitBodyToMarkdown(commit *git.Commit, conf *HecklerdConf, templates *template.Template) string {
 	var body strings.Builder
 	var err error
 
