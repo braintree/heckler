@@ -1107,50 +1107,47 @@ func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue
 	return err
 }
 
-func githubCreateIssues(ghclient *github.Client, conf *HecklerdConf, commitLogIds []git.Oid, groupedCommits map[git.Oid][]*groupedResource, commits map[git.Oid]*git.Commit, templates *template.Template, logger *log.Logger) error {
+func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.Commit, groupedCommit []*groupedResource, templates *template.Template, logger *log.Logger) error {
 	ctx := context.Background()
 	prefix := conf.EnvPrefix
 
-	for _, gi := range commitLogIds {
-		issue, err := githubIssueFromCommit(ghclient, gi, conf)
-		if err != nil {
-			return err
-		}
-		if issue != nil {
-			logger.Printf("Issue already exists for commit %s, skipping create", gi.String())
-			continue
-		}
-		githubIssue := &github.IssueRequest{
-			Title: github.String(noopTitle(gi, commits, prefix)),
-			// TODO need to enforce github user IDs for commits, so that we always
-			// have a valid github user.
-			Assignee: github.String("lollipopman"),
-			Body:     github.String(commitToMarkdown(commits[gi], templates) + groupedResourcesToMarkdown(groupedCommits[gi], templates)),
-		}
-		ni, _, err := ghclient.Issues.Create(ctx, conf.RepoOwner, conf.Repo, githubIssue)
+	issue, err := githubIssueFromCommit(ghclient, *commit.Id(), conf)
+	if err != nil {
+		return err
+	}
+	if issue != nil {
+		return fmt.Errorf("Issue already exists for commit %s", commit.Id().String())
+	}
+	githubIssue := &github.IssueRequest{
+		Title: github.String(noopTitle(commit, prefix)),
+		// TODO need to enforce github user IDs for commits, so that we always
+		// have a valid github user.
+		Assignee: github.String("lollipopman"),
+		Body:     github.String(commitToMarkdown(commit, templates) + groupedResourcesToMarkdown(groupedCommit, templates)),
+	}
+	ni, _, err := ghclient.Issues.Create(ctx, conf.RepoOwner, conf.Repo, githubIssue)
+	if err != nil {
+		logger.Fatal(err)
+	}
+	logger.Printf("Successfully created new issue: '%v'", *ni.Title)
+	if len(groupedCommit) == 0 {
+		logger.Println("No noop output marking issue as 'closed'")
+		err := closeIssue(ghclient, conf, ni)
 		if err != nil {
 			logger.Fatal(err)
 		}
-		logger.Printf("Successfully created new issue: '%v'", *ni.Title)
-		if len(groupedCommits[gi]) == 0 {
-			logger.Println("No noop output marking issue as 'closed'")
-			err := closeIssue(ghclient, conf, ni)
-			if err != nil {
-				logger.Fatal(err)
-			}
-		} else if conf.AutoCloseIssues {
-			logger.Println("Auto close set, marking issue as 'closed'")
-			err := closeIssue(ghclient, conf, ni)
-			if err != nil {
-				logger.Fatal(err)
-			}
+	} else if conf.AutoCloseIssues {
+		logger.Println("Auto close set, marking issue as 'closed'")
+		err := closeIssue(ghclient, conf, ni)
+		if err != nil {
+			logger.Fatal(err)
 		}
 	}
 	return nil
 }
 
-func noopTitle(gi git.Oid, commits map[git.Oid]*git.Commit, prefix string) string {
-	return fmt.Sprintf("%sPuppet noop output for commit: %s - %s", issuePrefix(prefix), gi.String(), commits[gi].Summary())
+func noopTitle(commit *git.Commit, prefix string) string {
+	return fmt.Sprintf("%sPuppet noop output for commit: %s - %s", issuePrefix(prefix), commit.Id().String(), commit.Summary())
 }
 
 func markdownOutput(conf *HecklerdConf, commitLogIds []git.Oid, commits map[git.Oid]*git.Commit, groupedCommits map[git.Oid][]*groupedResource, templates *template.Template) string {
@@ -1160,7 +1157,7 @@ func markdownOutput(conf *HecklerdConf, commitLogIds []git.Oid, commits map[git.
 			log.Printf("Skipping %s, no noop output", gi.String())
 			continue
 		}
-		output += fmt.Sprintf("## %s\n\n", noopTitle(gi, commits, conf.EnvPrefix))
+		output += fmt.Sprintf("## %s\n\n", noopTitle(commits[gi], conf.EnvPrefix))
 		output += commitToMarkdown(commits[gi], templates)
 		output += groupedResourcesToMarkdown(groupedCommits[gi], templates)
 	}
@@ -1875,11 +1872,11 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			logger.Printf("errNodes: %s, %v", host, err)
 		}
 		// TODO support other branches?
-		commitLogIds, commits, err := commitLogIdList(repo, commonTag, "master")
+		_, commits, err := commitLogIdList(repo, commonTag, "master")
 		if err != nil {
 			logger.Fatalf("Unable to obtain commit log ids: %v", err)
 		}
-		if len(commitLogIds) == 0 {
+		if len(commits) == 0 {
 			logger.Println("No new commits, sleeping")
 			closeNodes(dialedNodes)
 			continue
@@ -1888,23 +1885,21 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		if err != nil {
 			logger.Fatalf("Unable to connect to github: %v", err)
 		}
-		allIssuesExist := true
-		for _, gi := range commitLogIds {
+		for gi, _ := range commits {
 			issue, err := githubIssueFromCommit(ghclient, gi, conf)
 			if err != nil {
 				logger.Fatalf("Unable to determine if issues exists: %s", gi.String())
 			}
-			if issue == nil {
-				allIssuesExist = false
-				break
+			if issue != nil {
+				delete(commits, gi)
 			}
 		}
-		if allIssuesExist {
+		if len(commits) == 0 {
 			logger.Println("All issues exist, sleeping")
 			closeNodes(dialedNodes)
 			continue
 		} else {
-			logger.Println("Some issues do not exist on github, nooping range")
+			logger.Println("Some issues do not exist on github, requesting noops")
 		}
 		lockReq := hecklerpb.HecklerLockRequest{
 			User:    "root",
@@ -1934,36 +1929,29 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 		}
-		groupedCommits := make(map[git.Oid][]*groupedResource)
 		errNoopNodes := make(map[string]error)
 		for gi, commit := range commits {
-			groupedCommit, errCommitNoopNodes, err := noopCommit(lockedNodes, commit, repo, logger)
+			groupedCommit, errNoopCommitNodes, err := noopCommit(lockedNodes, commit, repo, logger)
 			if err != nil {
 				logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
-				nodeUnlock(&unlockReq, lockedNodes)
-				closeNodes(dialedNodes)
-				continue
+				break
 			}
-			// This masks previous node errors, but that is probably fine?
-			for host, err := range errCommitNoopNodes {
-				errNoopNodes[host] = err
+			errCurTotal := errNodesTotal + len(errNoopCommitNodes)
+			if errCurTotal > errorThresh {
+				logger.Printf("Nodes with errors when nooping(%d) exceeds the threshold(%d), sleeping", errCurTotal, errorThresh)
+				for host, err := range errNoopCommitNodes {
+					errNoopNodes[host] = err
+				}
+				break
 			}
-			groupedCommits[gi] = groupedCommit
-		}
-		errNodesTotal += len(errNoopNodes)
-		if errNodesTotal > errorThresh {
-			logger.Printf("Nodes with errors when nooping(%d) exceeds the threshold(%d), sleeping", errNodesTotal, errorThresh)
-			nodeUnlock(&unlockReq, lockedNodes)
-			closeNodes(dialedNodes)
-			continue
+			err = githubCreateIssue(ghclient, conf, commit, groupedCommit, templates, logger)
+			if err != nil {
+				logger.Printf("Unable to create github issue, sleeping: %v", err)
+				break
+			}
 		}
 		nodeUnlock(&unlockReq, lockedNodes)
 		closeNodes(dialedNodes)
-		err = githubCreateIssues(ghclient, conf, commitLogIds, groupedCommits, commits, templates, logger)
-		if err != nil {
-			logger.Printf("Unable to create github issues, sleeping: %v", err)
-			continue
-		}
 		logger.Println("Nooping complete, sleeping")
 	}
 }
