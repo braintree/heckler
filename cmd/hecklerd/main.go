@@ -1123,7 +1123,7 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 		// TODO need to enforce github user IDs for commits, so that we always
 		// have a valid github user.
 		Assignee: github.String("lollipopman"),
-		Body:     github.String(commitToMarkdown(commit, templates) + groupedResourcesToMarkdown(groupedCommit, templates)),
+		Body:     github.String(commitToMarkdown(commit, conf, templates) + groupedResourcesToMarkdown(groupedCommit, templates)),
 	}
 	ni, _, err := ghclient.Issues.Create(ctx, conf.RepoOwner, conf.Repo, githubIssue)
 	if err != nil {
@@ -1158,17 +1158,24 @@ func markdownOutput(conf *HecklerdConf, commitLogIds []git.Oid, commits map[git.
 			continue
 		}
 		output += fmt.Sprintf("## %s\n\n", noopTitle(commits[gi], conf.EnvPrefix))
-		output += commitToMarkdown(commits[gi], templates)
+		output += commitToMarkdown(commits[gi], conf, templates)
 		output += groupedResourcesToMarkdown(groupedCommits[gi], templates)
 	}
 	return output
 }
 
-func commitToMarkdown(c *git.Commit, templates *template.Template) string {
+func commitToMarkdown(commit *git.Commit, conf *HecklerdConf, templates *template.Template) string {
 	var body strings.Builder
 	var err error
 
-	err = templates.ExecuteTemplate(&body, "commit.tmpl", c)
+	data := struct {
+		Commit *git.Commit
+		Conf   *HecklerdConf
+	}{
+		commit,
+		conf,
+	}
+	err = templates.ExecuteTemplate(&body, "commit.tmpl", data)
 	if err != nil {
 		log.Fatal(err)
 	}

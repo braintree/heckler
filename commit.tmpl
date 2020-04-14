@@ -1,8 +1,8 @@
-### Commit [{{ .AsObject.Id }}](https://github.braintreeps.com/lollipopman/muppetshow/commit/{{ .AsObject.Id }})
+### Commit [{{ .Commit.AsObject.Id }}](https://{{ .Conf.GitHubDomain }}/{{ .Conf.RepoOwner }}/{{ .Conf.Repo }}/commit/{{ .Commit.AsObject.Id }})
 
-- *Author:* {{ .Author.Name }} (<{{ .Author.Email }}>)
+- *Author:* {{ .Commit.Author.Name }} (<{{ .Commit.Author.Email }}>)
 - *Message:*
   ```
-{{ .Message | indent 2 }}
+{{ .Commit.Message | indent 2 }}
   ```
 
