@@ -281,7 +281,6 @@ func loadNoop(commit git.Oid, node *Node, noopDir string, repo *git.Repository, 
 		if node.host != rprt.Host {
 			return nil, errors.New(fmt.Sprintf("Host mismatch %s != %s", node.host, rprt.Host))
 		}
-		logger.Printf("Found serialized noop: %s@%s", rprt.Host, rprt.ConfigurationVersion)
 		return rprt, nil
 	}
 }
@@ -321,13 +320,12 @@ func noopCommit(nodes map[string]*Node, commit *git.Commit, repo *git.Repository
 	}
 
 	var nodeCommitToNoop git.Oid
-	var noopRequests int
 	var rprt *rizzopb.PuppetReport
 	errNoopNodes := make(map[string]error)
 	puppetReportChan := make(chan applyResult)
 	for i, commitToNoop := range commitsToNoop {
 		logger.Printf("Nooping: %s (%d of %d)", commitToNoop.String(), i+1, len(commitsToNoop))
-		noopRequests = 0
+		noopHosts := make(map[string]bool)
 		for _, node := range nodes {
 			// perma-diff: We need a noop report of the lastApply so we can use it to
 			// subtract away perma-diffs from children. Typically the lastApply is
@@ -341,26 +339,30 @@ func noopCommit(nodes map[string]*Node, commit *git.Commit, repo *git.Repository
 			if rprt, err = loadNoop(nodeCommitToNoop, node, noopDir, repo, logger); err == nil {
 				nodes[node.host].commitReports[nodeCommitToNoop] = rprt
 			} else if os.IsNotExist(err) {
-				logger.Printf("Requesting noop %s@%s", node.host, nodeCommitToNoop.String())
 				par := rizzopb.PuppetApplyRequest{Rev: nodeCommitToNoop.String(), Noop: true}
 				go hecklerApply(node, puppetReportChan, par)
-				noopRequests++
+				noopHosts[node.host] = true
 			} else {
 				logger.Fatalf("Unable to load noop: %v", err)
 			}
 		}
-
+		noopRequests := len(noopHosts)
+		if noopRequests > 0 {
+			logger.Printf("Requesting noops for %s: %s", nodeCommitToNoop.String(), compressHostsMap(noopHosts))
+		}
 		for j := 0; j < noopRequests; j++ {
-			logger.Printf("Waiting for %d outstanding noop requests", noopRequests-j)
+			logger.Printf("Waiting for (%d) outstanding noop requests: %s", noopRequests-j, compressHostsMap(noopHosts))
 			r := <-puppetReportChan
 			if r.err != nil {
 				errNoopNodes[r.host] = fmt.Errorf("Noop failed for %s: %w", r.host, r.err)
 				logger.Println(errNoopNodes[r.host])
 				delete(nodes, r.host)
+				delete(noopHosts, r.host)
 				continue
 			}
 			newRprt := normalizeReport(r.report)
 			logger.Printf("Received noop: %s@%s", newRprt.Host, newRprt.ConfigurationVersion)
+			delete(noopHosts, newRprt.Host)
 			commitId, err := git.NewOid(newRprt.ConfigurationVersion)
 			if err != nil {
 				logger.Fatalf("Unable to marshal report: %v", err)
@@ -373,8 +375,8 @@ func noopCommit(nodes map[string]*Node, commit *git.Commit, repo *git.Repository
 		}
 	}
 
-	for host, node := range nodes {
-		logger.Printf("Creating delta resource: %s@%s", host, commit.Id().String())
+	logger.Printf("Creating delta resource for commit %s", commit.Id().String())
+	for _, node := range nodes {
 		// perma-diff: If the commit is already applied we can assume that the
 		// diff is empty. Ideally we would not need this special case as the noop
 		// for an already applied commit should be empty, but we purposefully
@@ -526,6 +528,16 @@ func compressHosts(hosts []string) string {
 	}
 	res := grange.NewResult(interfaceHosts...)
 	return grange.Compress(&res)
+}
+
+func compressHostsMap(hostsMap map[string]bool) string {
+	hosts := make([]string, len(hostsMap))
+	i := 0
+	for k, _ := range hostsMap {
+		hosts[i] = k
+		i++
+	}
+	return compressHosts(hosts)
 }
 
 func compressErrorHosts(hostErr map[string]error) map[string]error {
@@ -838,9 +850,9 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 			errNodes[host] = err
 		}
 		if req.Force {
-			har.Output = fmt.Sprintf("Applied nodes: %d; Error nodes: %d", len(appliedNodes), len(errNodes))
+			har.Output = fmt.Sprintf("Applied nodes: (%d); Error nodes: (%d)", len(appliedNodes), len(errNodes))
 		} else {
-			har.Output = fmt.Sprintf("Applied nodes: %d; Beyond rev nodes: %d; Error nodes: %d", len(appliedNodes), len(beyondRevNodes), len(errNodes))
+			har.Output = fmt.Sprintf("Applied nodes: (%d); Beyond rev nodes: (%d); Error nodes: (%d)", len(appliedNodes), len(beyondRevNodes), len(errNodes))
 		}
 	}
 	har.NodeErrors = make(map[string]string)
@@ -1615,7 +1627,7 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 		for host, err := range compressedErrNodes {
 			logger.Printf("errNodes: %s, %v", host, err)
 		}
-		logger.Printf("Applied nodes: %d; Beyond rev nodes: %d; Error nodes: %d", len(appliedNodes), len(beyondRevNodes), len(errNodes))
+		logger.Printf("Applied nodes: (%d); Beyond rev nodes: (%d); Error nodes: (%d)", len(appliedNodes), len(beyondRevNodes), len(errNodes))
 		logger.Println("Apply complete, sleeping")
 		closeNodes(dialedNodes)
 	}
