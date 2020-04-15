@@ -776,7 +776,7 @@ func nodesFromSet(conf *HecklerdConf, nodeSetName string, logger *log.Logger) ([
 	if len(filteredNodes) == 0 {
 		return nil, errors.New(fmt.Sprintf("Node set '%s': '%v' produced zero nodes", nodeSetName, nodeSet))
 	}
-	logger.Printf("Node set '%s' loaded, nodes (%d), blacklisted nodes (%d): %v", nodeSetName, len(filteredNodes), len(blacklistedNodes), blacklistedNodes)
+	logger.Printf("Node set '%s' loaded, nodes (%d), blacklisted nodes (%d): %s", nodeSetName, len(filteredNodes), len(blacklistedNodes), compressHosts(blacklistedNodes))
 	return filteredNodes, nil
 }
 
@@ -1626,14 +1626,16 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) {
 	}
 	unlockedNodes, errUnlockNodes := nodeUnlock(&unlockReq, dialedNodes)
 	errNodes := make(map[string]error)
+	unlockedHosts := make([]string, 0)
+	for host, _ := range unlockedNodes {
+		unlockedHosts = append(unlockedHosts, host)
+	}
+	logger.Printf("Unlocked: %s", compressHosts(unlockedHosts))
 	for host, err := range errDialNodes {
 		errNodes[host] = err
 	}
 	for host, err := range errUnlockNodes {
 		errNodes[host] = err
-	}
-	for host, _ := range unlockedNodes {
-		logger.Printf("Unlocked: %s", host)
 	}
 	compressedErrNodes := compressErrorHosts(errNodes)
 	for host, err := range compressedErrNodes {
@@ -2055,7 +2057,10 @@ func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Reposito
 		}
 	}
 	if len(tagNodes) == 0 {
-		logger.Printf("No common tag found, tags to nodes: %v", tagNodes)
+		logger.Println("No common tag found!")
+		for tag, nodes := range tagNodes {
+			logger.Printf("Tag: %s, Hosts: %s", tag, compressHosts(nodes))
+		}
 		return "", nil
 	}
 
