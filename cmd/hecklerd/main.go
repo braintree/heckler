@@ -1548,7 +1548,9 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 		}
 		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo, logger)
 		if err != nil {
-			logger.Fatalf("Unable to find common tag: %v", err)
+			logger.Printf("Unable to find common tag, sleeping: %v", err)
+			closeNodes(dialedNodes)
+			continue
 		}
 		if commonTag == "" {
 			logger.Println("No common tag found, sleeping")
@@ -1919,7 +1921,9 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		}
 		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo, logger)
 		if err != nil {
-			logger.Fatalf("Call to commonAncestorTag failed: %v", err)
+			logger.Printf("Unable to find common tag, sleeping: %v", err)
+			closeNodes(dialedNodes)
+			continue
 		}
 		if commonTag == "" {
 			logger.Println("No common tag found, sleeping")
