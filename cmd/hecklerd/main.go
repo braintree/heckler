@@ -33,6 +33,7 @@ import (
 	git "github.com/libgit2/git2go"
 	gitcgiserver "github.com/lollipopman/git-cgi-server"
 	"github.com/robfig/cron/v3"
+	"github.com/square/grange"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
@@ -113,13 +114,14 @@ type deltaResource struct {
 }
 
 type groupedResource struct {
-	Title      ResourceTitle
-	Type       string
-	DefineType string
-	Diff       string
-	Nodes      []string
-	Events     []*groupEvent
-	Logs       []*groupLog
+	Title           ResourceTitle
+	Type            string
+	DefineType      string
+	Diff            string
+	Nodes           []string
+	CompressedNodes string
+	Events          []*groupEvent
+	Logs            []*groupLog
 }
 
 type groupEvent struct {
@@ -517,6 +519,15 @@ func resourceDefineType(res *rizzopb.ResourceStatus) string {
 	return defineType
 }
 
+func compressHosts(hosts []string) string {
+	interfaceHosts := make([]interface{}, len(hosts))
+	for i, v := range hosts {
+		interfaceHosts[i] = v
+	}
+	res := grange.NewResult(interfaceHosts...)
+	return grange.Compress(&res)
+}
+
 func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node) *groupedResource {
 	var nodeList []string
 	var desiredValue string
@@ -541,6 +552,7 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 	gr.DefineType = targetDeltaResource.DefineType
 	sort.Strings(nodeList)
 	gr.Nodes = nodeList
+	gr.CompressedNodes = compressHosts(nodeList)
 
 	for _, e := range targetDeltaResource.Events {
 		ge = new(groupEvent)

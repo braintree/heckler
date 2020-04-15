@@ -10,6 +10,8 @@ github.com/Masterminds/sprig
 github.com/abbot/go-http-auth
 # github.com/bradleyfalzon/ghinstallation v1.1.1
 github.com/bradleyfalzon/ghinstallation
+# github.com/deckarep/golang-set v0.0.0-20170202203032-fc8930a5e645
+github.com/deckarep/golang-set
 # github.com/dgrijalva/jwt-go v3.2.0+incompatible
 github.com/dgrijalva/jwt-go
 # github.com/gogo/protobuf v1.3.1
@@ -46,8 +48,12 @@ github.com/lollipopman/luser
 github.com/mitchellh/copystructure
 # github.com/mitchellh/reflectwalk v1.0.1
 github.com/mitchellh/reflectwalk
+# github.com/orcaman/concurrent-map v0.0.0-20160823150647-8bf1e9bacbf6
+github.com/orcaman/concurrent-map
 # github.com/robfig/cron/v3 v3.0.1
 github.com/robfig/cron/v3
+# github.com/square/grange v0.0.0-20200108221412-2a4cb7b5b334
+github.com/square/grange
 # golang.org/x/crypto v0.0.0-20200317142112-1b76d66859c6
 golang.org/x/crypto/bcrypt
 golang.org/x/crypto/blowfish
@@ -116,3 +122,5 @@ google.golang.org/grpc/status
 google.golang.org/grpc/tap
 # gopkg.in/yaml.v3 v3.0.0-20190709130402-674ba3eaed22
 gopkg.in/yaml.v3
+# vbom.ml/util v0.0.0-20150502001426-d600ec780753
+vbom.ml/util/sortorder

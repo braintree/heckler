@@ -20,6 +20,7 @@ require (
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.1 // indirect
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/square/grange v0.0.0-20200108221412-2a4cb7b5b334
 	github.com/stretchr/testify v1.4.0 // indirect
 	golang.org/x/crypto v0.0.0-20200317142112-1b76d66859c6 // indirect
 	golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5 // indirect
