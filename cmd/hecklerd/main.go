@@ -528,6 +528,23 @@ func compressHosts(hosts []string) string {
 	return grange.Compress(&res)
 }
 
+func compressErrorHosts(hostErr map[string]error) map[string]error {
+	errHosts := make(map[string][]string)
+	for host, err := range hostErr {
+		errType := fmt.Sprintf("%T", err)
+		if hosts, ok := errHosts[errType]; ok {
+			errHosts[errType] = append(hosts, host)
+		} else {
+			errHosts[errType] = []string{host}
+		}
+	}
+	compressedHostErr := make(map[string]error)
+	for errType, hosts := range errHosts {
+		compressedHostErr[compressHosts(hosts)] = fmt.Errorf("Error: %s", errType)
+	}
+	return compressedHostErr
+}
+
 func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node) *groupedResource {
 	var nodeList []string
 	var desiredValue string
@@ -1586,7 +1603,8 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 		for host, lockState := range lockedByAnotherNodes {
 			logger.Printf("lockedByAnother: %s, %v", host, lockState)
 		}
-		for host, err := range errNodes {
+		compressedErrNodes := compressErrorHosts(errNodes)
+		for host, err := range compressedErrNodes {
 			logger.Printf("errNodes: %s, %v", host, err)
 		}
 		logger.Printf("Applied nodes: %d; Beyond rev nodes: %d; Error nodes: %d", len(appliedNodes), len(beyondRevNodes), len(errNodes))
@@ -1617,8 +1635,9 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) {
 	for host, _ := range unlockedNodes {
 		logger.Printf("Unlocked: %s", host)
 	}
-	for host, err := range errNodes {
-		logger.Printf("errNodes: %s, %v", host, err)
+	compressedErrNodes := compressErrorHosts(errNodes)
+	for host, err := range compressedErrNodes {
+		logger.Printf("Unlock errNodes: %s, %v", host, err)
 	}
 }
 
@@ -1793,7 +1812,8 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 		for host, err := range errUnknownRevNodes {
 			errNodes[host] = err
 		}
-		for host, err := range errNodes {
+		compressedErrNodes := compressErrorHosts(errNodes)
+		for host, err := range compressedErrNodes {
 			logger.Printf("errNodes: %s, %v", host, err)
 		}
 		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo, logger)
@@ -1912,7 +1932,8 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		for host, err := range errUnknownRevNodes {
 			errNodes[host] = err
 		}
-		for host, err := range errNodes {
+		compressedErrNodes := compressErrorHosts(errNodes)
+		for host, err := range compressedErrNodes {
 			logger.Printf("errNodes: %s, %v", host, err)
 		}
 		// TODO support other branches?
