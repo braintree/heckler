@@ -529,9 +529,15 @@ func compressHosts(hosts []string) string {
 }
 
 func compressErrorHosts(hostErr map[string]error) map[string]error {
+	var errType string
 	errHosts := make(map[string][]string)
 	for host, err := range hostErr {
-		errType := fmt.Sprintf("%T", err)
+		// If we don't have a custom error, than don't compress
+		if fmt.Sprintf("%T", err) == "*errors.errorString" {
+			errType = fmt.Sprintf("%v", err)
+		} else {
+			errType = fmt.Sprintf("%T", err)
+		}
 		if hosts, ok := errHosts[errType]; ok {
 			errHosts[errType] = append(hosts, host)
 		} else {
