@@ -196,7 +196,7 @@ func main() {
 			log.Fatalf("Unable to retreive heckler statuses: %v", err)
 		}
 		for node, nodeStatus := range rprt.NodeStatuses {
-			fmt.Printf("Status: %s@%s\n", node, nodeStatus)
+			fmt.Printf("Status: %s, %s\n", node, nodeStatus)
 		}
 		for node, nodeError := range rprt.NodeErrors {
 			fmt.Printf("Error: %s, %s\n", node, nodeError)

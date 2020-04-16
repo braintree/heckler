@@ -164,9 +164,7 @@ func grpcConnect(ctx context.Context, node *Node, clientConnChan chan nodeResult
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, address, grpc.WithInsecure(), grpc.WithBlock(), grpc.FailOnNonTempDialError(true))
-	if errors.Is(err, context.DeadlineExceeded) {
-		clientConnChan <- nodeResult{node, errors.New(fmt.Sprintf("Timeout connecting to %s", address))}
-	} else if err != nil {
+	if err != nil {
 		clientConnChan <- nodeResult{node, err}
 	} else {
 		node.rizzoClient = rizzopb.NewRizzoClient(conn)
@@ -1287,8 +1285,13 @@ func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.Heckl
 	lastApplyNodes, errUnknownRevNodes := nodeLastApply(dialedNodes, hs.repo, logger)
 	hsr := new(hecklerpb.HecklerStatusReport)
 	hsr.NodeStatuses = make(map[string]string)
+	var tagStr string
 	for _, node := range lastApplyNodes {
-		hsr.NodeStatuses[node.host] = node.lastApply.String()
+		tagStr, err = describeCommit(node.lastApply, hs.conf.EnvPrefix, hs.repo)
+		if err != nil {
+			tagStr = "NONE"
+		}
+		hsr.NodeStatuses[node.host] = "commit: " + node.lastApply.String() + ", tag: " + tagStr
 	}
 	hsr.NodeErrors = make(map[string]string)
 	for host, err := range errNodes {
@@ -2045,7 +2048,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 	}
 }
 
-func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Repository, logger *log.Logger) (string, error) {
+func describeCommit(gi git.Oid, prefix string, repo *git.Repository) (string, error) {
 	describeOpts, err := git.DefaultDescribeOptions()
 	if err != nil {
 		return "", err
@@ -2057,25 +2060,33 @@ func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Reposito
 		return "", err
 	}
 
+	commit, err := repo.LookupCommit(&gi)
+	if err != nil {
+		return "", err
+	}
+	result, err := commit.Describe(&describeOpts)
+	if err != nil {
+		return "", err
+	}
+	tagStr, err := result.Format(&formatOpts)
+	if err != nil {
+		return "", err
+	}
+	return tagStr, nil
+}
+
+func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Repository, logger *log.Logger) (string, error) {
 	// get set of tags
 	tagNodes := make(map[string][]string)
 	for _, node := range nodes {
-		commit, err := repo.LookupCommit(&node.lastApply)
-		if err != nil {
-			return "", err
-		}
-		result, err := commit.Describe(&describeOpts)
+		tagStr, err := describeCommit(node.lastApply, prefix, repo)
 		if err != nil {
 			return "", errors.New(fmt.Sprintf("Unable to describe %s@%s, %v", node.host, node.lastApply.String(), err))
 		}
-		resultStr, err := result.Format(&formatOpts)
-		if err != nil {
-			return "", err
-		}
-		if _, ok := tagNodes[resultStr]; ok {
-			tagNodes[resultStr] = append(tagNodes[resultStr], node.host)
+		if _, ok := tagNodes[tagStr]; ok {
+			tagNodes[tagStr] = append(tagNodes[tagStr], node.host)
 		} else {
-			tagNodes[resultStr] = []string{node.host}
+			tagNodes[tagStr] = []string{node.host}
 		}
 	}
 	if len(tagNodes) == 0 {
