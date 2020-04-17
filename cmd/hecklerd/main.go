@@ -1868,7 +1868,11 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 		priorTag := commonTag
 		var nextTagMilestone *github.Milestone
 		nextTagMilestone, err = milestoneFromTag(nextTag, ghclient, conf)
-		if err != nil {
+		if err == context.DeadlineExceeded {
+			logger.Println("Timeout reaching github for milestone, sleeping")
+			closeNodes(dialedNodes)
+			continue
+		} else if err != nil {
 			logger.Fatalf("Unable to find milestone from tag, '%s': %v", nextTag, err)
 		}
 		if nextTagMilestone == nil {
