@@ -400,6 +400,12 @@ func noopCommit(nodes map[string]*Node, commit *git.Commit, repo *git.Repository
 
 func priorEvent(event *rizzopb.Event, resourceTitleStr string, priorCommitNoops []*rizzopb.PuppetReport) bool {
 	for _, priorCommitNoop := range priorCommitNoops {
+		if priorCommitNoop == nil {
+			log.Fatalf("Error: prior commit noop was nil!")
+		}
+		if priorCommitNoop.ResourceStatuses == nil {
+			continue
+		}
 		if priorResourceStatuses, ok := priorCommitNoop.ResourceStatuses[resourceTitleStr]; ok {
 			for _, priorEvent := range priorResourceStatuses.Events {
 				if *event == *priorEvent {
@@ -411,10 +417,16 @@ func priorEvent(event *rizzopb.Event, resourceTitleStr string, priorCommitNoops 
 	return false
 }
 
-func priorLog(log *rizzopb.Log, priorCommitNoops []*rizzopb.PuppetReport) bool {
+func priorLog(curLog *rizzopb.Log, priorCommitNoops []*rizzopb.PuppetReport) bool {
 	for _, priorCommitNoop := range priorCommitNoops {
+		if priorCommitNoop == nil {
+			log.Fatalf("Error: prior commit noop was nil!")
+		}
+		if priorCommitNoop.Logs == nil {
+			continue
+		}
 		for _, priorLog := range priorCommitNoop.Logs {
-			if *log == *priorLog {
+			if *curLog == *priorLog {
 				return true
 			}
 		}
