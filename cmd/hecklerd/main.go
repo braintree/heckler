@@ -137,9 +137,8 @@ type groupLog struct {
 type ResourceTitle string
 
 func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map[git.Oid]*rizzopb.PuppetReport, repo *git.Repository, logger *log.Logger) []*rizzopb.PuppetReport {
-	var parentReports []*rizzopb.PuppetReport
 	var parentReport *rizzopb.PuppetReport
-
+	parentReports := make([]*rizzopb.PuppetReport, 0)
 	parentCount := commit.ParentCount()
 	for i := uint(0); i < parentCount; i++ {
 		// perma-diff: If our parent is already applied we substitute the lastApply
@@ -150,10 +149,10 @@ func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map
 		} else {
 			parentReport = commitReports[*commit.ParentId(i)]
 		}
-		if parentReport != nil {
-			parentReports = append(parentReports, commitReports[*commit.ParentId(i)])
-		} else {
+		if parentReport == nil {
 			logger.Fatalf("Parent report not found %s", commit.ParentId(i).String())
+		} else {
+			parentReports = append(parentReports, parentReport)
 		}
 	}
 	return parentReports
