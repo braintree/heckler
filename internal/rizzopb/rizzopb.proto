@@ -14,6 +14,7 @@ service Rizzo {
   rpc PuppetApply (PuppetApplyRequest) returns (PuppetReport) {}
   rpc PuppetLastApply (PuppetLastApplyRequest) returns (PuppetReport) {}
   rpc PuppetLock (PuppetLockRequest) returns (PuppetLockReport) {}
+  rpc PuppetLockState (PuppetLockStateRequest) returns (PuppetLockReport) {}
   rpc PuppetUnlock (PuppetUnlockRequest) returns (PuppetUnlockReport) {}
 }
 
@@ -113,4 +114,8 @@ message PuppetUnlockReport {
   string host = 1;
   bool unlocked = 2;
   string error = 3;
+}
+
+message PuppetLockStateRequest {
+  string user = 1;
 }

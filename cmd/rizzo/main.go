@@ -111,30 +111,70 @@ func (s *server) PuppetLastApply(ctx context.Context, req *rizzopb.PuppetLastApp
 
 func (s *server) PuppetLock(ctx context.Context, req *rizzopb.PuppetLockRequest) (*rizzopb.PuppetLockReport, error) {
 	log.Printf("PuppetLock: request received, %v", req)
-	var res *rizzopb.PuppetLockReport
-	res = new(rizzopb.PuppetLockReport)
 	lockState, err := puppetLock(req.User, req.Comment, req.Force)
 	if err != nil {
-		res.LockStatus = rizzopb.LockStatus_lock_unknown
-		res.Error = err.Error()
-	} else {
-		switch lockState.lockStatus {
-		case lockUnknown:
-			res.LockStatus = rizzopb.LockStatus_lock_unknown
-		case lockedByUser:
-			res.LockStatus = rizzopb.LockStatus_locked_by_user
-		case lockedByAnother:
-			res.LockStatus = rizzopb.LockStatus_locked_by_another
-		case unlocked:
-			res.LockStatus = rizzopb.LockStatus_unlocked
-		default:
-			log.Fatal("Unknown lockStatus!")
-		}
-		res.Comment = lockState.comment
-		res.User = lockState.user
+		return &rizzopb.PuppetLockReport{
+			LockStatus: rizzopb.LockStatus_lock_unknown,
+			Error:      err.Error(),
+		}, nil
 	}
+	res := lockStateToReport(lockState)
 	log.Printf("PuppetLock: reply, %v", res)
 	return res, nil
+}
+
+func (s *server) PuppetLockState(ctx context.Context, req *rizzopb.PuppetLockStateRequest) (*rizzopb.PuppetLockReport, error) {
+	log.Printf("PuppetLocked: request received, %v", req)
+	lockState, err := puppetLockState(req.User)
+	if err != nil {
+		return &rizzopb.PuppetLockReport{
+			LockStatus: rizzopb.LockStatus_lock_unknown,
+			Error:      err.Error(),
+		}, nil
+	}
+	res := lockStateToReport(lockState)
+	log.Printf("PuppetLocked: reply, %v", res)
+	return res, nil
+}
+
+func lockStateToReport(lockState lockState) *rizzopb.PuppetLockReport {
+	res := new(rizzopb.PuppetLockReport)
+	switch lockState.lockStatus {
+	case lockUnknown:
+		res.LockStatus = rizzopb.LockStatus_lock_unknown
+	case lockedByUser:
+		res.LockStatus = rizzopb.LockStatus_locked_by_user
+	case lockedByAnother:
+		res.LockStatus = rizzopb.LockStatus_locked_by_another
+	case unlocked:
+		res.LockStatus = rizzopb.LockStatus_unlocked
+	default:
+		log.Fatal("Unknown lockStatus!")
+	}
+	res.Comment = lockState.comment
+	res.User = lockState.user
+	return res
+}
+
+func puppetLockState(reqUser string) (lockState, error) {
+	var li lockState
+	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
+		li.lockStatus = unlocked
+		return li, nil
+	}
+	lockOwner, err := lockOwner()
+	if err != nil {
+		return li, nil
+	}
+	li.user = lockOwner.Username
+	li.comment, err = lockComment()
+	if reqUser == lockOwner.Username {
+		li.lockStatus = lockedByUser
+		return li, nil
+	} else {
+		li.lockStatus = lockedByAnother
+		return li, nil
+	}
 }
 
 func puppetLock(locker string, comment string, forceLock bool) (lockState, error) {
