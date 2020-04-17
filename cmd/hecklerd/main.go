@@ -373,7 +373,6 @@ func noopCommit(nodes map[string]*Node, commit *git.Commit, repo *git.Repository
 		}
 	}
 
-	logger.Printf("Creating delta resource for commit %s", commit.Id().String())
 	for _, node := range nodes {
 		// perma-diff: If the commit is already applied we can assume that the
 		// diff is empty. Ideally we would not need this special case as the noop
@@ -381,6 +380,7 @@ func noopCommit(nodes map[string]*Node, commit *git.Commit, repo *git.Repository
 		// substitute the noop of the lastApply to subtract away perma-diffs, so
 		// those would show up without this special case.
 		// TODO: Assign perma-diffs to server owners?
+		logger.Printf("Creating delta resource for commit %s@%s", node.host, commit.Id().String())
 		if commitAlreadyApplied(node.lastApply, *commit.Id(), repo) {
 			node.commitDeltaResources[*commit.Id()] = make(map[ResourceTitle]*deltaResource)
 		} else {
