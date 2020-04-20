@@ -1313,7 +1313,7 @@ func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.Heckl
 		if err != nil {
 			tagStr = "NONE"
 		}
-		hsr.NodeStatuses[node.host] = "commit: " + node.lastApply.String() + ", tag: " + tagStr
+		hsr.NodeStatuses[node.host] = "commit: " + node.lastApply.String() + ", last-tag: " + tagStr
 	}
 	hsr.NodeErrors = make(map[string]string)
 	for host, err := range errNodes {
