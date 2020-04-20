@@ -111,30 +111,69 @@ func (s *server) PuppetLastApply(ctx context.Context, req *rizzopb.PuppetLastApp
 
 func (s *server) PuppetLock(ctx context.Context, req *rizzopb.PuppetLockRequest) (*rizzopb.PuppetLockReport, error) {
 	log.Printf("PuppetLock: request received, %v", req)
-	var res *rizzopb.PuppetLockReport
-	res = new(rizzopb.PuppetLockReport)
-	lockState, err := puppetLock(req.User, req.Comment, req.Force)
-	if err != nil {
-		res.LockStatus = rizzopb.LockStatus_lock_unknown
-		res.Error = err.Error()
-	} else {
-		switch lockState.lockStatus {
-		case lockUnknown:
-			res.LockStatus = rizzopb.LockStatus_lock_unknown
-		case lockedByUser:
-			res.LockStatus = rizzopb.LockStatus_locked_by_user
-		case lockedByAnother:
-			res.LockStatus = rizzopb.LockStatus_locked_by_another
-		case unlocked:
-			res.LockStatus = rizzopb.LockStatus_unlocked
-		default:
-			log.Fatal("Unknown lockStatus!")
-		}
-		res.Comment = lockState.comment
-		res.User = lockState.user
+	var li lockState
+	var err error
+	switch req.Type {
+	case rizzopb.LockReqType_lock:
+		li, err = puppetLock(req.User, req.Comment, req.Force)
+	case rizzopb.LockReqType_unlock:
+		li, err = puppetUnlock(req.User, req.Force)
+	case rizzopb.LockReqType_state:
+		li, err = puppetLockState(req.User)
+	default:
+		log.Fatal("Unknown lock request!")
 	}
+	if err != nil {
+		return &rizzopb.PuppetLockReport{
+			LockStatus: rizzopb.LockStatus_lock_unknown,
+			Error:      err.Error(),
+		}, nil
+	}
+	res := lockStateToReport(li)
 	log.Printf("PuppetLock: reply, %v", res)
 	return res, nil
+}
+
+func lockStateToReport(lockState lockState) *rizzopb.PuppetLockReport {
+	res := new(rizzopb.PuppetLockReport)
+	switch lockState.lockStatus {
+	case lockUnknown:
+		res.LockStatus = rizzopb.LockStatus_lock_unknown
+	case lockedByUser:
+		res.LockStatus = rizzopb.LockStatus_locked_by_user
+	case lockedByAnother:
+		res.LockStatus = rizzopb.LockStatus_locked_by_another
+	case unlocked:
+		res.LockStatus = rizzopb.LockStatus_unlocked
+	default:
+		log.Fatal("Unknown lockStatus!")
+	}
+	res.Comment = lockState.comment
+	res.User = lockState.user
+	return res
+}
+
+func puppetLockState(reqUser string) (lockState, error) {
+	var li lockState
+	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
+		li.lockStatus = unlocked
+		return li, nil
+	}
+	lockOwner, err := lockOwner()
+	if err != nil {
+		return li, nil
+	}
+	li.user = lockOwner.Username
+	li.comment, err = lockComment()
+	if err != nil {
+		return li, nil
+	}
+	if reqUser == lockOwner.Username {
+		li.lockStatus = lockedByUser
+	} else {
+		li.lockStatus = lockedByAnother
+	}
+	return li, nil
 }
 
 func puppetLock(locker string, comment string, forceLock bool) (lockState, error) {
@@ -226,43 +265,31 @@ func renameAndCheck(src, dst string) error {
 	return os.Remove(src)
 }
 
-func (s *server) PuppetUnlock(ctx context.Context, req *rizzopb.PuppetUnlockRequest) (*rizzopb.PuppetUnlockReport, error) {
-	log.Printf("PuppetUnlock: request received, %v", req)
-	var res *rizzopb.PuppetUnlockReport
-	res = new(rizzopb.PuppetUnlockReport)
-	err := puppetUnlock(req.User, req.Force)
-	if err != nil {
-		res.Unlocked = false
-		res.Error = err.Error()
-	} else {
-		res.Unlocked = true
-	}
-	log.Printf("PuppetUnlock: reply, %v", res)
-	return res, nil
-}
-
-func puppetUnlock(unlocker string, forceUnlock bool) error {
-	// if we are already unlocked don't return an error
+func puppetUnlock(unlocker string, forceUnlock bool) (lockState, error) {
+	var li lockState
 	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
-		return nil
+		li.lockStatus = unlocked
+		return li, nil
 	}
 	lockOwner, err := lockOwner()
 	if err != nil {
-		return err
+		return li, err
 	}
 	if unlocker == lockOwner.Username || forceUnlock {
 		err = os.Remove(lockPath)
 		if err != nil {
-			return err
+			return li, err
 		}
-		return nil
+		li.lockStatus = unlocked
 	} else {
-		comment, err := lockComment()
+		li.user = lockOwner.Username
+		li.comment, err = lockComment()
 		if err != nil {
-			return err
+			return li, nil
 		}
-		return errors.New(fmt.Sprintf("Already locked by %s, '%s'", lockOwner.Username, comment))
+		li.lockStatus = lockedByAnother
 	}
+	return li, nil
 }
 
 func lockComment() (string, error) {

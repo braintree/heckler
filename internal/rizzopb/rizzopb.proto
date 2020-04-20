@@ -8,13 +8,18 @@ enum Lock_status {
 	unlocked = 3;
 }
 
+enum Lock_req_type {
+	lock = 0;
+	unlock = 1;
+	state = 2;
+}
+
 // The Rizzo service definition.
 service Rizzo {
   // applies a ref
   rpc PuppetApply (PuppetApplyRequest) returns (PuppetReport) {}
   rpc PuppetLastApply (PuppetLastApplyRequest) returns (PuppetReport) {}
   rpc PuppetLock (PuppetLockRequest) returns (PuppetLockReport) {}
-  rpc PuppetUnlock (PuppetUnlockRequest) returns (PuppetUnlockReport) {}
 }
 
 message Event {
@@ -91,9 +96,10 @@ message PuppetApplyRequest {
 message PuppetLastApplyRequest {}
 
 message PuppetLockRequest {
-  string user = 1;
-  string comment = 2;
-  bool force = 3;
+  Lock_req_type type = 1;
+  string user = 2;
+  string comment = 3;
+  bool force = 4;
 }
 
 message PuppetLockReport {
@@ -102,15 +108,4 @@ message PuppetLockReport {
   string error = 3;
   string user = 4;
   string comment = 5;
-}
-
-message PuppetUnlockRequest {
-  string user = 1;
-  bool force = 2;
-}
-
-message PuppetUnlockReport {
-  string host = 1;
-  bool unlocked = 2;
-  string error = 3;
 }

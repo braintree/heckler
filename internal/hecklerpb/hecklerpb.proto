@@ -20,7 +20,8 @@ service Heckler {
 
 message HecklerStatusRequest {
   string node_set = 1;
-  repeated string nodes = 2;
+  string user = 2;
+  repeated string nodes = 3;
 }
 
 message HecklerStatusReport {
