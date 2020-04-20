@@ -309,12 +309,23 @@ func noopCommit(nodes map[string]*Node, commit *git.Commit, repo *git.Repository
 		os.Mkdir(noopDir+"/"+host, 0755)
 	}
 
+	if !commitInAllNodeLineages(*commit.Id(), nodes, repo) {
+		return make([]*groupedResource, 0), make(map[string]error), nil
+	}
+
 	commitsToNoop := make([]git.Oid, 0)
 	commitsToNoop = append(commitsToNoop, *commit.Id())
 
 	parentCount := commit.ParentCount()
 	for i := uint(0); i < parentCount; i++ {
-		commitsToNoop = append(commitsToNoop, *commit.ParentId(i))
+		if commitInAllNodeLineages(*commit.ParentId(i), nodes, repo) {
+			commitsToNoop = append(commitsToNoop, *commit.ParentId(i))
+		} else {
+			for _, node := range nodes {
+				node.commitReports[*commit.ParentId(i)] = &rizzopb.PuppetReport{}
+				node.commitDeltaResources[*commit.ParentId(i)] = make(map[ResourceTitle]*deltaResource)
+			}
+		}
 	}
 
 	var nodeCommitToNoop git.Oid
@@ -2087,6 +2098,36 @@ func describeCommit(gi git.Oid, prefix string, repo *git.Repository) (string, er
 		return "", err
 	}
 	return tagStr, nil
+}
+
+// If a commit is not, equal, an ancestor, or a descendant of a node's last
+// applied commit, then we cannot noop that commit accurately, because the last
+// applied commit has children which we do not have in our graph and
+// consequently changes which we do not have.
+func commitInAllNodeLineages(commit git.Oid, nodes map[string]*Node, repo *git.Repository) bool {
+	commitInLineages := true
+	for _, node := range nodes {
+		if node.lastApply.Equal(&commit) {
+			continue
+		}
+		descendant, err := repo.DescendantOf(&node.lastApply, &commit)
+		if err != nil {
+			log.Fatalf("Cannot determine descendant status: %v", err)
+		}
+		if descendant {
+			continue
+		}
+		descendant, err = repo.DescendantOf(&commit, &node.lastApply)
+		if err != nil {
+			log.Fatalf("Cannot determine descendant status: %v", err)
+		}
+		if descendant {
+			continue
+		}
+		commitInLineages = false
+		break
+	}
+	return commitInLineages
 }
 
 func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Repository, logger *log.Logger) (string, error) {
