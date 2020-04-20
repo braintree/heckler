@@ -1425,7 +1425,7 @@ func rizzoLockNodes(req rizzopb.PuppetLockRequest, nodes map[string]*Node) (map[
 
 	lockedNodes := make(map[string]*Node)
 	unlockedNodes := make(map[string]*Node)
-	lockedByAnother := make(map[string]string)
+	lockedByAnotherNodes := make(map[string]string)
 	errNodes := make(map[string]error)
 	for i := 0; i < len(nodes); i++ {
 		r := <-reportChan
@@ -1435,7 +1435,7 @@ func rizzoLockNodes(req rizzopb.PuppetLockRequest, nodes map[string]*Node) (map[
 		case rizzopb.LockStatus_locked_by_user:
 			lockedNodes[r.Host] = nodes[r.Host]
 		case rizzopb.LockStatus_locked_by_another:
-			lockedByAnother[r.Host] = fmt.Sprintf("%s: %s", r.User, r.Comment)
+			lockedByAnotherNodes[r.Host] = fmt.Sprintf("%s: %s", r.User, r.Comment)
 		case rizzopb.LockStatus_lock_unknown:
 			errNodes[r.Host] = errors.New(r.Error)
 		default:
@@ -1443,7 +1443,7 @@ func rizzoLockNodes(req rizzopb.PuppetLockRequest, nodes map[string]*Node) (map[
 		}
 	}
 
-	return lockedNodes, unlockedNodes, lockedByAnother, errNodes
+	return lockedNodes, unlockedNodes, lockedByAnotherNodes, errNodes
 }
 
 func rizzoLock(host string, rc rizzopb.RizzoClient, req rizzopb.PuppetLockRequest, c chan<- rizzopb.PuppetLockReport) {
@@ -1571,9 +1571,17 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-		lastApplyNodes, errUnknownRevNodes := nodeLastApply(dialedNodes, repo, logger)
+		eligibleNodes, lockedByAnotherNodes, errEligibleNodes := eligibleNodes("root", dialedNodes)
+		compressedLockedByAnotherNodes := compressHostsStr(lockedByAnotherNodes)
+		for host, str := range compressedLockedByAnotherNodes {
+			logger.Printf("Locked by another: %s, %s", host, str)
+		}
+		lastApplyNodes, errUnknownRevNodes := nodeLastApply(eligibleNodes, repo, logger)
 		errNodes := make(map[string]error)
 		for host, err := range errDialNodes {
+			errNodes[host] = err
+		}
+		for host, err := range errEligibleNodes {
 			errNodes[host] = err
 		}
 		for host, err := range errUnknownRevNodes {
@@ -1590,6 +1598,7 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			closeNodes(dialedNodes)
 			continue
 		}
+		logger.Printf("Found common tag: %s", commonTag)
 		ghclient, _, err := githubConn(conf)
 		if err != nil {
 			logger.Fatalf("Unable to connect to github: %v", err)
@@ -1619,7 +1628,7 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			continue
 		}
 		logger.Printf("Tag '%s' is ready to apply, applying...", nextTag)
-		lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", "Applying with Heckler", false, dialedNodes)
+		lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", "Applying with Heckler", false, lastApplyNodes)
 		appliedNodes, beyondRevNodes, errApplyNodes := applyNodes(lockedNodes, false, false, nextTag, repo, logger)
 		unlockNodes("root", false, lockedNodes)
 		for host, err := range errLockNodes {
@@ -1812,6 +1821,18 @@ func tagIssuesReviewed(repo *git.Repository, ghclient *github.Client, conf *Heck
 	return true, nil
 }
 
+func eligibleNodes(user string, nodes map[string]*Node) (map[string]*Node, map[string]string, map[string]error) {
+	lockedNodes, unlockedNodes, lockedByAnotherNodes, errLockNodes := nodesLockState(user, nodes)
+	eligibleNodes := make(map[string]*Node)
+	for host, node := range lockedNodes {
+		eligibleNodes[host] = node
+	}
+	for host, node := range unlockedNodes {
+		eligibleNodes[host] = node
+	}
+	return eligibleNodes, lockedByAnotherNodes, errLockNodes
+}
+
 // Is there a newer release tag than our common lastApply tag across "all"
 // nodes?
 //   If yes
@@ -1835,8 +1856,16 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-		lastApplyNodes, errUnknownRevNodes := nodeLastApply(dialedNodes, repo, logger)
+		eligibleNodes, lockedByAnotherNodes, errEligibleNodes := eligibleNodes("root", dialedNodes)
+		compressedLockedByAnotherNodes := compressHostsStr(lockedByAnotherNodes)
+		for host, str := range compressedLockedByAnotherNodes {
+			logger.Printf("Locked by another: %s, %s", host, str)
+		}
+		lastApplyNodes, errUnknownRevNodes := nodeLastApply(eligibleNodes, repo, logger)
 		errNodes := make(map[string]error)
+		for host, err := range errEligibleNodes {
+			errNodes[host] = err
+		}
 		for host, err := range errDialNodes {
 			errNodes[host] = err
 		}
@@ -1858,6 +1887,7 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 			closeNodes(dialedNodes)
 			continue
 		}
+		logger.Printf("Found common tag: %s", commonTag)
 		ghclient, _, err := githubConn(conf)
 		if err != nil {
 			logger.Fatalf("Unable to connect to github: %v", err)
@@ -1928,9 +1958,12 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 	prefix := conf.EnvPrefix
 	errorThresh := conf.AllowedNumberOfErrorNodes
 	lockedThresh := conf.AllowedNumberOfLockedNodes
-	errNodesTotal := 0
+	var errNodesTotal int
+	var lockedByAnotherNodesTotal int
 	for {
 		time.Sleep(10 * time.Second)
+		errNodesTotal = 0
+		lockedByAnotherNodesTotal = 0
 		nodesToDial, err := nodesFromSet(conf, "all", logger)
 		if err != nil {
 			logger.Fatalf("Unable to load 'all' node set: %v", err)
@@ -1938,15 +1971,42 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-		if len(errDialNodes) > errorThresh {
-			logger.Printf("Nodes which could not be dialed(%d) exceeds the threshold(%d), sleeping", len(errDialNodes), errorThresh)
+		errNodesTotal += len(errDialNodes)
+		if errNodesTotal > errorThresh {
+			logger.Printf("Nodes which could not be dialed(%d) exceeds the threshold(%d), sleeping", errNodesTotal, errorThresh)
 			closeNodes(dialedNodes)
 			continue
 		}
-		lastApplyNodes, errUnknownRevNodes := nodeLastApply(dialedNodes, repo, logger)
+		eligibleNodes, lockedByAnotherNodes, errEligibleNodes := eligibleNodes("root", dialedNodes)
+		lockedByAnotherNodesTotal += len(lockedByAnotherNodes)
+		if lockedByAnotherNodesTotal > lockedThresh {
+			logger.Printf("Locked by another nodes(%d) exceeds the threshold(%d), sleeping", lockedByAnotherNodesTotal, lockedThresh)
+			closeNodes(dialedNodes)
+			continue
+		}
+		errNodesTotal += len(errEligibleNodes)
+		compressedLockedByAnotherNodes := compressHostsStr(lockedByAnotherNodes)
+		for host, str := range compressedLockedByAnotherNodes {
+			logger.Printf("Locked by another: %s, %s", host, str)
+		}
+		lastApplyNodes, errUnknownRevNodes := nodeLastApply(eligibleNodes, repo, logger)
+		errNodes := make(map[string]error)
+		for host, err := range errDialNodes {
+			errNodes[host] = err
+		}
+		for host, err := range errEligibleNodes {
+			errNodes[host] = err
+		}
+		for host, err := range errUnknownRevNodes {
+			errNodes[host] = err
+		}
+		compressedErrNodes := compressErrorHosts(errNodes)
+		for host, err := range compressedErrNodes {
+			logger.Printf("errNodes: %s, %v", host, err)
+		}
 		errNodesTotal += len(errUnknownRevNodes)
 		if errNodesTotal > errorThresh {
-			logger.Printf("Unknown rev nodes(%d) exceeds the threshold(%d), sleeping", errNodesTotal, errorThresh)
+			logger.Printf("Error nodes(%d) exceeds the threshold(%d), sleeping", errNodesTotal, errorThresh)
 			closeNodes(dialedNodes)
 			continue
 		}
@@ -1962,17 +2022,6 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			continue
 		}
 		logger.Printf("Found common tag: %s", commonTag)
-		errNodes := make(map[string]error)
-		for host, err := range errDialNodes {
-			errNodes[host] = err
-		}
-		for host, err := range errUnknownRevNodes {
-			errNodes[host] = err
-		}
-		compressedErrNodes := compressErrorHosts(errNodes)
-		for host, err := range compressedErrNodes {
-			logger.Printf("errNodes: %s, %v", host, err)
-		}
 		// TODO support other branches?
 		_, commits, err := commitLogIdList(repo, commonTag, "master")
 		if err != nil {
@@ -2004,6 +2053,13 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			logger.Println("Some issues do not exist on github, requesting noops")
 		}
 		lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", "Applying with Heckler", false, lastApplyNodes)
+		lockedByAnotherNodesTotal += len(lockedByAnotherNodes)
+		if lockedByAnotherNodesTotal > lockedThresh {
+			logger.Printf("Locked by another nodes(%d) exceeds the threshold(%d), sleeping", lockedByAnotherNodesTotal, lockedThresh)
+			unlockNodes("root", false, lockedNodes)
+			closeNodes(dialedNodes)
+			continue
+		}
 		errNodesTotal += len(errLockNodes)
 		if errNodesTotal > errorThresh {
 			logger.Printf("Nodes with errors when locking(%d) exceeds the threshold(%d), sleeping", errNodesTotal, errorThresh)
