@@ -13,6 +13,12 @@ max_thresholds:
   locked_nodes: 0
 env_prefix: ""
 manual_mode: false
+lock_message: |
+  Heckler is running Puppet, if you need to steal the node from Heckler,
+  override this lock with your own lock and wait for Heckler's current Puppet
+  process to complete. Heckler will then respect your lock. Use
+  IGNORE_OWN_LOCK=1 to run future cap tasks. For more information see,
+  https://example.com
 git_server_max_clients: 1
 node_sets:
   all:

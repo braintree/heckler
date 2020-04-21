@@ -69,6 +69,7 @@ type HecklerdConf struct {
 	MaxThresholds        Thresholds         `yaml:"max_thresholds"`
 	GitServerMaxClients  int                `yaml:"git_server_max_clients"`
 	ManualMode           bool               `yaml:"manual_mode"`
+	LockMessage          string             `yaml:"lock_message"`
 }
 
 type NodeSet struct {
@@ -849,7 +850,7 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 	}
 	dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
 	defer closeNodes(dialedNodes)
-	lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes(req.User, "Applying with Heckler", false, dialedNodes)
+	lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes(req.User, hs.conf.LockMessage, false, dialedNodes)
 	defer unlockNodes(req.User, false, lockedNodes)
 	errNodes := make(map[string]error)
 	for host, err := range errDialNodes {
@@ -963,7 +964,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
 	defer closeNodes(dialedNodes)
 	lastApplyNodes, errUnknownRevNodes := nodeLastApply(dialedNodes, hs.repo, logger)
-	lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", "Applying with Heckler", false, lastApplyNodes)
+	lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", hs.conf.LockMessage, false, lastApplyNodes)
 	commitLogIds, commits, err := commitLogIdList(hs.repo, req.BeginRev, req.EndRev)
 	if err != nil {
 		return nil, err
@@ -1632,7 +1633,7 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			continue
 		}
 		logger.Printf("Tag '%s' is ready to apply, applying...", nextTag)
-		lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", "Applying with Heckler", false, lastApplyNodes)
+		lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", conf.LockMessage, false, lastApplyNodes)
 		appliedNodes, beyondRevNodes, errApplyNodes := applyNodes(lockedNodes, false, false, nextTag, repo, logger)
 		unlockNodes("root", false, lockedNodes)
 		for host, err := range errLockNodes {
@@ -2071,7 +2072,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 				errNodes:    curThresholds.errNodes,
 				lockedNodes: curThresholds.lockedNodes,
 			}
-			lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", "Applying with Heckler", false, lastApplyNodes)
+			lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", conf.LockMessage, false, lastApplyNodes)
 			perNoopThresholds.lockedNodes += len(lockedByAnotherNodes)
 			perNoopThresholds.errNodes += len(errLockNodes)
 			if msg, ok := thresholdExceeded(perNoopThresholds, conf.MaxThresholds); ok {
