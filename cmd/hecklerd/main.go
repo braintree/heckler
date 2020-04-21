@@ -1191,14 +1191,22 @@ func updateIssueMilestone(ghclient *github.Client, conf *HecklerdConf, issue *gi
 	return err
 }
 
-// TODO: add comment with reason for closing
-func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue) error {
-	issuePatch := &github.IssueRequest{
-		State: github.String("closed"),
+func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, reason string) error {
+	comment := &github.IssueComment{
+		Body: github.String(reason),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	_, _, err := ghclient.Issues.Edit(ctx, conf.RepoOwner, conf.Repo, *issue.Number, issuePatch)
+	_, _, err := ghclient.Issues.CreateComment(ctx, conf.RepoOwner, conf.Repo, *issue.Number, comment)
+	if err != nil {
+		return err
+	}
+	issuePatch := &github.IssueRequest{
+		State: github.String("closed"),
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	_, _, err = ghclient.Issues.Edit(ctx, conf.RepoOwner, conf.Repo, *issue.Number, issuePatch)
 	return err
 }
 
@@ -1226,14 +1234,12 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 	}
 	logger.Printf("Successfully created new issue: '%v'", *ni.Title)
 	if len(groupedCommit) == 0 {
-		logger.Println("No noop output marking issue as 'closed'")
-		err := closeIssue(ghclient, conf, ni)
+		err := closeIssue(ghclient, conf, ni, "No noop output marking issue as 'closed'")
 		if err != nil {
 			logger.Fatal(err)
 		}
 	} else if conf.AutoCloseIssues {
-		logger.Println("Auto close set, marking issue as 'closed'")
-		err := closeIssue(ghclient, conf, ni)
+		err := closeIssue(ghclient, conf, ni, "Auto close set, marking issue as 'closed'")
 		if err != nil {
 			logger.Fatal(err)
 		}
