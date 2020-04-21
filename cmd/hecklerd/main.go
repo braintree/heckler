@@ -78,8 +78,8 @@ type NodeSet struct {
 }
 
 type Thresholds struct {
-	errNodes    int `yaml:"err_nodes"`
-	lockedNodes int `yaml:"locked_nodes"`
+	ErrNodes    int `yaml:"err_nodes"`
+	LockedNodes int `yaml:"locked_nodes"`
 }
 
 // hecklerServer is used to implement heckler.HecklerServer
@@ -1959,10 +1959,10 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 }
 
 func thresholdExceeded(cur Thresholds, max Thresholds) (string, bool) {
-	if cur.errNodes > max.errNodes {
-		return fmt.Sprintf("Error nodes(%d) exceeds the threshold(%d)", cur.errNodes, max.errNodes), true
-	} else if cur.lockedNodes > max.lockedNodes {
-		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", cur.lockedNodes, max.lockedNodes), true
+	if cur.ErrNodes > max.ErrNodes {
+		return fmt.Sprintf("Error nodes(%d) exceeds the threshold(%d)", cur.ErrNodes, max.ErrNodes), true
+	} else if cur.LockedNodes > max.LockedNodes {
+		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", cur.LockedNodes, max.LockedNodes), true
 	}
 	return "", false
 }
@@ -1979,8 +1979,8 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 	var curThresholds Thresholds
 	for {
 		time.Sleep(10 * time.Second)
-		curThresholds.errNodes = 0
-		curThresholds.lockedNodes = 0
+		curThresholds.ErrNodes = 0
+		curThresholds.LockedNodes = 0
 		nodesToDial, err := nodesFromSet(conf, "all", logger)
 		if err != nil {
 			logger.Fatalf("Unable to load 'all' node set: %v", err)
@@ -1988,22 +1988,22 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-		curThresholds.errNodes += len(errDialNodes)
+		curThresholds.ErrNodes += len(errDialNodes)
 		if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
 			logger.Printf("%s, sleeping", msg)
 			closeNodes(dialedNodes)
 			continue
 		}
 		eligibleNodes, lockedByAnotherNodes, errEligibleNodes := eligibleNodes("root", dialedNodes)
-		curThresholds.lockedNodes += len(lockedByAnotherNodes)
-		curThresholds.errNodes += len(errEligibleNodes)
+		curThresholds.LockedNodes += len(lockedByAnotherNodes)
+		curThresholds.ErrNodes += len(errEligibleNodes)
 		if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
 			logger.Printf("%s, sleeping", msg)
 			closeNodes(dialedNodes)
 			continue
 		}
 		lastApplyNodes, errUnknownRevNodes := nodeLastApply(eligibleNodes, repo, logger)
-		curThresholds.errNodes += len(errUnknownRevNodes)
+		curThresholds.ErrNodes += len(errUnknownRevNodes)
 		if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
 			logger.Printf("%s, sleeping", msg)
 			closeNodes(dialedNodes)
@@ -2075,12 +2075,12 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		}
 		for gi, commit := range commits {
 			perNoopThresholds := Thresholds{
-				errNodes:    curThresholds.errNodes,
-				lockedNodes: curThresholds.lockedNodes,
+				ErrNodes:    curThresholds.ErrNodes,
+				LockedNodes: curThresholds.LockedNodes,
 			}
 			lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", conf.LockMessage, false, lastApplyNodes)
-			perNoopThresholds.lockedNodes += len(lockedByAnotherNodes)
-			perNoopThresholds.errNodes += len(errLockNodes)
+			perNoopThresholds.LockedNodes += len(lockedByAnotherNodes)
+			perNoopThresholds.ErrNodes += len(errLockNodes)
 			if msg, ok := thresholdExceeded(perNoopThresholds, conf.MaxThresholds); ok {
 				logger.Printf("%s, sleeping", msg)
 				unlockNodes("root", false, lockedNodes)
@@ -2092,7 +2092,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 				unlockNodes("root", false, lockedNodes)
 				break
 			}
-			perNoopThresholds.errNodes += len(errNoopCommitNodes)
+			perNoopThresholds.ErrNodes += len(errNoopCommitNodes)
 			if msg, ok := thresholdExceeded(perNoopThresholds, conf.MaxThresholds); ok {
 				compressedErrNodes := compressErrorHosts(errNoopCommitNodes)
 				for host, err := range compressedErrNodes {
