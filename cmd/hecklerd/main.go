@@ -2062,47 +2062,46 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		} else {
 			logger.Println("Some issues do not exist on github, requesting noops")
 		}
-		lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", "Applying with Heckler", false, lastApplyNodes)
-		curThresholds.lockedNodes += len(lockedByAnotherNodes)
-		curThresholds.errNodes += len(errLockNodes)
-		if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
-			logger.Printf("%s, sleeping", msg)
-			unlockNodes("root", false, lockedNodes)
-			closeNodes(dialedNodes)
-			continue
-		}
-		for host, lockState := range lockedByAnotherNodes {
-			log.Printf("lockedByAnother: %s, %v", host, lockState)
-		}
-		for _, node := range lockedNodes {
+		for _, node := range lastApplyNodes {
 			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 		}
-		errNoopNodes := make(map[string]error)
 		for gi, commit := range commits {
+			perNoopThresholds := Thresholds{
+				errNodes:    curThresholds.errNodes,
+				lockedNodes: curThresholds.lockedNodes,
+			}
+			lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", "Applying with Heckler", false, lastApplyNodes)
+			perNoopThresholds.lockedNodes += len(lockedByAnotherNodes)
+			perNoopThresholds.errNodes += len(errLockNodes)
+			if msg, ok := thresholdExceeded(perNoopThresholds, conf.MaxThresholds); ok {
+				logger.Printf("%s, sleeping", msg)
+				unlockNodes("root", false, lockedNodes)
+				break
+			}
 			groupedCommit, errNoopCommitNodes, err := noopCommit(lockedNodes, commit, repo, logger)
 			if err != nil {
 				logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
+				unlockNodes("root", false, lockedNodes)
 				break
 			}
-			perNoopTreshold := Thresholds{
-				errNodes:    curThresholds.errNodes + len(errNoopCommitNodes),
-				lockedNodes: curThresholds.lockedNodes,
-			}
-			if msg, ok := thresholdExceeded(perNoopTreshold, conf.MaxThresholds); ok {
-				logger.Printf("%s, sleeping", msg)
-				for host, err := range errNoopCommitNodes {
-					errNoopNodes[host] = err
+			perNoopThresholds.errNodes += len(errNoopCommitNodes)
+			if msg, ok := thresholdExceeded(perNoopThresholds, conf.MaxThresholds); ok {
+				compressedErrNodes := compressErrorHosts(errNoopCommitNodes)
+				for host, err := range compressedErrNodes {
+					logger.Printf("errNodes: %s, %v", host, err)
 				}
+				logger.Printf("%s, sleeping", msg)
+				unlockNodes("root", false, lockedNodes)
 				break
 			}
+			unlockNodes("root", false, lockedNodes)
 			err = githubCreateIssue(ghclient, conf, commit, groupedCommit, templates, logger)
 			if err != nil {
 				logger.Printf("Unable to create github issue, sleeping: %v", err)
 				break
 			}
 		}
-		unlockNodes("root", false, lockedNodes)
 		closeNodes(dialedNodes)
 		logger.Println("Nooping complete, sleeping")
 	}
