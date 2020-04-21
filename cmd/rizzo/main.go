@@ -188,7 +188,7 @@ func puppetLock(locker string, comment string, forceLock bool) (lockState, error
 	}
 	defer os.Remove(tmpfile.Name())
 
-	if _, err := tmpfile.WriteString(comment + "\n"); err != nil {
+	if _, err := tmpfile.WriteString(strings.TrimRight(comment, "\n") + "\n"); err != nil {
 		return li, err
 	}
 	if err := tmpfile.Close(); err != nil {
