@@ -1960,12 +1960,12 @@ func thresholdExceeded(cur Thresholds, max Thresholds) (string, bool) {
 	return "", false
 }
 
-//  Are there newer commits than our common lastApply across "all" nodes?
-//  If yes
-//    check if all commits have issues on github
-//      If no, run noop range, needs to be idempotent
-//      If yes, do nothing
-//  If no, do nothing
+//  Are there newer commits than our common last applied commit across "all"
+//  nodes?
+//    If No, do nothing
+//    If Yes, do all commits have issues created on github?
+//      If Yes, do nothing
+//      If No, run a noop per commit & create a github issue
 func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	logger := log.New(os.Stdout, "[noopLoop] ", log.Lshortfile)
 	prefix := conf.EnvPrefix
