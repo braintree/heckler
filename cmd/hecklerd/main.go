@@ -55,26 +55,30 @@ var Debug = false
 var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 
 type HecklerdConf struct {
-	Repo                       string             `yaml:"repo"`
-	RepoOwner                  string             `yaml:"repo_owner"`
-	GitHubDomain               string             `yaml:"github_domain"`
-	GitHubPrivateKeyPath       string             `yaml:"github_private_key_path"`
-	GitHubAppSlug              string             `yaml:"github_app_slug"`
-	GitHubAppId                int64              `yaml:"github_app_id"`
-	GitHubAppInstallId         int64              `yaml:"github_app_install_id"`
-	NodeSets                   map[string]NodeSet `yaml:"node_sets"`
-	AutoTagCronSchedule        string             `yaml:"auto_tag_cron_schedule"`
-	AutoCloseIssues            bool               `yaml:"auto_close_issues"`
-	EnvPrefix                  string             `yaml:"env_prefix"`
-	AllowedNumberOfErrorNodes  int                `yaml:"allowed_number_of_error_nodes"`
-	AllowedNumberOfLockedNodes int                `yaml:"allowed_number_of_locked_nodes"`
-	GitServerMaxClients        int                `yaml:"git_server_max_clients"`
-	ManualMode                 bool               `yaml:"manual_mode"`
+	Repo                 string             `yaml:"repo"`
+	RepoOwner            string             `yaml:"repo_owner"`
+	GitHubDomain         string             `yaml:"github_domain"`
+	GitHubPrivateKeyPath string             `yaml:"github_private_key_path"`
+	GitHubAppSlug        string             `yaml:"github_app_slug"`
+	GitHubAppId          int64              `yaml:"github_app_id"`
+	GitHubAppInstallId   int64              `yaml:"github_app_install_id"`
+	NodeSets             map[string]NodeSet `yaml:"node_sets"`
+	AutoTagCronSchedule  string             `yaml:"auto_tag_cron_schedule"`
+	AutoCloseIssues      bool               `yaml:"auto_close_issues"`
+	EnvPrefix            string             `yaml:"env_prefix"`
+	MaxThresholds        Thresholds         `yaml:"max_thresholds"`
+	GitServerMaxClients  int                `yaml:"git_server_max_clients"`
+	ManualMode           bool               `yaml:"manual_mode"`
 }
 
 type NodeSet struct {
 	Cmd       []string `yaml:"cmd"`
 	Blacklist []string `yaml:"blacklist"`
+}
+
+type Thresholds struct {
+	errNodes    int `yaml:"err_nodes"`
+	lockedNodes int `yaml:"locked_nodes"`
 }
 
 // hecklerServer is used to implement heckler.HecklerServer
@@ -1947,6 +1951,15 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 	}
 }
 
+func thresholdExceeded(cur Thresholds, max Thresholds) (string, bool) {
+	if cur.errNodes > max.errNodes {
+		return fmt.Sprintf("Error nodes(%d) exceeds the threshold(%d)", cur.errNodes, max.errNodes), true
+	} else if cur.lockedNodes > max.lockedNodes {
+		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", cur.lockedNodes, max.lockedNodes), true
+	}
+	return "", false
+}
+
 //  Are there newer commits than our common lastApply across "all" nodes?
 //  If yes
 //    check if all commits have issues on github
@@ -1956,14 +1969,11 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	logger := log.New(os.Stdout, "[noopLoop] ", log.Lshortfile)
 	prefix := conf.EnvPrefix
-	errorThresh := conf.AllowedNumberOfErrorNodes
-	lockedThresh := conf.AllowedNumberOfLockedNodes
-	var errNodesTotal int
-	var lockedByAnotherNodesTotal int
+	var curThresholds Thresholds
 	for {
 		time.Sleep(10 * time.Second)
-		errNodesTotal = 0
-		lockedByAnotherNodesTotal = 0
+		curThresholds.errNodes = 0
+		curThresholds.lockedNodes = 0
 		nodesToDial, err := nodesFromSet(conf, "all", logger)
 		if err != nil {
 			logger.Fatalf("Unable to load 'all' node set: %v", err)
@@ -1971,25 +1981,27 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-		errNodesTotal += len(errDialNodes)
-		if errNodesTotal > errorThresh {
-			logger.Printf("Nodes which could not be dialed(%d) exceeds the threshold(%d), sleeping", errNodesTotal, errorThresh)
+		curThresholds.errNodes += len(errDialNodes)
+		if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
+			logger.Printf("%s, sleeping", msg)
 			closeNodes(dialedNodes)
 			continue
 		}
 		eligibleNodes, lockedByAnotherNodes, errEligibleNodes := eligibleNodes("root", dialedNodes)
-		lockedByAnotherNodesTotal += len(lockedByAnotherNodes)
-		if lockedByAnotherNodesTotal > lockedThresh {
-			logger.Printf("Locked by another nodes(%d) exceeds the threshold(%d), sleeping", lockedByAnotherNodesTotal, lockedThresh)
+		curThresholds.lockedNodes += len(lockedByAnotherNodes)
+		curThresholds.errNodes += len(errEligibleNodes)
+		if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
+			logger.Printf("%s, sleeping", msg)
 			closeNodes(dialedNodes)
 			continue
 		}
-		errNodesTotal += len(errEligibleNodes)
-		compressedLockedByAnotherNodes := compressHostsStr(lockedByAnotherNodes)
-		for host, str := range compressedLockedByAnotherNodes {
-			logger.Printf("Locked by another: %s, %s", host, str)
-		}
 		lastApplyNodes, errUnknownRevNodes := nodeLastApply(eligibleNodes, repo, logger)
+		curThresholds.errNodes += len(errUnknownRevNodes)
+		if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
+			logger.Printf("%s, sleeping", msg)
+			closeNodes(dialedNodes)
+			continue
+		}
 		errNodes := make(map[string]error)
 		for host, err := range errDialNodes {
 			errNodes[host] = err
@@ -2004,11 +2016,9 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		for host, err := range compressedErrNodes {
 			logger.Printf("errNodes: %s, %v", host, err)
 		}
-		errNodesTotal += len(errUnknownRevNodes)
-		if errNodesTotal > errorThresh {
-			logger.Printf("Error nodes(%d) exceeds the threshold(%d), sleeping", errNodesTotal, errorThresh)
-			closeNodes(dialedNodes)
-			continue
+		compressedLockedByAnotherNodes := compressHostsStr(lockedByAnotherNodes)
+		for host, str := range compressedLockedByAnotherNodes {
+			logger.Printf("Locked by another: %s, %s", host, str)
 		}
 		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo, logger)
 		if err != nil {
@@ -2053,22 +2063,10 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			logger.Println("Some issues do not exist on github, requesting noops")
 		}
 		lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", "Applying with Heckler", false, lastApplyNodes)
-		lockedByAnotherNodesTotal += len(lockedByAnotherNodes)
-		if lockedByAnotherNodesTotal > lockedThresh {
-			logger.Printf("Locked by another nodes(%d) exceeds the threshold(%d), sleeping", lockedByAnotherNodesTotal, lockedThresh)
-			unlockNodes("root", false, lockedNodes)
-			closeNodes(dialedNodes)
-			continue
-		}
-		errNodesTotal += len(errLockNodes)
-		if errNodesTotal > errorThresh {
-			logger.Printf("Nodes with errors when locking(%d) exceeds the threshold(%d), sleeping", errNodesTotal, errorThresh)
-			unlockNodes("root", false, lockedNodes)
-			closeNodes(dialedNodes)
-			continue
-		}
-		if len(lockedByAnotherNodes) > lockedThresh {
-			logger.Printf("Locked by another nodes(%d) exceeds the threshold(%d), sleeping", len(lockedByAnotherNodes), lockedThresh)
+		curThresholds.lockedNodes += len(lockedByAnotherNodes)
+		curThresholds.errNodes += len(errLockNodes)
+		if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
+			logger.Printf("%s, sleeping", msg)
 			unlockNodes("root", false, lockedNodes)
 			closeNodes(dialedNodes)
 			continue
@@ -2087,9 +2085,12 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 				logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
 				break
 			}
-			errCurTotal := errNodesTotal + len(errNoopCommitNodes)
-			if errCurTotal > errorThresh {
-				logger.Printf("Nodes with errors when nooping(%d) exceeds the threshold(%d), sleeping", errCurTotal, errorThresh)
+			perNoopTreshold := Thresholds{
+				errNodes:    curThresholds.errNodes + len(errNoopCommitNodes),
+				lockedNodes: curThresholds.lockedNodes,
+			}
+			if msg, ok := thresholdExceeded(perNoopTreshold, conf.MaxThresholds); ok {
+				logger.Printf("%s, sleeping", msg)
 				for host, err := range errNoopCommitNodes {
 					errNoopNodes[host] = err
 				}
