@@ -2326,7 +2326,6 @@ func main() {
 	if err != nil {
 		logger.Fatal(err)
 	}
-	defer file.Close()
 	data, err = ioutil.ReadAll(file)
 	if err != nil {
 		logger.Fatalf("Cannot read config: %v", err)
@@ -2336,6 +2335,7 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Cannot unmarshal config: %v", err)
 	}
+	file.Close()
 
 	if clearState && clearGitHub {
 		logger.Println("clear & ghclear are mutually exclusive")

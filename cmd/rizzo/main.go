@@ -397,7 +397,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer file.Close()
 	data, err = ioutil.ReadAll(file)
 	if err != nil {
 		log.Fatalf("Cannot read config: %v", err)
@@ -407,6 +406,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Cannot unmarshal config: %v", err)
 	}
+	file.Close()
 
 	if clearState {
 		log.Printf("Removing state directory: %v", stateDir)
