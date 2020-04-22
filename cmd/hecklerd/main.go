@@ -16,6 +16,8 @@ import (
 	"os/exec"
 	"os/signal"
 	"regexp"
+	"runtime"
+	"runtime/pprof"
 	"sort"
 	"strings"
 	"syscall"
@@ -2302,6 +2304,9 @@ func main() {
 	var clearState bool
 	var clearGitHub bool
 	var printVersion bool
+	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
+	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
+
 	templates := parseTemplates()
 	logger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
 
@@ -2309,6 +2314,18 @@ func main() {
 	flag.BoolVar(&clearGitHub, "ghclear", false, "Clear remote github state, e.g. issues & milestones")
 	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.Parse()
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			logger.Fatal("could not create CPU profile: ", err)
+		}
+		defer f.Close() // error handling omitted for example
+		if err := pprof.StartCPUProfile(f); err != nil {
+			logger.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
 
 	if printVersion {
 		fmt.Printf("v%s\n", Version)
@@ -2473,4 +2490,16 @@ func main() {
 	}()
 
 	<-done
+
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		if err != nil {
+			logger.Fatal("could not create memory profile: ", err)
+		}
+		defer f.Close() // error handling omitted for example
+		runtime.GC()    // get up-to-date statistics
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			logger.Fatal("could not write memory profile: ", err)
+		}
+	}
 }
