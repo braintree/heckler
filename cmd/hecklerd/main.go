@@ -2480,6 +2480,9 @@ func main() {
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 		logger.Printf("Received %s", <-sigs)
+		if !conf.ManualMode {
+			unlockAll(conf, logger)
+		}
 		if err := gitServer.Shutdown(context.Background()); err != nil {
 			logger.Printf("HTTP server shutdown error: %v", err)
 		}
