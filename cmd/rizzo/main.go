@@ -11,6 +11,9 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
+	"runtime"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"syscall"
@@ -49,13 +52,13 @@ type lockState struct {
 }
 
 // server is used to implement rizzo.RizzoServer.
-type server struct {
+type rizzoServer struct {
 	rizzopb.UnimplementedRizzoServer
 	conf *RizzoConf
 }
 
 // PuppetApply implements rizzo.RizzoServer
-func (s *server) PuppetApply(ctx context.Context, req *rizzopb.PuppetApplyRequest) (*rizzopb.PuppetReport, error) {
+func (s *rizzoServer) PuppetApply(ctx context.Context, req *rizzopb.PuppetApplyRequest) (*rizzopb.PuppetReport, error) {
 	var err error
 	var oid string
 
@@ -87,7 +90,7 @@ func (s *server) PuppetApply(ctx context.Context, req *rizzopb.PuppetApplyReques
 }
 
 // PuppetLastApply implements rizzo.RizzoServer
-func (s *server) PuppetLastApply(ctx context.Context, req *rizzopb.PuppetLastApplyRequest) (*rizzopb.PuppetReport, error) {
+func (s *rizzoServer) PuppetLastApply(ctx context.Context, req *rizzopb.PuppetLastApplyRequest) (*rizzopb.PuppetReport, error) {
 	var err error
 	log.Printf("PuppetLastApply: request received, %v", req)
 
@@ -109,7 +112,7 @@ func (s *server) PuppetLastApply(ctx context.Context, req *rizzopb.PuppetLastApp
 	return pr, nil
 }
 
-func (s *server) PuppetLock(ctx context.Context, req *rizzopb.PuppetLockRequest) (*rizzopb.PuppetLockReport, error) {
+func (s *rizzoServer) PuppetLock(ctx context.Context, req *rizzopb.PuppetLockRequest) (*rizzopb.PuppetLockReport, error) {
 	log.Printf("PuppetLock: request received, %v", req)
 	var li lockState
 	var err error
@@ -376,10 +379,24 @@ func main() {
 	var conf *RizzoConf
 	var clearState bool
 	var printVersion bool
+	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
+	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 
 	flag.BoolVar(&clearState, "clear", false, "Clear local state, e.g. puppet code repo")
 	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.Parse()
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		defer f.Close() // error handling omitted for example
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
 
 	if printVersion {
 		fmt.Printf("v%s\n", Version)
@@ -434,11 +451,37 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	s := grpc.NewServer()
-	server := new(server)
-	server.conf = conf
-	rizzopb.RegisterRizzoServer(s, server)
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+	grpcServer := grpc.NewServer()
+	rizzoServer := new(rizzoServer)
+	go func() {
+		rizzoServer.conf = conf
+		rizzopb.RegisterRizzoServer(grpcServer, rizzoServer)
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("failed to serve: %v", err)
+		}
+	}()
+
+	done := make(chan bool, 1)
+	go func() {
+		sigs := make(chan os.Signal, 1)
+		signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+		log.Printf("Received %s", <-sigs)
+		grpcServer.GracefulStop()
+		log.Println("Rizzo Shutdown")
+		done <- true
+	}()
+
+	<-done
+
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		if err != nil {
+			log.Fatal("could not create memory profile: ", err)
+		}
+		defer f.Close() // error handling omitted for example
+		runtime.GC()    // get up-to-date statistics
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			log.Fatal("could not write memory profile: ", err)
+		}
 	}
 }
