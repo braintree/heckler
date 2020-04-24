@@ -2053,29 +2053,23 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		}
 		ghclient, _, err := githubConn(conf)
 		if err != nil {
-			logger.Fatalf("Unable to connect to github: %v", err)
-		}
-		for gi, _ := range commits {
-			issue, err := githubIssueFromCommit(ghclient, gi, conf)
-			if err != nil {
-				logger.Fatalf("Unable to determine if issues exists: %s", gi.String())
-			}
-			if issue != nil {
-				delete(commits, gi)
-			}
-		}
-		if len(commits) == 0 {
-			logger.Println("All issues exist, sleeping")
 			closeNodes(dialedNodes)
+			logger.Printf("Unable to connect to github, sleeping: %v", err)
 			continue
-		} else {
-			logger.Println("Some issues do not exist on github, requesting noops")
 		}
 		for _, node := range lastApplyNodes {
 			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 		}
 		for gi, commit := range commits {
+			issue, err := githubIssueFromCommit(ghclient, gi, conf)
+			if err != nil {
+				logger.Printf("Unable to determine if issue for %s exists, sleeping: %v", gi.String(), err)
+				break
+			}
+			if issue != nil {
+				continue
+			}
 			perNoopThresholds := Thresholds{
 				ErrNodes:    curThresholds.ErrNodes,
 				LockedNodes: curThresholds.LockedNodes,
