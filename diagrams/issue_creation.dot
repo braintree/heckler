@@ -1,0 +1,95 @@
+digraph {
+  label="Issue Creation"
+  graph [fontname = "Noto Sans", fontsize=14, compound=true];
+  node [fontname = "Noto Sans", fontsize=12];
+  edge [fontname = "Noto Sans", fontsize=12];
+  
+  subgraph cluster_0 {
+    label="Find a common git tag"
+    find_common_tag [
+      label = "Query nodes for their\nlast applied commit";
+      shape = rect;
+    ];
+    find_common_tag_node1 [ label = "node1"; shape = rect; ];
+    find_common_tag_node2 [ label = "node2"; shape = rect; ];
+    find_common_tag_node3 [ label = "node3"; shape = rect; ];
+    find_common_tag_node_elipsis [ label = "..."; shape = rect; ];
+    find_common_tag -> find_common_tag_node1;
+    find_common_tag -> find_common_tag_node2;
+    find_common_tag -> find_common_tag_node3;
+    find_common_tag -> find_common_tag_node_elipsis;
+  }
+
+  subgraph cluster_1 {
+    penwidth=0;
+    label=""
+    { rank=source commits_left; }
+    commits_left [
+      label = "Any commits left\nto noop?";
+      shape = diamond;
+    ];
+    loop_update [
+      label = "Update commits\nto noop"
+      shape = rectangle;
+    ];
+    create_delta_noops [
+      label = "Create a delta noop by\nsubtracting parent noops";
+      shape = rectangle;
+    ];
+    aggregate_noops [
+      label = "Aggregate the noops\nby Puppet resource";
+      shape = rectangle;
+    ];
+    create_github_issue [
+      label = "Create a GitHub issue\nfor the commit";
+      shape = rectangle;
+    ];
+    aggregate_noops -> create_github_issue;
+    commits_left:s -> noop [lhead=cluster_1a label="Yes"];
+    create_delta_noops -> aggregate_noops;
+    create_github_issue -> loop_update;
+    loop_update -> commits_left:w;
+    noop -> create_delta_noops [ltail=cluster_1a];
+    subgraph cluster_1a {
+      label="Noop commits"
+      penwidth=1;
+      noop [
+        label = "Noop commit & parents\nof commit";
+        shape = rect;
+      ];
+      noop_node1 [ label = "node1"; shape = rect; ];
+      noop_node2 [ label = "node2"; shape = rect; ];
+      noop_node3 [ label = "node3"; shape = rect; ];
+      noop_node_elipsis [ label = "..."; shape = rect; ];
+      noop -> noop_node1;
+      noop -> noop_node2;
+      noop -> noop_node3;
+      noop -> noop_node_elipsis;
+    }
+  }
+
+  begin [
+    label="Begin";
+    shape = oval;
+  ];
+  found_common_tag [
+    label = "Found a\ncommon tag?";
+    shape = diamond;
+  ];
+  any_new_commits [
+    label = "Any new commits\nsince last tag?";
+    shape = diamond;
+  ];
+  end [
+    label= "End";
+    shape = oval;
+  ];
+
+  any_new_commits -> commits_left [label="Yes" ];
+  any_new_commits:e -> end [label="No"];
+  begin -> find_common_tag [lhead=cluster_0];
+  commits_left:e -> end [label="No"];
+  find_common_tag -> found_common_tag;
+  found_common_tag -> any_new_commits [label="Yes"];
+  found_common_tag:e -> end [label="No"];
+}
