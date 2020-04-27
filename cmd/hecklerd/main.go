@@ -308,7 +308,7 @@ func marshalReport(rprt rizzopb.PuppetReport, noopDir string, commit git.Oid) er
 	return nil
 }
 
-func noopCommit(nodes map[string]*Node, commit *git.Commit, repo *git.Repository, logger *log.Logger) ([]*groupedResource, map[string]error, error) {
+func noopCommit(nodes map[string]*Node, commit *git.Commit, deltaNoop bool, repo *git.Repository, logger *log.Logger) ([]*groupedResource, map[string]error, error) {
 	var err error
 	noopDir := stateDir + "/noops"
 	os.MkdirAll(noopDir, 0755)
@@ -316,6 +316,9 @@ func noopCommit(nodes map[string]*Node, commit *git.Commit, repo *git.Repository
 		os.Mkdir(noopDir+"/"+host, 0755)
 	}
 
+	// TODO: if we are only requesting a single noop via heckler, we probably
+	// always want to noop, rather than returning an empty noop if the commit is
+	// not part of a nodes lineage.
 	if !commitInAllNodeLineages(*commit.Id(), nodes, repo) {
 		return make([]*groupedResource, 0), make(map[string]error), nil
 	}
@@ -325,7 +328,7 @@ func noopCommit(nodes map[string]*Node, commit *git.Commit, repo *git.Repository
 
 	parentCount := commit.ParentCount()
 	for i := uint(0); i < parentCount; i++ {
-		if commitInAllNodeLineages(*commit.ParentId(i), nodes, repo) {
+		if deltaNoop && commitInAllNodeLineages(*commit.ParentId(i), nodes, repo) {
 			commitsToNoop = append(commitsToNoop, *commit.ParentId(i))
 		} else {
 			for _, node := range nodes {
@@ -400,7 +403,7 @@ func noopCommit(nodes map[string]*Node, commit *git.Commit, repo *git.Repository
 		if commitAlreadyApplied(node.lastApply, *commit.Id(), repo) {
 			node.commitDeltaResources[*commit.Id()] = make(map[ResourceTitle]*deltaResource)
 		} else {
-			node.commitDeltaResources[*commit.Id()] = deltaNoop(node.commitReports[*commit.Id()], commitParentReports(*commit, node.lastApply, node.commitReports, repo, logger))
+			node.commitDeltaResources[*commit.Id()] = subtractNoops(node.commitReports[*commit.Id()], commitParentReports(*commit, node.lastApply, node.commitReports, repo, logger))
 		}
 	}
 
@@ -460,7 +463,7 @@ func initDeltaResource(resourceTitle ResourceTitle, r *rizzopb.ResourceStatus, d
 	return deltaRes
 }
 
-func deltaNoop(commitNoop *rizzopb.PuppetReport, priorCommitNoops []*rizzopb.PuppetReport) map[ResourceTitle]*deltaResource {
+func subtractNoops(commitNoop *rizzopb.PuppetReport, priorCommitNoops []*rizzopb.PuppetReport) map[ResourceTitle]*deltaResource {
 	var deltaEvents []*rizzopb.Event
 	var deltaLogs []*rizzopb.Log
 	var deltaResources map[ResourceTitle]*deltaResource
@@ -873,7 +876,7 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 		}
-		groupedCommit, errNoopNodes, err := noopCommit(lastApplyNodes, commit, hs.repo, logger)
+		groupedCommit, errNoopNodes, err := noopCommit(lastApplyNodes, commit, req.DeltaNoop, hs.repo, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -981,7 +984,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	rprt.NodeErrors = make(map[string]string)
 	groupedCommits := make(map[git.Oid][]*groupedResource)
 	for gi, commit := range commits {
-		groupedCommit, errNoopNodes, err := noopCommit(lockedNodes, commit, hs.repo, logger)
+		groupedCommit, errNoopNodes, err := noopCommit(lockedNodes, commit, true, hs.repo, logger)
 		if err != nil {
 			unlockNodes("root", false, lockedNodes)
 			return nil, err
@@ -2084,7 +2087,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 				unlockNodes("root", false, lockedNodes)
 				break
 			}
-			groupedCommit, errNoopCommitNodes, err := noopCommit(lockedNodes, commit, repo, logger)
+			groupedCommit, errNoopCommitNodes, err := noopCommit(lockedNodes, commit, true, repo, logger)
 			if err != nil {
 				logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
 				unlockNodes("root", false, lockedNodes)

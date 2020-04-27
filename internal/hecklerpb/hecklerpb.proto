@@ -48,9 +48,10 @@ message HecklerApplyRequest {
   string rev = 2;
   bool noop = 3;
   bool force = 4;
-  Output_format output_format = 5;
-  string node_set = 6;
-  repeated string nodes = 7;
+  bool delta_noop = 5;
+  Output_format output_format = 6;
+  string node_set = 7;
+  repeated string nodes = 8;
 }
 
 message HecklerApplyReport {

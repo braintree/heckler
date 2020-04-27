@@ -64,6 +64,7 @@ func main() {
 	var rev string
 	var nodeFile string
 	var noop bool
+	var deltaNoop bool
 	var lock bool
 	var unlock bool
 	var force bool
@@ -76,6 +77,7 @@ func main() {
 	flag.BoolVar(&lock, "lock", false, "lock nodes")
 	flag.BoolVar(&markdownOut, "md", false, "Generate markdown output")
 	flag.BoolVar(&noop, "noop", false, "noop")
+	flag.BoolVar(&deltaNoop, "delta", false, "Show the delta of the noop minus its parents")
 	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.BoolVar(&status, "status", false, "Query node apply status")
 	flag.BoolVar(&unlock, "unlock", false, "unlock nodes")
@@ -206,12 +208,13 @@ func main() {
 
 	if rev != "" {
 		har := hecklerpb.HecklerApplyRequest{
-			User:    curUserInf.Username,
-			Rev:     rev,
-			Noop:    noop,
-			Force:   force,
-			NodeSet: nodeSet,
-			Nodes:   nodes,
+			User:      curUserInf.Username,
+			Rev:       rev,
+			Noop:      noop,
+			DeltaNoop: deltaNoop,
+			Force:     force,
+			NodeSet:   nodeSet,
+			Nodes:     nodes,
 		}
 		rprt, err := hc.HecklerApply(ctx, &har)
 		if err != nil {
