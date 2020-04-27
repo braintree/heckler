@@ -9,7 +9,7 @@ auto_close_issues: true
 # This is the number of nodes that can be missing when creating a noop for an
 # environment
 max_thresholds:
-  err_nodes: 1
+  err_nodes: 0
   locked_nodes: 0
 env_prefix: ""
 manual_mode: false
