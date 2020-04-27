@@ -1,8 +1,6 @@
 syntax = "proto3";
 package hecklerpb;
 
-// XXX node_errors -> better name?
-
 enum Output_format {
   none = 0;
   markdown = 1;
