@@ -308,8 +308,13 @@ func marshalReport(rprt rizzopb.PuppetReport, noopDir string, commit git.Oid) er
 	return nil
 }
 
-func noopCommit(nodes map[string]*Node, commit *git.Commit, deltaNoop bool, repo *git.Repository, logger *log.Logger) ([]*groupedResource, map[string]error, error) {
+func noopCommit(reqNodes map[string]*Node, commit *git.Commit, deltaNoop bool, repo *git.Repository, logger *log.Logger) ([]*groupedResource, map[string]error, error) {
 	var err error
+
+	nodes := make(map[string]*Node)
+	for k, v := range reqNodes {
+		nodes[k] = v
+	}
 	noopDir := stateDir + "/noops"
 	os.MkdirAll(noopDir, 0755)
 	for host, _ := range nodes {
