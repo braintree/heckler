@@ -431,6 +431,7 @@ func main() {
 		os.Exit(0)
 	}
 
+	log.Printf("rizzod: v%s\n", Version)
 	// Clone a copy of the repo on startup so that future fetches are quicker.
 	repoUrl := "http://" + conf.HecklerHost + ":8080/puppetcode"
 	repoPulled := false

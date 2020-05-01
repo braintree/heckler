@@ -2390,6 +2390,7 @@ func main() {
 		os.Exit(0)
 	}
 
+	logger.Printf("hecklerd: v%s\n", Version)
 	repo, err := fetchRepo(conf)
 	if err != nil {
 		logger.Fatalf("Unable to fetch repo to serve: %v", err)
