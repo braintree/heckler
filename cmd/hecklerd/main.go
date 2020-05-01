@@ -1347,6 +1347,7 @@ func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.Heckl
 	}
 	return hsr, nil
 }
+
 func (hs *hecklerServer) HecklerUnlock(ctx context.Context, req *hecklerpb.HecklerUnlockRequest) (*hecklerpb.HecklerUnlockReport, error) {
 	logger := log.New(os.Stdout, "[HecklerUnlock] ", log.Lshortfile)
 	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
