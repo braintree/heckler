@@ -26,6 +26,10 @@ help: ## Show the help
 docker-build: docker-build-image ## Build heckler via the container
 	docker run --rm -v $(PWD):/home/builder/$(NAME) $(IMAGE) make -C /home/builder/$(NAME) build
 
+.PHONY: docker-vet
+docker-vet: docker-build-image ## Vet heckler via the container
+	docker run --rm -v $(PWD):/home/builder/$(NAME) $(IMAGE) make -C /home/builder/$(NAME) vet
+
 .PHONY: docker-build-image
 docker-build-image: ## Build a docker image used for packaging
 	docker build --rm -t $(IMAGE) -t $(IMAGE_TAGGED) - < Dockerfile
@@ -55,6 +59,10 @@ clean: ## Remove all state
 .PHONY: build
 build: vendor/github.com/libgit2/git2go/static-build ## Build heckler, usually called inside the container
 	go build -o . -ldflags '$(GO_LDFLAGS)' ./...
+
+.PHONY: vet
+vet: ## Vet heckler, usually called inside the container
+	go vet ./...
 
 vendor/github.com/libgit2/git2go/static-build: ## Build libgit2
 	./build-libgit2-static
