@@ -21,7 +21,7 @@ Depends: ${misc:Depends},
 Built-Using: ${misc:Built-Using},
 Description: Heckler control client for talking to hecklerd
 
-Package: rizzo
+Package: rizzod
 Architecture: any
 Depends: ${misc:Depends},
          ${shlibs:Depends},

@@ -40,7 +40,7 @@ const (
 
 const (
 	port     = ":50051"
-	stateDir = "/var/lib/rizzo"
+	stateDir = "/var/lib/rizzod"
 	repoDir  = stateDir + "/repo/puppetcode"
 	lockPath = "/var/tmp/puppet.lock"
 )
@@ -403,12 +403,12 @@ func main() {
 		os.Exit(0)
 	}
 
-	if _, err := os.Stat("/etc/rizzo/rizzo_conf.yaml"); err == nil {
-		rizzoConfPath = "/etc/rizzo/rizzo_conf.yaml"
-	} else if _, err := os.Stat("rizzo_conf.yaml"); err == nil {
-		rizzoConfPath = "rizzo_conf.yaml"
+	if _, err := os.Stat("/etc/rizzod/rizzod_conf.yaml"); err == nil {
+		rizzoConfPath = "/etc/rizzod/rizzod_conf.yaml"
+	} else if _, err := os.Stat("rizzod_conf.yaml"); err == nil {
+		rizzoConfPath = "rizzod_conf.yaml"
 	} else {
-		log.Fatal("Unable to load rizzo_conf.yaml from /etc/rizzo or .")
+		log.Fatal("Unable to load rizzod_conf.yaml from /etc/rizzo or .")
 	}
 	file, err = os.Open(rizzoConfPath)
 	if err != nil {
