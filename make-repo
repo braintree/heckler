@@ -5,16 +5,16 @@ set -o pipefail
 set -o nounset
 
 AUTHORS=(
-  [1]='lollipopman <hathaway@paypal.com>'
-  [2]='lollipopman <hathaway@paypal.com>'
-  [3]='lollipopman <hathaway@paypal.com>'
-  [4]='lollipopman <hathaway@paypal.com>'
-  [5]='lollipopman <hathaway@paypal.com>'
-  [6]='lollipopman <hathaway@paypal.com>'
-  [7]='lollipopman <hathaway@paypal.com>'
-  [8]='lollipopman <hathaway@paypal.com>'
-  [9]='lollipopman <hathaway@paypal.com>'
-  [10]='lollipopman <hathaway@paypal.com>'
+  [1]='misspiggy <heckler+misspiggy@getbraintree.com>'
+  [2]='kermit <heckler+kermit@getbraintree.com>'
+  [3]='misspiggy <heckler+misspiggy@getbraintree.com>'
+  [4]='misspiggy <heckler+misspiggy@getbraintree.com>'
+  [5]='misspiggy <heckler+misspiggy@getbraintree.com>'
+  [6]='kermit <heckler+kermit@getbraintree.com>'
+  [7]='kermit <heckler+kermit@getbraintree.com>'
+  [8]='kermit <heckler+kermit@getbraintree.com>'
+  [9]='misspiggy <heckler+misspiggy@getbraintree.com>'
+  [10]='kermit <heckler+kermit@getbraintree.com>'
 )
 
 MSGS=(
