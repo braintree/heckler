@@ -35,6 +35,8 @@ github.com/google/go-github/v29/github
 github.com/google/go-querystring/query
 # github.com/google/uuid v1.1.1
 github.com/google/uuid
+# github.com/hairyhenderson/go-codeowners v0.2.2
+github.com/hairyhenderson/go-codeowners
 # github.com/huandu/xstrings v1.3.0
 github.com/huandu/xstrings
 # github.com/imdario/mergo v0.3.8
@@ -45,6 +47,11 @@ github.com/libgit2/git2go
 github.com/lollipopman/git-cgi-server
 # github.com/lollipopman/luser v0.0.0-20200226194359-0e64908ec951
 github.com/lollipopman/luser
+# github.com/lyraproj/issue v0.0.0-20190606092846-e082d6813d15
+github.com/lyraproj/issue/issue
+# github.com/lyraproj/puppet-parser v0.0.0-20190606112603-21687f912799
+github.com/lyraproj/puppet-parser/parser
+github.com/lyraproj/puppet-parser/pn
 # github.com/mitchellh/copystructure v1.0.0
 github.com/mitchellh/copystructure
 # github.com/mitchellh/reflectwalk v1.0.1
@@ -53,6 +60,9 @@ github.com/mitchellh/reflectwalk
 github.com/orcaman/concurrent-map
 # github.com/robfig/cron/v3 v3.0.1
 github.com/robfig/cron/v3
+# github.com/spf13/afero v1.2.2
+github.com/spf13/afero
+github.com/spf13/afero/mem
 # github.com/square/grange v0.0.0-20200108221412-2a4cb7b5b334
 github.com/square/grange
 # golang.org/x/crypto v0.0.0-20200317142112-1b76d66859c6

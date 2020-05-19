@@ -26,6 +26,7 @@ import (
 
 	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
 	"github.braintreeps.com/lollipopman/heckler/internal/hecklerpb"
+	"github.braintreeps.com/lollipopman/heckler/internal/puppetutil"
 	"github.braintreeps.com/lollipopman/heckler/internal/rizzopb"
 	"github.com/Masterminds/semver/v3"
 	"github.com/Masterminds/sprig"
@@ -33,6 +34,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/go-github/v29/github"
+	codeowners "github.com/hairyhenderson/go-codeowners"
 	git "github.com/libgit2/git2go"
 	gitcgiserver "github.com/lollipopman/git-cgi-server"
 	"github.com/robfig/cron/v3"
@@ -51,6 +53,7 @@ const (
 	shutdownTimeout = time.Second * 5
 	port            = ":50052"
 	stateDir        = "/var/lib/hecklerd"
+	workRepo        = "/var/lib/hecklerd" + "/work_repo/puppetcode"
 	noopDir         = stateDir + "/noops"
 )
 
@@ -1255,13 +1258,6 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 	ctx := context.Background()
 	prefix := conf.EnvPrefix
 
-	issue, err := githubIssueFromCommit(ghclient, *commit.Id(), conf)
-	if err != nil {
-		return err
-	}
-	if issue != nil {
-		return fmt.Errorf("Issue already exists for commit %s", commit.Id().String())
-	}
 	githubIssue := &github.IssueRequest{
 		Title: github.String(noopTitle(commit, prefix)),
 		// TODO need to enforce github user IDs for commits, so that we always
@@ -1284,8 +1280,84 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 		if err != nil {
 			logger.Fatal(err)
 		}
+	} else {
+		err = notifyApprovers(ghclient, conf, ni, groupedCommit, logger)
+		if err != nil {
+			logger.Fatal(err)
+		}
 	}
 	return nil
+}
+
+func notifyApprovers(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, groupedCommit []*groupedResource, logger *log.Logger) error {
+	// Unique nodes
+	nodes := make(map[string]bool)
+	for _, gr := range groupedCommit {
+		for _, node := range gr.Nodes {
+			nodes[node] = true
+		}
+	}
+	nodeList := make([]string, len(nodes))
+	i := 0
+	for node := range nodes {
+		nodeList[i] = node
+		i++
+	}
+	approvers, err := approversFromNodes(nodeList)
+	if err != nil {
+		return err
+	}
+	body := "Please approve: " + strings.Join(approvers, ", ")
+	comment := &github.IssueComment{
+		Body: github.String(body),
+	}
+	ctx := context.Background()
+	_, _, err = ghclient.Issues.CreateComment(ctx, conf.RepoOwner, conf.Repo, *issue.Number, comment)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func nodeFile(node string, nodeFileRegexes map[string][]*regexp.Regexp) (string, error) {
+	for file, regexes := range nodeFileRegexes {
+		for _, regex := range regexes {
+			if regex.MatchString(node) {
+				return strings.TrimPrefix(file, workRepo+"/"), nil
+			}
+		}
+	}
+	return "", fmt.Errorf("Unable to find node file for node: %v", node)
+}
+
+func approversFromNodes(nodes []string) ([]string, error) {
+	co, err := codeowners.NewCodeowners(workRepo)
+	if err != nil {
+		return []string{}, err
+	}
+	nodeFileRegexes, err := puppetutil.NodeFileRegexes(workRepo + "/nodes")
+	if err != nil {
+		return []string{}, err
+	}
+	nodesToFile := make(map[string]string)
+	for _, node := range nodes {
+		nodesToFile[node], err = nodeFile(node, nodeFileRegexes)
+		if err != nil {
+			return []string{}, err
+		}
+	}
+	uniqueApprovers := make(map[string]bool)
+	for _, file := range nodesToFile {
+		owners := co.Owners(file)
+		for _, owner := range owners {
+			uniqueApprovers[owner] = true
+		}
+	}
+	approversList := make([]string, 0)
+	for approver := range uniqueApprovers {
+		approversList = append(approversList, approver)
+	}
+	return approversList, nil
 }
 
 func noopTitle(commit *git.Commit, prefix string) string {
