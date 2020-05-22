@@ -36,13 +36,8 @@ message Log {
   string level = 1;
   string message = 2;
   string source = 3;
-	//
-	// XXX Removing these for now, as it breaks grouping for resources that are
-	// defined in diffent places in the source code. Should they be readded, i.e.
-	// is the common case to have the same source line & file location, probably?
-	//
-  // string file = 4;
-  // int64 line = 5;
+  string file = 4;
+  int64 line = 5;
 }
 
 message PuppetReport {
@@ -59,6 +54,7 @@ message PuppetReport {
   map<string,ResourceStatus> resource_statuses = 11;
   bool corrective_change = 12;
   string cached_catalog_status = 13;
+  string confdir = 14;
 }
 
 message ResourceStatus {
@@ -68,13 +64,6 @@ message ResourceStatus {
   bool corrective_change = 4;
   bool failed = 5;
   bool failed_to_restart = 6;
-	//
-	// XXX Removing these for now, as it breaks grouping for resources that are
-	// defined in diffent places in the source code. Should they be readded, i.e.
-	// is the common case to have the same source line & file location, probably?
-	//
-  // string file = ?;
-  // int64 line = ?;
   bool out_of_sync = 7;
   int64 out_of_sync_count = 8;
   string provider_used = 9;
@@ -83,6 +72,8 @@ message ResourceStatus {
   bool skipped = 12;
   string title = 13;
   repeated Event events = 14;
+  string file = 15;
+  int64 line = 16;
 }
 
 // The request message containing the git rev identifier, e.g. a tag or a

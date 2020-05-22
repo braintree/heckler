@@ -31,6 +31,7 @@ import (
 	"github.com/Masterminds/sprig"
 	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/go-github/v29/github"
 	git "github.com/libgit2/git2go"
 	gitcgiserver "github.com/lollipopman/git-cgi-server"
@@ -120,6 +121,8 @@ type deltaResource struct {
 	Title      ResourceTitle
 	Type       string
 	DefineType string
+	File       string
+	Line       int64
 	Events     []*rizzopb.Event
 	Logs       []*rizzopb.Log
 }
@@ -129,6 +132,8 @@ type groupedResource struct {
 	Type            string
 	DefineType      string
 	Diff            string
+	File            string
+	Line            int64
 	Nodes           []string
 	CompressedNodes string
 	Events          []*groupEvent
@@ -295,6 +300,13 @@ func loadNoop(commit git.Oid, node *Node, noopDir string, repo *git.Repository, 
 }
 
 func normalizeReport(rprt rizzopb.PuppetReport) rizzopb.PuppetReport {
+	for _, resourceStatus := range rprt.ResourceStatuses {
+		// Strip off the puppet confdir prefix, so we are left with the relative
+		// path of the source file in the code repo
+		if resourceStatus.File != "" {
+			resourceStatus.File = strings.TrimPrefix(resourceStatus.File, rprt.Confdir+"/")
+		}
+	}
 	rprt.Logs = normalizeLogs(rprt.Logs)
 	return rprt
 }
@@ -469,6 +481,8 @@ func initDeltaResource(resourceTitle ResourceTitle, r *rizzopb.ResourceStatus, d
 	deltaRes.Events = deltaEvents
 	deltaRes.Logs = deltaLogs
 	deltaRes.DefineType = resourceDefineType(r)
+	deltaRes.File = r.File
+	deltaRes.Line = r.Line
 	return deltaRes
 }
 
@@ -630,7 +644,12 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 
 	for nodeName, node := range nodes {
 		if nodeDeltaResource, ok := node.commitDeltaResources[commitLogId][targetDeltaResource.Title]; ok {
-			if cmp.Equal(targetDeltaResource, nodeDeltaResource) {
+			// TODO: cmp is not recommended to be used in production, because it
+			// panics on any errors. It would probably be better to write a custom
+			// compare function which can account for skipping fields which are not
+			// relavant to the desired measure of equality, e.g. source file line
+			// number
+			if cmp.Equal(targetDeltaResource, nodeDeltaResource, cmpopts.IgnoreFields(deltaResource{}, "Line")) {
 				nodeList = append(nodeList, nodeName)
 				delete(node.commitDeltaResources[commitLogId], targetDeltaResource.Title)
 			}
@@ -641,6 +660,8 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 	gr.Title = targetDeltaResource.Title
 	gr.Type = targetDeltaResource.Type
 	gr.DefineType = targetDeltaResource.DefineType
+	gr.File = targetDeltaResource.File
+	gr.Line = targetDeltaResource.Line
 	sort.Strings(nodeList)
 	gr.Nodes = nodeList
 	gr.CompressedNodes = compressHosts(nodeList)
@@ -743,6 +764,10 @@ func normalizeLogs(Logs []*rizzopb.Log) []*rizzopb.Log {
 			if Debug {
 				log.Printf("Adding Log: '%v' -> '%v': %v", origSource, newSource, l.Message)
 			}
+			// TODO: If we wrote a custom equality function, rather than using cmp,
+			// we could ignore source code line numbers in logs, but since we are using
+			// cmp at present, just set it equal to 0 for all logs.
+			l.Line = 0
 			newLogs = append(newLogs, l)
 		} else {
 			log.Printf("Unaccounted for Log: %v: %v", l.Source, l.Message)
@@ -1242,7 +1267,7 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 		// TODO need to enforce github user IDs for commits, so that we always
 		// have a valid github user.
 		Assignee: github.String("lollipopman"),
-		Body:     github.String(commitBodyToMarkdown(commit, conf, templates) + groupedResourcesToMarkdown(groupedCommit, templates)),
+		Body:     github.String(commitBodyToMarkdown(commit, conf, templates) + groupedResourcesToMarkdown(groupedCommit, commit, conf, templates)),
 	}
 	ni, _, err := ghclient.Issues.Create(ctx, conf.RepoOwner, conf.Repo, githubIssue)
 	if err != nil {
@@ -1279,7 +1304,7 @@ func commitToMarkdown(conf *HecklerdConf, commit *git.Commit, groupedCommit []*g
 	var output string
 	output += fmt.Sprintf("## %s\n\n", noopTitle(commit, conf.EnvPrefix))
 	output += commitBodyToMarkdown(commit, conf, templates)
-	output += groupedResourcesToMarkdown(groupedCommit, templates)
+	output += groupedResourcesToMarkdown(groupedCommit, commit, conf, templates)
 	return output
 }
 
@@ -1301,7 +1326,7 @@ func commitBodyToMarkdown(commit *git.Commit, conf *HecklerdConf, templates *tem
 	return body.String()
 }
 
-func groupedResourcesToMarkdown(groupedResources []*groupedResource, templates *template.Template) string {
+func groupedResourcesToMarkdown(groupedResources []*groupedResource, commit *git.Commit, conf *HecklerdConf, templates *template.Template) string {
 	var body strings.Builder
 	var err error
 
@@ -1316,7 +1341,16 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource, templates *
 			}
 		})
 
-	err = templates.ExecuteTemplate(&body, "groupedResource.tmpl", groupedResources)
+	data := struct {
+		GroupedResources []*groupedResource
+		Commit           *git.Commit
+		Conf             *HecklerdConf
+	}{
+		groupedResources,
+		commit,
+		conf,
+	}
+	err = templates.ExecuteTemplate(&body, "groupedResource.tmpl", data)
 	if err != nil {
 		log.Fatal(err)
 	}

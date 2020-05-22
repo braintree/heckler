@@ -38,6 +38,9 @@ Puppet::Reports.register_report(:heckler) do
       "time" => @time.iso8601(9),
       # HACK: Turn into a string, necessary for v4.5.2
       "configuration_version" => @configuration_version.to_s,
+      # not in the original Puppet report, but useful to strip the source file
+      # prefix when using a monorepo for puppet
+      "confdir" => Puppet.settings[:confdir],
       "transaction_uuid" => @transaction_uuid,
       "report_format" => @report_format,
       "puppet_version" => @puppet_version,
