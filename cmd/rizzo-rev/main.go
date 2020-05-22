@@ -8,7 +8,8 @@ import (
 )
 
 func main() {
-	repo, err := git.OpenRepository("/var/lib/rizzo/repo/puppetcode")
+	// TODO: read rizzo conf file?
+	repo, err := git.OpenRepository("/var/lib/rizzod/repo/puppetcode")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: Unable to get rev: %v\n", err)
 		os.Exit(1)
