@@ -1,6 +1,6 @@
-## Puppet noop output for commit: 8face5c116911ca916b5202b24d6c39e2d41dd8d - stop nginx on fozzie & add episode one
+## Puppet noop output for commit: 1eba2f8789a532c0d5bee1218d51ec5766229030 - stop nginx on fozzie & add episode one
 
-### Commit [8face5c116911ca916b5202b24d6c39e2d41dd8d](https://github.braintreeps.com/braintree/muppetshow/commit/8face5c116911ca916b5202b24d6c39e2d41dd8d)
+### Commit [1eba2f8789a532c0d5bee1218d51ec5766229030](https://github.braintreeps.com/braintree/muppetshow/commit/1eba2f8789a532c0d5bee1218d51ec5766229030)
 
 - *Author:* kermit (<heckler+kermit@getbraintree.com>)
 - *Message:*
@@ -32,6 +32,7 @@
 
 -  **File[/data/puppet_apply/fozzie/slapstick]**
     - *Hosts:* `fozzie.example.com`
+    - *Source File:* [modules/fozzie/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/1eba2f8789a532c0d5bee1218d51ec5766229030/modules/fozzie/manifests/init.pp#L5)
     - *Current State:* `file`
     - *Desired State:* `absent`
 
@@ -44,6 +45,7 @@
       ```
     - *Hosts:* `{fozzie,statler,waldorf}.example.com`
     - *Define Type:* `Muppetshow::Episode[One]`
+    - *Source File:* [modules/muppetshow/manifests/episode.pp](https://github.braintreeps.com/braintree/muppetshow/blob/1eba2f8789a532c0d5bee1218d51ec5766229030/modules/muppetshow/manifests/episode.pp#L4)
     - *Current State:* `{md5}d41d8cd98f00b204e9800998ecf8427e`
     - *Desired State:* `{md5}15d4a7e90a35a1b9d8d69deecbf9f7d0`
 
@@ -55,6 +57,7 @@
       +foul
       ```
     - *Hosts:* `statler.example.com`
+    - *Source File:* [modules/statler/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/1eba2f8789a532c0d5bee1218d51ec5766229030/modules/statler/manifests/init.pp#L8)
     - *Current State:* `{md5}114457bbbd50c0aca9f294e02c4ca712`
     - *Desired State:* `{md5}0476788129760a948a9b6a0e5275e965`
 
@@ -66,17 +69,19 @@
       +sour
       ```
     - *Hosts:* `waldorf.example.com`
+    - *Source File:* [modules/waldorf/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/1eba2f8789a532c0d5bee1218d51ec5766229030/modules/waldorf/manifests/init.pp#L7)
     - *Current State:* `{md5}2af84c70543edf1599b4eccdc65247c0`
     - *Desired State:* `{md5}4ac18c74645273475594a9c255e321f0`
 
 -  **Service[nginx]**
     - *Hosts:* `fozzie.example.com`
+    - *Source File:* [modules/fozzie/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/1eba2f8789a532c0d5bee1218d51ec5766229030/modules/fozzie/manifests/init.pp#L8)
     - *Current State:* `running`
     - *Desired State:* `stopped`
 
-## Puppet noop output for commit: bbe48d35283b35dccd944d622f166b7459a96475 - finish the muppet show lyrics
+## Puppet noop output for commit: 093f5e07882fdb95bdf6b94366ec2a32fdb3f1e6 - finish the muppet show lyrics
 
-### Commit [bbe48d35283b35dccd944d622f166b7459a96475](https://github.braintreeps.com/braintree/muppetshow/commit/bbe48d35283b35dccd944d622f166b7459a96475)
+### Commit [093f5e07882fdb95bdf6b94366ec2a32fdb3f1e6](https://github.braintreeps.com/braintree/muppetshow/commit/093f5e07882fdb95bdf6b94366ec2a32fdb3f1e6)
 
 - *Author:* misspiggy (<heckler+misspiggy@getbraintree.com>)
 - *Message:*
@@ -111,6 +116,7 @@
       +This is what we call the Muppet Show
       ```
     - *Hosts:* `{fozzie,statler,waldorf}.example.com`
+    - *Source File:* [modules/muppetshow/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/093f5e07882fdb95bdf6b94366ec2a32fdb3f1e6/modules/muppetshow/manifests/init.pp#L33)
     - *Current State:* `{md5}eb554c301d10b04fb72261d721990270`
     - *Desired State:* `{md5}52a949d5beed1782e28094c8a74b8ac1`
 
@@ -122,6 +128,7 @@
       +Fozzie
       ```
     - *Hosts:* `fozzie.example.com`
+    - *Source File:* [modules/fozzie/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/093f5e07882fdb95bdf6b94366ec2a32fdb3f1e6/modules/fozzie/manifests/init.pp#L11)
     - *Current State:* `{md5}e5deafb6425abb47e5a1efef8b969fb8`
     - *Desired State:* `{md5}a148678410c6e6abb9fe0103391f3692`
 
@@ -133,6 +140,7 @@
       +Statler
       ```
     - *Hosts:* `statler.example.com`
+    - *Source File:* [modules/statler/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/093f5e07882fdb95bdf6b94366ec2a32fdb3f1e6/modules/statler/manifests/init.pp#L15)
     - *Current State:* `{md5}e5deafb6425abb47e5a1efef8b969fb8`
     - *Desired State:* `{md5}2599d35b2c0893c7dea8a07c372b02a0`
 
@@ -144,17 +152,25 @@
       +Waldorf
       ```
     - *Hosts:* `waldorf.example.com`
+    - *Source File:* [modules/waldorf/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/093f5e07882fdb95bdf6b94366ec2a32fdb3f1e6/modules/waldorf/manifests/init.pp#L14)
     - *Current State:* `{md5}e5deafb6425abb47e5a1efef8b969fb8`
     - *Desired State:* `{md5}afc384a68e4fae8b8d257e15cd167a48`
 
 -  **Service[nginx]**
-    - *Hosts:* `{statler,waldorf}.example.com`
+    - *Hosts:* `statler.example.com`
+    - *Source File:* [modules/statler/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/093f5e07882fdb95bdf6b94366ec2a32fdb3f1e6/modules/statler/manifests/init.pp#L12)
     - *Logs:*
         - `Would have triggered 'refresh' from 1 event`
 
-## Puppet noop output for commit: 07f824ad0ca61df5f17cbce47bc5a941a8eb6c38 - add some fun diversions
+-  **Service[nginx]**
+    - *Hosts:* `waldorf.example.com`
+    - *Source File:* [modules/waldorf/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/093f5e07882fdb95bdf6b94366ec2a32fdb3f1e6/modules/waldorf/manifests/init.pp#L11)
+    - *Logs:*
+        - `Would have triggered 'refresh' from 1 event`
 
-### Commit [07f824ad0ca61df5f17cbce47bc5a941a8eb6c38](https://github.braintreeps.com/braintree/muppetshow/commit/07f824ad0ca61df5f17cbce47bc5a941a8eb6c38)
+## Puppet noop output for commit: 98f94001102274c1f25bc94e1b919f7b654ded4b - add some fun diversions
+
+### Commit [98f94001102274c1f25bc94e1b919f7b654ded4b](https://github.braintreeps.com/braintree/muppetshow/commit/98f94001102274c1f25bc94e1b919f7b654ded4b)
 
 - *Author:* kermit (<heckler+kermit@getbraintree.com>)
 - *Message:*
@@ -170,17 +186,25 @@
 
 -  **Package[bsdgames]**
     - *Hosts:* `fozzie.example.com`
+    - *Source File:* [modules/fozzie/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/98f94001102274c1f25bc94e1b919f7b654ded4b/modules/fozzie/manifests/init.pp#L15)
     - *Current State:* `purged`
     - *Desired State:* `present`
 
 -  **Package[sl]**
-    - *Hosts:* `{statler,waldorf}.example.com`
+    - *Hosts:* `statler.example.com`
+    - *Source File:* [modules/statler/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/98f94001102274c1f25bc94e1b919f7b654ded4b/modules/statler/manifests/init.pp#L20)
     - *Current State:* `purged`
     - *Desired State:* `present`
 
-## Puppet noop output for commit: b66ba8ec99daf0f146655a32ce5137e4cb135c5a - add kermit user, modify sail input
+-  **Package[sl]**
+    - *Hosts:* `waldorf.example.com`
+    - *Source File:* [modules/waldorf/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/98f94001102274c1f25bc94e1b919f7b654ded4b/modules/waldorf/manifests/init.pp#L19)
+    - *Current State:* `purged`
+    - *Desired State:* `present`
 
-### Commit [b66ba8ec99daf0f146655a32ce5137e4cb135c5a](https://github.braintreeps.com/braintree/muppetshow/commit/b66ba8ec99daf0f146655a32ce5137e4cb135c5a)
+## Puppet noop output for commit: 71513759d5ce2d2e17a7390707c77cbdc72b6929 - add kermit user, modify sail input
+
+### Commit [71513759d5ce2d2e17a7390707c77cbdc72b6929](https://github.braintreeps.com/braintree/muppetshow/commit/71513759d5ce2d2e17a7390707c77cbdc72b6929)
 
 - *Author:* kermit (<heckler+kermit@getbraintree.com>)
 - *Message:*
@@ -196,6 +220,7 @@
 
 -  **Exec[sail]**
     - *Hosts:* `fozzie.example.com`
+    - *Source File:* [modules/fozzie/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/71513759d5ce2d2e17a7390707c77cbdc72b6929/modules/fozzie/manifests/init.pp#L22)
     - *Logs:*
         - `Would have triggered 'refresh' from 1 event`
 
@@ -206,27 +231,31 @@
       +Come Sail Away
       ```
     - *Hosts:* `fozzie.example.com`
+    - *Source File:* [modules/fozzie/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/71513759d5ce2d2e17a7390707c77cbdc72b6929/modules/fozzie/manifests/init.pp#L18)
     - *Current State:* `{md5}d41d8cd98f00b204e9800998ecf8427e`
     - *Desired State:* `{md5}d256d47934e09aa4e80b8e6e5b5519c4`
 
 -  **Group[kermit]**
     - *Hosts:* `{fozzie,statler,waldorf}.example.com`
+    - *Source File:* [modules/muppetshow/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/71513759d5ce2d2e17a7390707c77cbdc72b6929/modules/muppetshow/manifests/init.pp#L38)
     - *Current State:* `absent`
     - *Desired State:* `present`
 
 -  **Group[muppets]**
     - *Hosts:* `{fozzie,statler,waldorf}.example.com`
+    - *Source File:* [modules/muppetshow/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/71513759d5ce2d2e17a7390707c77cbdc72b6929/modules/muppetshow/manifests/init.pp#L49)
     - *Current State:* `absent`
     - *Desired State:* `present`
 
 -  **User[kermit]**
     - *Hosts:* `{fozzie,statler,waldorf}.example.com`
+    - *Source File:* [modules/muppetshow/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/71513759d5ce2d2e17a7390707c77cbdc72b6929/modules/muppetshow/manifests/init.pp#L42)
     - *Current State:* `absent`
     - *Desired State:* `present`
 
-## Puppet noop output for commit: 9408f39395ce50e9e3cc118e0963e61539b82376 - New Movie
+## Puppet noop output for commit: 0ae719430b34ff2cb487a9a03bc59c7383de8993 - New Movie
 
-### Commit [9408f39395ce50e9e3cc118e0963e61539b82376](https://github.braintreeps.com/braintree/muppetshow/commit/9408f39395ce50e9e3cc118e0963e61539b82376)
+### Commit [0ae719430b34ff2cb487a9a03bc59c7383de8993](https://github.braintreeps.com/braintree/muppetshow/commit/0ae719430b34ff2cb487a9a03bc59c7383de8993)
 
 - *Author:* misspiggy (<heckler+misspiggy@getbraintree.com>)
 - *Message:*
@@ -239,12 +268,13 @@
 
 -  **File[/data/puppet_apply/fozzie/manhattan]**
     - *Hosts:* `fozzie.example.com`
+    - *Source File:* [modules/fozzie/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/0ae719430b34ff2cb487a9a03bc59c7383de8993/modules/fozzie/manifests/init.pp#L11)
     - *Current State:* `absent`
     - *Desired State:* `present`
 
-## Puppet noop output for commit: 8a7c2bc86e47199fb63473e3e297693c08367375 - Gonzo
+## Puppet noop output for commit: 5836064c1146d628eda8feb6cae99d7870e5ea90 - Gonzo
 
-### Commit [8a7c2bc86e47199fb63473e3e297693c08367375](https://github.braintreeps.com/braintree/muppetshow/commit/8a7c2bc86e47199fb63473e3e297693c08367375)
+### Commit [5836064c1146d628eda8feb6cae99d7870e5ea90](https://github.braintreeps.com/braintree/muppetshow/commit/5836064c1146d628eda8feb6cae99d7870e5ea90)
 
 - *Author:* misspiggy (<heckler+misspiggy@getbraintree.com>)
 - *Message:*
@@ -257,12 +287,13 @@
 
 -  **File[/data/puppet_apply/waldorf/manhattan]**
     - *Hosts:* `waldorf.example.com`
+    - *Source File:* [modules/waldorf/manifests/init.pp](https://github.braintreeps.com/braintree/muppetshow/blob/5836064c1146d628eda8feb6cae99d7870e5ea90/modules/waldorf/manifests/init.pp#L11)
     - *Current State:* `absent`
     - *Desired State:* `present`
 
-## Puppet noop output for commit: 229907a5e4a4416681ab577490fe44b8ea7b04ad - Take Manhattan
+## Puppet noop output for commit: 57847d332f4ea61ad3f62111a57356877619d4d0 - Take Manhattan
 
-### Commit [229907a5e4a4416681ab577490fe44b8ea7b04ad](https://github.braintreeps.com/braintree/muppetshow/commit/229907a5e4a4416681ab577490fe44b8ea7b04ad)
+### Commit [57847d332f4ea61ad3f62111a57356877619d4d0](https://github.braintreeps.com/braintree/muppetshow/commit/57847d332f4ea61ad3f62111a57356877619d4d0)
 
 - *Author:* Jesse Hathaway (<hathaway@paypal.com>)
 - *Message:*
