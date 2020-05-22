@@ -54,6 +54,10 @@ const (
 )
 
 var Debug = false
+
+// TODO: this regex also matches, Node[__node_regexp__fozzie], which causes
+// resources in node blocks to be mistaken for define types. Is there a more
+// robust way to match for define types?
 var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 
 type HecklerdConf struct {
