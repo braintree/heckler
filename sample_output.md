@@ -1,8 +1,8 @@
-## Puppet noop output for commit: 807042e368a11b6e47debfa31dbc0441c4ebe5f0 - stop nginx on fozzie & add episode one
+## Puppet noop output for commit: 8face5c116911ca916b5202b24d6c39e2d41dd8d - stop nginx on fozzie & add episode one
 
-### Commit [807042e368a11b6e47debfa31dbc0441c4ebe5f0](https://github.braintreeps.com/lollipopman/muppetshow/commit/807042e368a11b6e47debfa31dbc0441c4ebe5f0)
+### Commit [8face5c116911ca916b5202b24d6c39e2d41dd8d](https://github.braintreeps.com/braintree/muppetshow/commit/8face5c116911ca916b5202b24d6c39e2d41dd8d)
 
-- *Author:* lollipopman (<hathaway@paypal.com>)
+- *Author:* kermit (<heckler+kermit@getbraintree.com>)
 - *Message:*
   ```
   stop nginx on fozzie & add episode one
@@ -74,11 +74,11 @@
     - *Current State:* `running`
     - *Desired State:* `stopped`
 
-## Puppet noop output for commit: 9b3a171563c131303baf9a47e411d5223374b891 - finish the muppet show lyrics
+## Puppet noop output for commit: bbe48d35283b35dccd944d622f166b7459a96475 - finish the muppet show lyrics
 
-### Commit [9b3a171563c131303baf9a47e411d5223374b891](https://github.braintreeps.com/lollipopman/muppetshow/commit/9b3a171563c131303baf9a47e411d5223374b891)
+### Commit [bbe48d35283b35dccd944d622f166b7459a96475](https://github.braintreeps.com/braintree/muppetshow/commit/bbe48d35283b35dccd944d622f166b7459a96475)
 
-- *Author:* lollipopman (<hathaway@paypal.com>)
+- *Author:* misspiggy (<heckler+misspiggy@getbraintree.com>)
 - *Message:*
   ```
   finish the muppet show lyrics
@@ -152,11 +152,11 @@
     - *Logs:*
         - `Would have triggered 'refresh' from 1 event`
 
-## Puppet noop output for commit: 74a82e82f60fa1663618c36196903f7b150a802a - add some fun diversions
+## Puppet noop output for commit: 07f824ad0ca61df5f17cbce47bc5a941a8eb6c38 - add some fun diversions
 
-### Commit [74a82e82f60fa1663618c36196903f7b150a802a](https://github.braintreeps.com/lollipopman/muppetshow/commit/74a82e82f60fa1663618c36196903f7b150a802a)
+### Commit [07f824ad0ca61df5f17cbce47bc5a941a8eb6c38](https://github.braintreeps.com/braintree/muppetshow/commit/07f824ad0ca61df5f17cbce47bc5a941a8eb6c38)
 
-- *Author:* lollipopman (<hathaway@paypal.com>)
+- *Author:* kermit (<heckler+kermit@getbraintree.com>)
 - *Message:*
   ```
   add some fun diversions
@@ -178,11 +178,11 @@
     - *Current State:* `purged`
     - *Desired State:* `present`
 
-## Puppet noop output for commit: 36fe88c8252439f20c78bcd3c82e72ccf5bb9572 - add kermit user, modify sail input
+## Puppet noop output for commit: b66ba8ec99daf0f146655a32ce5137e4cb135c5a - add kermit user, modify sail input
 
-### Commit [36fe88c8252439f20c78bcd3c82e72ccf5bb9572](https://github.braintreeps.com/lollipopman/muppetshow/commit/36fe88c8252439f20c78bcd3c82e72ccf5bb9572)
+### Commit [b66ba8ec99daf0f146655a32ce5137e4cb135c5a](https://github.braintreeps.com/braintree/muppetshow/commit/b66ba8ec99daf0f146655a32ce5137e4cb135c5a)
 
-- *Author:* lollipopman (<hathaway@paypal.com>)
+- *Author:* kermit (<heckler+kermit@getbraintree.com>)
 - *Message:*
   ```
   add kermit user, modify sail input
@@ -224,11 +224,11 @@
     - *Current State:* `absent`
     - *Desired State:* `present`
 
-## Puppet noop output for commit: 233ef78c6bf53d97477c6acd08ff618bedfce192 - New Movie
+## Puppet noop output for commit: 9408f39395ce50e9e3cc118e0963e61539b82376 - New Movie
 
-### Commit [233ef78c6bf53d97477c6acd08ff618bedfce192](https://github.braintreeps.com/lollipopman/muppetshow/commit/233ef78c6bf53d97477c6acd08ff618bedfce192)
+### Commit [9408f39395ce50e9e3cc118e0963e61539b82376](https://github.braintreeps.com/braintree/muppetshow/commit/9408f39395ce50e9e3cc118e0963e61539b82376)
 
-- *Author:* lollipopman (<hathaway@paypal.com>)
+- *Author:* misspiggy (<heckler+misspiggy@getbraintree.com>)
 - *Message:*
   ```
   New Movie
@@ -242,11 +242,11 @@
     - *Current State:* `absent`
     - *Desired State:* `present`
 
-## Puppet noop output for commit: 9304a2759e53768468cbeb1924b6f0f68c59dea4 - Gonzo
+## Puppet noop output for commit: 8a7c2bc86e47199fb63473e3e297693c08367375 - Gonzo
 
-### Commit [9304a2759e53768468cbeb1924b6f0f68c59dea4](https://github.braintreeps.com/lollipopman/muppetshow/commit/9304a2759e53768468cbeb1924b6f0f68c59dea4)
+### Commit [8a7c2bc86e47199fb63473e3e297693c08367375](https://github.braintreeps.com/braintree/muppetshow/commit/8a7c2bc86e47199fb63473e3e297693c08367375)
 
-- *Author:* lollipopman (<hathaway@paypal.com>)
+- *Author:* misspiggy (<heckler+misspiggy@getbraintree.com>)
 - *Message:*
   ```
   Gonzo
@@ -260,11 +260,11 @@
     - *Current State:* `absent`
     - *Desired State:* `present`
 
-## Puppet noop output for commit: 1aab8d5bc3129e13a88dac9dbc8251fbe6fee639 - Take Manhattan
+## Puppet noop output for commit: 229907a5e4a4416681ab577490fe44b8ea7b04ad - Take Manhattan
 
-### Commit [1aab8d5bc3129e13a88dac9dbc8251fbe6fee639](https://github.braintreeps.com/lollipopman/muppetshow/commit/1aab8d5bc3129e13a88dac9dbc8251fbe6fee639)
+### Commit [229907a5e4a4416681ab577490fe44b8ea7b04ad](https://github.braintreeps.com/braintree/muppetshow/commit/229907a5e4a4416681ab577490fe44b8ea7b04ad)
 
-- *Author:* lollipopman (<code@getbraintree.com>)
+- *Author:* Jesse Hathaway (<hathaway@paypal.com>)
 - *Message:*
   ```
   Take Manhattan

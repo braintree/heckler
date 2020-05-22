@@ -4,7 +4,7 @@ puppet_cmd:
   - "--confdir=/var/lib/rizzod/repo/puppetcode"
   - "--vardir=/var/tmp"
   - "--config_version=rizzo-rev"
-  - "/var/lib/rizzod/repo/puppetcode/nodes.pp"
+  - "/var/lib/rizzod/repo/puppetcode/nodes"
   env:
     BUTTER: "bubbles"
 puppet_reportdir: "/var/tmp/reports"
