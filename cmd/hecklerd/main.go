@@ -636,6 +636,20 @@ func compressHostsStr(hostsStr map[string]string) map[string]string {
 	return compressedHostStr
 }
 
+func uniqueStrSlice(strSlice []string) []string {
+	uniqueMap := make(map[string]bool)
+	for _, v := range strSlice {
+		uniqueMap[v] = true
+	}
+	uniqueList := make([]string, len(uniqueMap))
+	i := 0
+	for v := range uniqueMap {
+		uniqueList[i] = v
+		i++
+	}
+	return uniqueList
+}
+
 func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node) *groupedResource {
 	var nodeList []string
 	var desiredValue string
@@ -1303,10 +1317,18 @@ func notifyApprovers(ghclient *github.Client, conf *HecklerdConf, issue *github.
 		nodeList[i] = node
 		i++
 	}
-	approvers, err := approversFromNodes(nodeList)
+	nodeApprovers, err := approversFromNodes(nodeList)
 	if err != nil {
 		return err
 	}
+	resourceApprovers, err := approversFromResources(groupedCommit)
+	if err != nil {
+		return err
+	}
+	approvers := make([]string, len(nodeApprovers))
+	copy(approvers, nodeApprovers)
+	approvers = append(approvers, resourceApprovers...)
+	approvers = uniqueStrSlice(approvers)
 	body := "Please approve: " + strings.Join(approvers, ", ")
 	comment := &github.IssueComment{
 		Body: github.String(body),
@@ -1328,6 +1350,21 @@ func nodeFile(node string, nodeFileRegexes map[string][]*regexp.Regexp) (string,
 		}
 	}
 	return "", fmt.Errorf("Unable to find node file for node: %v", node)
+}
+
+func approversFromResources(groupedResources []*groupedResource) ([]string, error) {
+	co, err := codeowners.NewCodeowners(workRepo)
+	if err != nil {
+		return []string{}, err
+	}
+	approvers := make([]string, 0)
+	for _, gr := range groupedResources {
+		if gr.File != "" {
+			owners := co.Owners(gr.File)
+			approvers = append(approvers, owners...)
+		}
+	}
+	return uniqueStrSlice(approvers), nil
 }
 
 func approversFromNodes(nodes []string) ([]string, error) {
