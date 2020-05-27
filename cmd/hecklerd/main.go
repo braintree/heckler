@@ -1304,20 +1304,12 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 }
 
 func notifyApprovers(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, groupedCommit []*groupedResource, logger *log.Logger) error {
-	// Unique nodes
-	nodes := make(map[string]bool)
+	nodes := make([]string, 0)
 	for _, gr := range groupedCommit {
-		for _, node := range gr.Nodes {
-			nodes[node] = true
-		}
+		nodes = append(nodes, gr.Nodes...)
 	}
-	nodeList := make([]string, len(nodes))
-	i := 0
-	for node := range nodes {
-		nodeList[i] = node
-		i++
-	}
-	nodeApprovers, err := approversFromNodes(nodeList)
+	nodes = uniqueStrSlice(nodes)
+	nodeApprovers, err := approversFromNodes(nodes)
 	if err != nil {
 		return err
 	}
@@ -1383,18 +1375,12 @@ func approversFromNodes(nodes []string) ([]string, error) {
 			return []string{}, err
 		}
 	}
-	uniqueApprovers := make(map[string]bool)
+	approvers := make([]string, 0)
 	for _, file := range nodesToFile {
 		owners := co.Owners(file)
-		for _, owner := range owners {
-			uniqueApprovers[owner] = true
-		}
+		approvers = append(approvers, owners...)
 	}
-	approversList := make([]string, 0)
-	for approver := range uniqueApprovers {
-		approversList = append(approversList, approver)
-	}
-	return approversList, nil
+	return uniqueStrSlice(approvers), nil
 }
 
 func noopTitle(commit *git.Commit, prefix string) string {
