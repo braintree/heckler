@@ -1295,7 +1295,7 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 			logger.Fatal(err)
 		}
 	} else {
-		err = notifyApprovers(ghclient, conf, ni, groupedCommit, logger)
+		err = notifyApprovers(ghclient, conf, ni, commit, groupedCommit, templates, logger)
 		if err != nil {
 			logger.Fatal(err)
 		}
@@ -1303,17 +1303,17 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 	return nil
 }
 
-func notifyApprovers(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, groupedCommit []*groupedResource, logger *log.Logger) error {
+func notifyApprovers(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, commit *git.Commit, groupedCommit []*groupedResource, templates *template.Template, logger *log.Logger) error {
 	nodes := make([]string, 0)
 	for _, gr := range groupedCommit {
 		nodes = append(nodes, gr.Nodes...)
 	}
 	nodes = uniqueStrSlice(nodes)
-	nodeApprovers, err := approversFromNodes(nodes)
+	nodeApprovers, nodeFiles, err := approversFromNodes(nodes)
 	if err != nil {
 		return err
 	}
-	resourceApprovers, err := approversFromResources(groupedCommit)
+	resourceApprovers, resourceFiles, err := approversFromResources(groupedCommit)
 	if err != nil {
 		return err
 	}
@@ -1321,9 +1321,32 @@ func notifyApprovers(ghclient *github.Client, conf *HecklerdConf, issue *github.
 	copy(approvers, nodeApprovers)
 	approvers = append(approvers, resourceApprovers...)
 	approvers = uniqueStrSlice(approvers)
-	body := "Please approve: " + strings.Join(approvers, ", ")
+	data := struct {
+		Commit        *git.Commit
+		Conf          *HecklerdConf
+		Approvers     []string
+		NodeFiles     []string
+		ResourceFiles []string
+	}{
+		commit,
+		conf,
+		approvers,
+		nodeFiles,
+		resourceFiles,
+	}
+	var tmpl string
+	if len(approvers) > 0 {
+		tmpl = "issueApprovers.tmpl"
+	} else {
+		tmpl = "issueApproversUnknown.tmpl"
+	}
+	var body strings.Builder
+	err = templates.ExecuteTemplate(&body, tmpl, data)
+	if err != nil {
+		return err
+	}
 	comment := &github.IssueComment{
-		Body: github.String(body),
+		Body: github.String(body.String()),
 	}
 	ctx := context.Background()
 	_, _, err = ghclient.Issues.CreateComment(ctx, conf.RepoOwner, conf.Repo, *issue.Number, comment)
@@ -1344,43 +1367,47 @@ func nodeFile(node string, nodeFileRegexes map[string][]*regexp.Regexp) (string,
 	return "", fmt.Errorf("Unable to find node file for node: %v", node)
 }
 
-func approversFromResources(groupedResources []*groupedResource) ([]string, error) {
+func approversFromResources(groupedResources []*groupedResource) ([]string, []string, error) {
 	co, err := codeowners.NewCodeowners(workRepo)
 	if err != nil {
-		return []string{}, err
+		return []string{}, []string{}, err
 	}
 	approvers := make([]string, 0)
+	files := make([]string, 0)
 	for _, gr := range groupedResources {
 		if gr.File != "" {
 			owners := co.Owners(gr.File)
 			approvers = append(approvers, owners...)
+			files = append(files, gr.File)
 		}
 	}
-	return uniqueStrSlice(approvers), nil
+	return uniqueStrSlice(approvers), files, nil
 }
 
-func approversFromNodes(nodes []string) ([]string, error) {
+func approversFromNodes(nodes []string) ([]string, []string, error) {
 	co, err := codeowners.NewCodeowners(workRepo)
 	if err != nil {
-		return []string{}, err
+		return []string{}, []string{}, err
 	}
 	nodeFileRegexes, err := puppetutil.NodeFileRegexes(workRepo + "/nodes")
 	if err != nil {
-		return []string{}, err
+		return []string{}, []string{}, err
 	}
 	nodesToFile := make(map[string]string)
 	for _, node := range nodes {
 		nodesToFile[node], err = nodeFile(node, nodeFileRegexes)
 		if err != nil {
-			return []string{}, err
+			return []string{}, []string{}, err
 		}
 	}
 	approvers := make([]string, 0)
+	files := make([]string, 0)
 	for _, file := range nodesToFile {
 		owners := co.Owners(file)
 		approvers = append(approvers, owners...)
+		files = append(files, file)
 	}
-	return uniqueStrSlice(approvers), nil
+	return uniqueStrSlice(approvers), files, nil
 }
 
 func noopTitle(commit *git.Commit, prefix string) string {
