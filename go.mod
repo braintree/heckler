@@ -15,7 +15,7 @@ require (
 	github.com/hairyhenderson/go-codeowners v0.2.2
 	github.com/huandu/xstrings v1.3.0 // indirect
 	github.com/imdario/mergo v0.3.8 // indirect
-	github.com/libgit2/git2go v0.0.0-20191210224138-ba1b5f0c23b3
+	github.com/libgit2/git2go/v30 v30.0.4-0.20200602173042-5241c72e6ebd
 	github.com/lollipopman/git-cgi-server v1.0.2-0.20200407142400-d6c3040ae76f
 	github.com/lollipopman/luser v0.0.0-20200226194359-0e64908ec951
 	github.com/lyraproj/puppet-parser v0.0.0-20190606112603-21687f912799

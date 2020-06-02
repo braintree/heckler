@@ -2,7 +2,7 @@
 
 HECKLER_VERSION := $(shell git describe --abbrev=0 | sed 's/^v//')
 export DH_VERBOSE := 1
-export DH_GOLANG_INSTALL_EXTRA := vendor/github.com/libgit2/git2go/static-build \
+export DH_GOLANG_INSTALL_EXTRA := vendor/github.com/libgit2/git2go/v30/static-build \
 	$(shell find . -name '*.tmpl')
 export DEB_BUILD_OPTIONS := nostrip
 export CC := /usr/local/musl/bin/musl-gcc
@@ -15,10 +15,10 @@ export GOFLAGS := -mod=vendor -tags=static,osusergo
 override_dh_auto_build:
 	dh_auto_build -O--buildsystem=golang -- -ldflags '$(GO_LDFLAGS)'
 
-override_dh_auto_configure: vendor/github.com/libgit2/git2go/static-build
+override_dh_auto_configure: vendor/github.com/libgit2/git2go/v30/static-build
 	dh_auto_configure
 
-vendor/github.com/libgit2/git2go/static-build:
+vendor/github.com/libgit2/git2go/v30/static-build:
 	./build-libgit2-static
 
 override_dh_auto_install:

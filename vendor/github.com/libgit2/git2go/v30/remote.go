@@ -1,8 +1,10 @@
 package git
 
 /*
-#include <git2.h>
 #include <string.h>
+
+#include <git2.h>
+#include <git2/sys/cred.h>
 
 extern void _go_git_setup_callbacks(git_remote_callbacks *callbacks);
 
@@ -49,7 +51,7 @@ const (
 
 type TransportMessageCallback func(str string) ErrorCode
 type CompletionCallback func(RemoteCompletion) ErrorCode
-type CredentialsCallback func(url string, username_from_url string, allowed_types CredType) (ErrorCode, *Cred)
+type CredentialsCallback func(url string, username_from_url string, allowed_types CredType) (*Cred, error)
 type TransferProgressCallback func(stats TransferProgress) ErrorCode
 type UpdateTipsCallback func(refname string, a *Oid, b *Oid) ErrorCode
 type CertificateCheckCallback func(cert *Certificate, valid bool, hostname string) ErrorCode
@@ -244,11 +246,21 @@ func credentialsCallback(_cred **C.git_cred, _url *C.char, _username_from_url *C
 	}
 	url := C.GoString(_url)
 	username_from_url := C.GoString(_username_from_url)
-	ret, cred := callbacks.CredentialsCallback(url, username_from_url, (CredType)(allowed_types))
+	cred, err := callbacks.CredentialsCallback(url, username_from_url, (CredType)(allowed_types))
+	if err != nil {
+		if gitError, ok := err.(*GitError); ok {
+			return int(gitError.Code)
+		}
+		return C.GIT_EUSER
+	}
 	if cred != nil {
 		*_cred = cred.ptr
+
+		// have transferred ownership to libgit, 'forget' the native pointer
+		cred.ptr = nil
+		runtime.SetFinalizer(cred, nil)
 	}
-	return int(ret)
+	return 0
 }
 
 //export transferProgressCallback

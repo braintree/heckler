@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	git "github.com/libgit2/git2go"
+	git "github.com/libgit2/git2go/v30"
 )
 
 func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptions) (*git.Repository, error) {
