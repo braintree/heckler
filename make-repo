@@ -32,6 +32,12 @@ AUTHORS=(
 	[10]='kermit <heckler+kermit@getbraintree.com>'
 )
 
+CO_AUTHORS=(
+	[3]='kermit <heckler+kermit@getbraintree.com>'
+	[5]='kermit <heckler+kermit@getbraintree.com>'
+	[8]='misspiggy <heckler+misspiggy@getbraintree.com>'
+)
+
 MSGS=(
 	[1]='commit1'
 	[2]='stop nginx on fozzie & add episode one
@@ -129,7 +135,12 @@ for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
 		cp "${src}" "${dst}"
 		git add "${dst}"
 	done
-	git commit --author "${AUTHORS[$commit]}" -F - <<<"${MSGS[commit]}"
+	msg="${MSGS[commit]}"
+	if [[ -v "CO_AUTHORS[${commit}]" ]]; then
+		printf -v co_author '\n\nCo-authored-by: %s' "${CO_AUTHORS[${commit}]}"
+		msg+="${co_author}"
+	fi
+	git commit --author "${AUTHORS[$commit]}" -F - <<<"${msg}"
 	if ((commit == 1)); then
 		git tag v1 -m 'Release v1'
 	fi
