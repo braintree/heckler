@@ -11,19 +11,19 @@ BUILD_SCRIPT='build-libgit2-static.sh'
 git2go_rel_dir='vendor/github.com/libgit2/git2go/v30'
 
 if [[ ! -e "${git2go_rel_dir}" ]]; then
-  printf 'No git2go vendored dir: %s\n' "${git2go_rel_dir}"
-  exit 1
+	printf 'No git2go vendored dir: %s\n' "${git2go_rel_dir}"
+	exit 1
 fi
 
 build_script_path="$PWD"/script/"${BUILD_SCRIPT}"
 if [[ ! -e "${build_script_path}" ]]; then
-  printf 'No libgit2 build script found: %s\n' "${build_script_path}"
-  exit 1
+	printf 'No libgit2 build script found: %s\n' "${build_script_path}"
+	exit 1
 fi
 
 if [[ -e "${git2go_rel_dir}"/static-build ]]; then
-  printf 'Static build already exists! %s\n' "${git2go_rel_dir}"/static-build
-  exit 1
+	printf 'Static build already exists! %s\n' "${git2go_rel_dir}"/static-build
+	exit 1
 fi
 
 pushd "${git2go_rel_dir}" >/dev/null
