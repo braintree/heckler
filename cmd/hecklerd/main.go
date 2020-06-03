@@ -1174,6 +1174,25 @@ func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, conf *HecklerdC
 	}
 }
 
+// Given an email address, return the github user associated with the provided
+// email address
+func githubUserFromEmail(ghclient *github.Client, email string) (*github.User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	query := fmt.Sprintf("%s in:email", email)
+	searchResults, _, err := ghclient.Search.Users(ctx, query, nil)
+	if err != nil {
+		return nil, err
+	}
+	if searchResults.GetTotal() == 0 {
+		return nil, nil
+	} else if searchResults.GetTotal() == 1 {
+		return &searchResults.Users[0], nil
+	} else {
+		return nil, errors.New("More than one users exists for a single email address")
+	}
+}
+
 func clearMilestones(ghclient *github.Client, conf *HecklerdConf) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*100)
 	defer cancel()
@@ -1269,16 +1288,19 @@ func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue
 }
 
 func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.Commit, groupedCommit []*groupedResource, templates *template.Template, logger *log.Logger) error {
-	ctx := context.Background()
 	prefix := conf.EnvPrefix
-
-	githubIssue := &github.IssueRequest{
-		Title: github.String(noopTitle(commit, prefix)),
-		// TODO need to enforce github user IDs for commits, so that we always
-		// have a valid github user.
-		Assignee: github.String("lollipopman"),
-		Body:     github.String(commitBodyToMarkdown(commit, conf, templates) + groupedResourcesToMarkdown(groupedCommit, commit, conf, templates)),
+	authors, err := commitAuthorsLogins(ghclient, commit, logger)
+	if err != nil {
+		logger.Fatal(err)
 	}
+	body := commitBodyToMarkdown(commit, conf, templates)
+	body += groupedResourcesToMarkdown(groupedCommit, commit, conf, templates)
+	githubIssue := &github.IssueRequest{
+		Title:     github.String(noopTitle(commit, prefix)),
+		Assignees: &authors,
+		Body:      github.String(body),
+	}
+	ctx := context.Background()
 	ni, _, err := ghclient.Issues.Create(ctx, conf.RepoOwner, conf.Repo, githubIssue)
 	if err != nil {
 		logger.Fatal(err)
@@ -1301,6 +1323,43 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 		}
 	}
 	return nil
+}
+
+// Given a git commit return a slice of GitHub logins associated with the
+// commit author as well as any co-authors found in the commit message
+// trailers.
+func commitAuthorsLogins(ghclient *github.Client, commit *git.Commit, logger *log.Logger) ([]string, error) {
+	githubUser, err := githubUserFromEmail(ghclient, commit.Author().Email)
+	if err != nil {
+		return []string{}, err
+	}
+	authors := make([]string, 0)
+	if githubUser != nil {
+		authors = append(authors, *githubUser.Login)
+	} else {
+		logger.Printf("Unable to find GitHub user for commit author email: '%s'", commit.Author().Email)
+	}
+	trailers, err := git.MessageTrailers(commit.Message())
+	if err != nil {
+		return []string{}, err
+	}
+	regexCoAuthor := regexp.MustCompile(`^[Cc]o-authored-by$`)
+	regexEmailCapture := regexp.MustCompile(`<([^>]*)>`)
+	for _, trailer := range trailers {
+		if !regexCoAuthor.MatchString(trailer.Key) {
+			continue
+		}
+		email := regexEmailCapture.FindStringSubmatch(trailer.Value)
+		if len(email) < 2 || email[1] == "" {
+			continue
+		}
+		githubUser, err := githubUserFromEmail(ghclient, email[1])
+		if err != nil {
+			return []string{}, err
+		}
+		authors = append(authors, *githubUser.Login)
+	}
+	return authors, nil
 }
 
 func notifyApprovers(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, commit *git.Commit, groupedCommit []*groupedResource, templates *template.Template, logger *log.Logger) error {
