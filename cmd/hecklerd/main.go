@@ -1204,6 +1204,22 @@ func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, conf *HecklerdC
 	}
 }
 
+func githubOpenIssues(ghclient *github.Client, conf *HecklerdConf) ([]github.Issue, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	prefix := conf.EnvPrefix
+	query := "is:issue is:open"
+	if prefix != "" {
+		query += fmt.Sprintf(" %sin:title", issuePrefix(prefix))
+	}
+	query += fmt.Sprintf(" author:app/%s", conf.GitHubAppSlug)
+	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
+	if err != nil {
+		return nil, err
+	}
+	return searchResults.Issues, nil
+}
+
 // Given an email address, return the github user associated with the provided
 // email address
 func githubUserFromEmail(ghclient *github.Client, email string) (*github.User, error) {
@@ -1934,6 +1950,53 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 		logger.Println("Apply complete, sleeping")
 		closeNodes(dialedNodes)
 	}
+}
+
+// Are there any open issues for an environment?
+//   If yes
+//     For each issue:
+//       Has the issue been approved?
+//         If yes, close issue
+//         If no, do nothing
+func noopApprovalLoop(conf *HecklerdConf) {
+	logger := log.New(os.Stdout, "[noopApprovalLoop] ", log.Lshortfile)
+	for {
+		time.Sleep(10 * time.Second)
+		ghclient, _, err := githubConn(conf)
+		if err != nil {
+			logger.Printf("Unable to connect to github, sleeping: %v", err)
+			continue
+		}
+		openIssues, err := githubOpenIssues(ghclient, conf)
+		for _, openIssue := range openIssues {
+			issueApproved, err := issueApproved(ghclient, conf, openIssue)
+			if err != nil {
+				logger.Printf("Unable to determine if issue(%d) is approved: %v", openIssue.Number, err)
+				continue
+			}
+			if issueApproved {
+				err := closeIssue(ghclient, conf, &openIssue, "Issue has been approved, closing")
+				if err != nil {
+					logger.Printf("Unable to close approved issue(%d): %v", openIssue.Number, err)
+					continue
+				}
+			}
+		}
+	}
+}
+
+func issueApproved(ghclient *github.Client, conf *HecklerdConf, issue github.Issue) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	comments, _, err := ghclient.Issues.ListComments(ctx, conf.RepoOwner, conf.Repo, issue.GetNumber(), nil)
+	if err != nil {
+		return false, err
+	}
+	// if comment author is not heckler && comment body matches /approved/, possible approver?
+	for _, comment := range comments {
+		log.Printf("DEBUG comment: %v", comment.GetBody())
+	}
+	return false, nil
 }
 
 func unlockAll(conf *HecklerdConf, logger *log.Logger) {
@@ -2742,6 +2805,7 @@ func main() {
 		go noopLoop(conf, repo, templates)
 		go milestoneLoop(conf, repo)
 		go applyLoop(conf, repo)
+		go noopApprovalLoop(conf)
 		if conf.AutoTagCronSchedule != "" {
 			logger.Println("Starting tag loop")
 			c := cron.New()
