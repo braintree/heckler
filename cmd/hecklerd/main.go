@@ -51,10 +51,12 @@ const (
 
 	defaultAddr     = ":8080"
 	shutdownTimeout = time.Second * 5
-	port            = ":50052"
-	stateDir        = "/var/lib/hecklerd"
-	workRepo        = "/var/lib/hecklerd" + "/work_repo/puppetcode"
-	noopDir         = stateDir + "/noops"
+	// TODO move to HecklerdConf
+	port           = ":50052"
+	stateDir       = "/var/lib/hecklerd"
+	workRepo       = "/var/lib/hecklerd" + "/work_repo/puppetcode"
+	noopDir        = stateDir + "/noops"
+	groupedNoopDir = noopDir + "/grouped"
 )
 
 var Debug = false
@@ -326,6 +328,36 @@ func marshalReport(rprt rizzopb.PuppetReport, noopDir string, commit git.Oid) er
 	}
 	return nil
 }
+func marshalGroupedCommit(oid *git.Oid, groupedCommit []*groupedResource, groupedNoopDir string) error {
+	groupedCommitPath := groupedNoopDir + "/" + oid.String() + ".json"
+	data, err := json.Marshal(groupedCommit)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(groupedCommitPath, data, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func unmarshalGroupedCommit(oid *git.Oid, groupedNoopDir string) ([]*groupedResource, error) {
+	groupedCommitPath := groupedNoopDir + "/" + oid.String() + ".json"
+	file, err := os.Open(groupedCommitPath)
+	if err != nil {
+		return []*groupedResource{}, err
+	}
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		return []*groupedResource{}, err
+	}
+	var groupedCommit []*groupedResource
+	err = json.Unmarshal([]byte(data), &groupedCommit)
+	if err != nil {
+		return []*groupedResource{}, err
+	}
+	return groupedCommit, nil
+}
 
 func noopCommit(reqNodes map[string]*Node, commit *git.Commit, deltaNoop bool, repo *git.Repository, logger *log.Logger) ([]*groupedResource, map[string]error, error) {
 	var err error
@@ -334,8 +366,6 @@ func noopCommit(reqNodes map[string]*Node, commit *git.Commit, deltaNoop bool, r
 	for k, v := range reqNodes {
 		nodes[k] = v
 	}
-	noopDir := stateDir + "/noops"
-	os.MkdirAll(noopDir, 0755)
 	for host, _ := range nodes {
 		os.Mkdir(noopDir+"/"+host, 0755)
 	}
@@ -2304,48 +2334,59 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 		}
+		var groupedCommit []*groupedResource
 		for gi, commit := range commits {
-			issue, err := githubIssueFromCommit(ghclient, gi, conf)
-			if err != nil {
-				logger.Printf("Unable to determine if issue for %s exists, sleeping: %v", gi.String(), err)
-				break
-			}
-			if issue != nil {
+			groupedCommit, err = unmarshalGroupedCommit(commit.Id(), groupedNoopDir)
+			if os.IsNotExist(err) {
+				perNoopThresholds := Thresholds{
+					ErrNodes:    curThresholds.ErrNodes,
+					LockedNodes: curThresholds.LockedNodes,
+				}
+				lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", conf.LockMessage, false, lastApplyNodes)
+				perNoopThresholds.LockedNodes += len(lockedByAnotherNodes)
+				perNoopThresholds.ErrNodes += len(errLockNodes)
+				if msg, ok := thresholdExceeded(perNoopThresholds, conf.MaxThresholds); ok {
+					logger.Printf("%s, sleeping", msg)
+					unlockNodes("root", false, lockedNodes, logger)
+					break
+				}
+				var errNoopCommitNodes map[string]error
+				groupedCommit, errNoopCommitNodes, err = noopCommit(lockedNodes, commit, true, repo, logger)
+				if err != nil {
+					logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
+					unlockNodes("root", false, lockedNodes, logger)
+					break
+				}
+				perNoopThresholds.ErrNodes += len(errNoopCommitNodes)
+				if msg, ok := thresholdExceeded(perNoopThresholds, conf.MaxThresholds); ok {
+					compressedErrNodes := compressErrorHosts(errNoopCommitNodes)
+					for host, err := range compressedErrNodes {
+						logger.Printf("errNodes: %s, %v", host, err)
+					}
+					logger.Printf("%s, sleeping", msg)
+					unlockNodes("root", false, lockedNodes, logger)
+					break
+				}
+				unlockNodes("root", false, lockedNodes, logger)
+				err = marshalGroupedCommit(commit.Id(), groupedCommit, groupedNoopDir)
+				if err != nil {
+					logger.Printf("Unable to marshal group commit: %v", err)
+				}
+			} else if err != nil {
+				logger.Printf("Error trying to unmarshal groupedCommit, sleeping: %v", err)
 				continue
 			}
-			perNoopThresholds := Thresholds{
-				ErrNodes:    curThresholds.ErrNodes,
-				LockedNodes: curThresholds.LockedNodes,
-			}
-			lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", conf.LockMessage, false, lastApplyNodes)
-			perNoopThresholds.LockedNodes += len(lockedByAnotherNodes)
-			perNoopThresholds.ErrNodes += len(errLockNodes)
-			if msg, ok := thresholdExceeded(perNoopThresholds, conf.MaxThresholds); ok {
-				logger.Printf("%s, sleeping", msg)
-				unlockNodes("root", false, lockedNodes, logger)
-				break
-			}
-			groupedCommit, errNoopCommitNodes, err := noopCommit(lockedNodes, commit, true, repo, logger)
+			issue, err := githubIssueFromCommit(ghclient, gi, conf)
 			if err != nil {
-				logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
-				unlockNodes("root", false, lockedNodes, logger)
+				logger.Printf("Unable to determine if issue for commit %s exists, sleeping: %v", gi.String(), err)
 				break
 			}
-			perNoopThresholds.ErrNodes += len(errNoopCommitNodes)
-			if msg, ok := thresholdExceeded(perNoopThresholds, conf.MaxThresholds); ok {
-				compressedErrNodes := compressErrorHosts(errNoopCommitNodes)
-				for host, err := range compressedErrNodes {
-					logger.Printf("errNodes: %s, %v", host, err)
+			if issue == nil {
+				err = githubCreateIssue(ghclient, conf, commit, groupedCommit, templates, logger)
+				if err != nil {
+					logger.Printf("Unable to create github issue, sleeping: %v", err)
+					break
 				}
-				logger.Printf("%s, sleeping", msg)
-				unlockNodes("root", false, lockedNodes, logger)
-				break
-			}
-			unlockNodes("root", false, lockedNodes, logger)
-			err = githubCreateIssue(ghclient, conf, commit, groupedCommit, templates, logger)
-			if err != nil {
-				logger.Printf("Unable to create github issue, sleeping: %v", err)
-				break
 			}
 		}
 		closeNodes(dialedNodes)
@@ -2611,6 +2652,8 @@ func main() {
 	}
 
 	logger.Printf("hecklerd: v%s\n", Version)
+	os.MkdirAll(noopDir, 0755)
+	os.MkdirAll(groupedNoopDir, 0755)
 	repo, err := fetchRepo(conf)
 	if err != nil {
 		logger.Fatalf("Unable to fetch repo to serve: %v", err)
