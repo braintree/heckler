@@ -140,9 +140,22 @@ type groupedResource struct {
 	File            string
 	Line            int64
 	Nodes           []string
+	NodeFiles       []string
 	CompressedNodes string
 	Events          []*groupEvent
 	Logs            []*groupLog
+	Owners          groupedResourceOwners
+	Approvals       groupedResourceApprovals
+}
+
+type groupedResourceOwners struct {
+	File      []string
+	NodeFiles map[string][]string
+}
+
+type groupedResourceApprovals struct {
+	File      []string
+	NodeFiles map[string][]string
 }
 
 type groupEvent struct {
@@ -1413,12 +1426,7 @@ func commitAuthorsLogins(ghclient *github.Client, commit *git.Commit) ([]string,
 }
 
 func notifyApprovers(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, commit *git.Commit, groupedCommit []*groupedResource, templates *template.Template, logger *log.Logger) error {
-	nodes := make([]string, 0)
-	for _, gr := range groupedCommit {
-		nodes = append(nodes, gr.Nodes...)
-	}
-	nodes = uniqueStrSlice(nodes)
-	nodeApprovers, nodeFiles, err := approversFromNodes(nodes)
+	nodeApprovers, nodeFiles, err := approversFromNodes(groupedCommit)
 	if err != nil {
 		return err
 	}
@@ -1465,11 +1473,14 @@ func notifyApprovers(ghclient *github.Client, conf *HecklerdConf, issue *github.
 	return nil
 }
 
-func nodeFile(node string, nodeFileRegexes map[string][]*regexp.Regexp) (string, error) {
+// nodeFile takes node name and a map of a puppet node source file to its node
+// regexes contained in the source file. Then nodeFile returns the node source
+// file path which matches the node.
+func nodeFile(node string, nodeFileRegexes map[string][]*regexp.Regexp, puppetCodePath string) (string, error) {
 	for file, regexes := range nodeFileRegexes {
 		for _, regex := range regexes {
 			if regex.MatchString(node) {
-				return strings.TrimPrefix(file, workRepo+"/"), nil
+				return strings.TrimPrefix(file, puppetCodePath+"/"), nil
 			}
 		}
 	}
@@ -1493,7 +1504,12 @@ func approversFromResources(groupedResources []*groupedResource) ([]string, []st
 	return uniqueStrSlice(approvers), files, nil
 }
 
-func approversFromNodes(nodes []string) ([]string, []string, error) {
+func approversFromNodes(groupedCommit []*groupedResource) ([]string, []string, error) {
+	nodes := make([]string, 0)
+	for _, gr := range groupedCommit {
+		nodes = append(nodes, gr.Nodes...)
+	}
+	nodes = uniqueStrSlice(nodes)
 	co, err := codeowners.NewCodeowners(workRepo)
 	if err != nil {
 		return []string{}, []string{}, err
@@ -1504,7 +1520,7 @@ func approversFromNodes(nodes []string) ([]string, []string, error) {
 	}
 	nodesToFile := make(map[string]string)
 	for _, node := range nodes {
-		nodesToFile[node], err = nodeFile(node, nodeFileRegexes)
+		nodesToFile[node], err = nodeFile(node, nodeFileRegexes, workRepo)
 		if err != nil {
 			return []string{}, []string{}, err
 		}
@@ -1956,32 +1972,57 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 	}
 }
 
-// Are there any open issues for an environment?
-//   If yes
-//     For each issue:
-//       Has the issue been approved?
-//         If yes, close issue
-//         If no, do nothing
-func noopApprovalLoop(conf *HecklerdConf) {
+//  Are there newer commits than our common last applied tag across "all"
+//  nodes?
+//    If No, do nothing
+//    If Yes, check each commit issue for approval
+//      Is the issue approved?
+//        If No, do nothing
+//        If Yes, note approval and close the issue
+func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 	logger := log.New(os.Stdout, "[noopApprovalLoop] ", log.Lshortfile)
 	for {
 		time.Sleep(10 * time.Second)
+		commonTag, err := commonTag(conf, repo, logger)
+		if err != nil {
+			logger.Printf("Unable to query for commonTag: %v", err)
+			continue
+		}
+		_, commits, err := commitLogIdList(repo, commonTag, "master")
+		if err != nil {
+			logger.Printf("Unable to obtain commit log ids: %v", err)
+			continue
+		}
+		if len(commits) == 0 {
+			logger.Println("No new commits, sleeping")
+			continue
+		}
 		ghclient, _, err := githubConn(conf)
 		if err != nil {
 			logger.Printf("Unable to connect to github, sleeping: %v", err)
 			continue
 		}
-		openIssues, err := githubOpenIssues(ghclient, conf)
-		for _, openIssue := range openIssues {
-			issueApproved, err := issueApproved(ghclient, conf, openIssue)
+		for gi, commit := range commits {
+			issue, err := githubIssueFromCommit(ghclient, gi, conf)
 			if err != nil {
-				logger.Printf("Unable to determine if issue(%d) is approved: %v", openIssue.Number, err)
+				logger.Printf("Unable to determine if issues exists: %s", gi.String())
 				continue
 			}
-			if issueApproved {
-				err := closeIssue(ghclient, conf, &openIssue, "Issue has been approved, closing")
+			if issue == nil {
+				continue
+			}
+			noopApproved, err := noopApproved(ghclient, conf, commit, issue)
+			if err != nil {
+				logger.Printf("Unable to determine if issue(%d) is approved: %v", issue.Number, err)
+				continue
+			}
+			if noopApproved {
+				if issue.GetState() == "closed" {
+					continue
+				}
+				err := closeIssue(ghclient, conf, issue, "Issue has been approved, closing")
 				if err != nil {
-					logger.Printf("Unable to close approved issue(%d): %v", openIssue.Number, err)
+					logger.Printf("Unable to close approved issue(%d): %v", issue.GetNumber(), err)
 					continue
 				}
 			}
@@ -1989,18 +2030,253 @@ func noopApprovalLoop(conf *HecklerdConf) {
 	}
 }
 
-func issueApproved(ghclient *github.Client, conf *HecklerdConf, issue github.Issue) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-	comments, _, err := ghclient.Issues.ListComments(ctx, conf.RepoOwner, conf.Repo, issue.GetNumber(), nil)
+// Given a commit & associated github issue check if each grouped resource has
+// been approved by a valid approver, excluding authors of the commit
+func noopApproved(ghclient *github.Client, conf *HecklerdConf, commit *git.Commit, issue *github.Issue) (bool, error) {
+	groupedResources, err := unmarshalGroupedCommit(commit.Id(), groupedNoopDir)
+	if os.IsNotExist(err) {
+		return false, fmt.Errorf("No marshaled groupedCommit file found for %s", commit.Id())
+	} else if err != nil {
+		return false, err
+	}
+	groupedResources, err = groupedResourcesNodeFiles(groupedResources, workRepo)
 	if err != nil {
 		return false, err
 	}
-	// if comment author is not heckler && comment body matches /approved/, possible approver?
-	for _, comment := range comments {
-		log.Printf("DEBUG comment: %v", comment.GetBody())
+	groupedResources, err = groupedResourcesOwners(groupedResources, workRepo)
+	if err != nil {
+		return false, err
 	}
-	return false, nil
+	groups, err := githubGroupsForGroupedResources(ghclient, groupedResources)
+	if err != nil {
+		return false, err
+	}
+	noopApprovers, err := githubNoopApprovals(ghclient, conf, issue)
+	if err != nil {
+		return false, err
+	}
+	commitAuthors, err := commitAuthorsLogins(ghclient, commit)
+	if err != nil {
+		return false, err
+	}
+	// Remove commit authors if they approved the noop, since we do not want
+	// authors approving their own noops.
+	// TODO make this configurable
+	approvers := setDifferenceStrSlice(noopApprovers, commitAuthors)
+	approved, groupedResources := resourcesApproved(groupedResources, groups, approvers)
+	return approved, nil
+}
+
+// Given two string slice sets return the elements that are only in a and not
+// in b
+func setDifferenceStrSlice(a []string, b []string) []string {
+	c := make([]string, 0)
+	mapB := make(map[string]bool)
+	for _, i := range b {
+		mapB[i] = true
+	}
+	for _, i := range a {
+		if _, ok := mapB[i]; !ok {
+			c = append(c, i)
+		}
+	}
+	return c
+}
+
+// Given a slice of groupedResources populate the NodeFiles slice of each
+// groupedResource with the set of node files applicable to that
+// groupedResource and return the populated groupedResources
+func groupedResourcesNodeFiles(groupedResources []*groupedResource, puppetCodePath string) ([]*groupedResource, error) {
+	nodeFileRegexes, err := puppetutil.NodeFileRegexes(puppetCodePath + "/nodes")
+	if err != nil {
+		return nil, err
+	}
+	// Get node source file for each node in groupedResource
+	nodesToFile := make(map[string]string)
+	for _, gr := range groupedResources {
+		for _, node := range gr.Nodes {
+			if _, ok := nodesToFile[node]; !ok {
+				nodesToFile[node], err = nodeFile(node, nodeFileRegexes, puppetCodePath)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	// Add unique node files set to groupedResource
+	for _, gr := range groupedResources {
+		nodeFiles := make([]string, 0)
+		for _, node := range gr.Nodes {
+			nodeFiles = append(nodeFiles, nodesToFile[node])
+		}
+		gr.NodeFiles = uniqueStrSlice(nodeFiles)
+	}
+	return groupedResources, nil
+}
+
+// Given a slice of groupedResources populate the groupedResourceOwners struct
+// on each grouped resource with the groups & users from the CODEOWNERS file
+// who are assigned to the source code files and node files of the grouped
+// resource. Return the populated groupedResource slice.
+func groupedResourcesOwners(groupedResources []*groupedResource, puppetCodePath string) ([]*groupedResource, error) {
+	co, err := codeowners.NewCodeowners(puppetCodePath)
+	if err != nil {
+		return nil, err
+	}
+	// Add node file & file approvers
+	for _, gr := range groupedResources {
+		nodeFilesOwners := make(map[string][]string)
+		for _, nodeFile := range gr.NodeFiles {
+			nodeFilesOwners[nodeFile] = co.Owners(nodeFile)
+		}
+		gr.Owners = groupedResourceOwners{
+			NodeFiles: nodeFilesOwners,
+		}
+		if gr.File != "" {
+			gr.Owners.File = co.Owners(gr.File)
+		}
+	}
+	return groupedResources, nil
+}
+
+// Given a github issue return the set of github logins which have approved the issue
+func githubNoopApprovals(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue) ([]string, error) {
+	approvers := make([]string, 0)
+	ctx := context.Background()
+	comments, _, err := ghclient.Issues.ListComments(ctx, conf.RepoOwner, conf.Repo, issue.GetNumber(), nil)
+	if err != nil {
+		return nil, err
+	}
+	regexApproved := regexp.MustCompile(`^[aA]pproved$`)
+	for _, comment := range comments {
+		commentAuthor := comment.GetUser().GetLogin()
+		if commentAuthor == conf.GitHubAppSlug+"[bot]" {
+			continue
+		}
+		if regexApproved.MatchString(comment.GetBody()) {
+			approvers = append(approvers, "@"+comment.GetUser().GetLogin())
+		}
+	}
+	return uniqueStrSlice(approvers), nil
+}
+
+// Given a slice of groupedResources return a map of group to github logins for
+// any resources or nodes owned by groups.
+func githubGroupsForGroupedResources(ghclient *github.Client, groupedResources []*groupedResource) (map[string][]string, error) {
+	var err error
+	groups := make(map[string][]string)
+	regexGithubGroup := regexp.MustCompile(`^@.*/.*$`)
+	for _, gr := range groupedResources {
+		for _, owner := range gr.Owners.File {
+			if regexGithubGroup.MatchString(owner) {
+				groups[owner] = nil
+			}
+		}
+		for _, nodeFileOwners := range gr.Owners.NodeFiles {
+			for _, owner := range nodeFileOwners {
+				if regexGithubGroup.MatchString(owner) {
+					groups[owner] = nil
+				}
+			}
+		}
+	}
+	for group := range groups {
+		groups[group], err = githubGroupMembersUsernames(ghclient, group)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return groups, nil
+}
+
+// Returns the members of a github group as a slice of github logins
+func githubGroupMembersUsernames(ghclient *github.Client, group string) ([]string, error) {
+	regexGithubGroupCapture := regexp.MustCompile(`^@(.*)/(.*)$`)
+	groupComponents := regexGithubGroupCapture.FindStringSubmatch(group)
+	if len(groupComponents) != 3 {
+		return nil, fmt.Errorf("Unable to parse group name: '%s'", group)
+	}
+	org := groupComponents[1]
+	slug := groupComponents[2]
+	ctx := context.Background()
+	// TODO: Once github.com/bradleyfalzon/ghinstallation supports
+	// go-github > v30 we can use ListTeamMembersBySlug and avoid
+	// two calls to github
+	team, _, err := ghclient.Teams.GetTeamBySlug(ctx, org, slug)
+	if err != nil {
+		return nil, err
+	}
+	users, _, err := ghclient.Teams.ListTeamMembers(ctx, team.GetID(), nil)
+	if err != nil {
+		return nil, err
+	}
+	usernames := make([]string, len(users))
+	for i, user := range users {
+		usernames[i] = "@" + user.GetLogin()
+	}
+	return usernames, nil
+}
+
+// Given a slice of groupedResources and a slice of approvers, populate the
+// groupedResourceApprovals struct on each grouped resource with the valid
+// approver if any. Also, keep track of whether each resource was approved.
+// Return the populated groupedResource slice as well as a bool set to true if all
+// resources were approved.
+func resourcesApproved(groupedResources []*groupedResource, groups map[string][]string, approvers []string) (bool, []*groupedResource) {
+	approvedResources := 0
+	var grApproved bool
+	var approvedNodeFiles int
+	for _, gr := range groupedResources {
+		grApproved = false
+		if gr.File != "" {
+			gr.Approvals.File = intersectionOwnersApprovers(gr.Owners.File, approvers, groups)
+			if len(gr.Approvals.File) > 0 {
+				grApproved = true
+			}
+		}
+		nodeFilesApprovers := make(map[string][]string)
+		approvedNodeFiles = 0
+		for _, nodeFile := range gr.NodeFiles {
+			nodeFilesApprovers[nodeFile] = intersectionOwnersApprovers(gr.Owners.NodeFiles[nodeFile], approvers, groups)
+			if len(nodeFilesApprovers[nodeFile]) > 0 {
+				approvedNodeFiles++
+			}
+		}
+		gr.Approvals.NodeFiles = nodeFilesApprovers
+		if grApproved {
+			approvedResources++
+		} else if (len(gr.NodeFiles) > 0) && (len(gr.NodeFiles) == approvedNodeFiles) {
+			approvedResources++
+		}
+	}
+	if len(groupedResources) == approvedResources {
+		return true, groupedResources
+	} else {
+		return false, groupedResources
+	}
+}
+
+// Given the owners of a resource, the mapping of group name to members, and
+// the approvers of the resource; return the intersection of the owners and
+// approvers, i.e. the valid approvers.
+func intersectionOwnersApprovers(owners []string, approvers []string, groups map[string][]string) []string {
+	intersection := make([]string, 0)
+	mapOwners := make(map[string]bool)
+	for _, owner := range owners {
+		if _, ok := groups[owner]; ok {
+			for _, user := range groups[owner] {
+				mapOwners[user] = true
+			}
+		} else {
+			mapOwners[owner] = true
+		}
+	}
+	for _, i := range approvers {
+		if _, ok := mapOwners[i]; ok {
+			intersection = append(intersection, i)
+		}
+	}
+	return intersection
 }
 
 func unlockAll(conf *HecklerdConf, logger *log.Logger) {
@@ -2307,6 +2583,66 @@ func thresholdExceeded(cur Thresholds, max Thresholds) (string, bool) {
 		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", cur.LockedNodes, max.LockedNodes), true
 	}
 	return "", false
+}
+
+// Return the most recent tag across all nodes in an environment
+func commonTag(conf *HecklerdConf, repo *git.Repository, logger *log.Logger) (string, error) {
+	var curThresholds Thresholds
+	curThresholds.ErrNodes = 0
+	curThresholds.LockedNodes = 0
+	nodesToDial, err := nodesFromSet(conf, "all", logger)
+	if err != nil {
+		logger.Fatalf("Unable to load 'all' node set: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
+	curThresholds.ErrNodes += len(errDialNodes)
+	if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
+		closeNodes(dialedNodes)
+		return "", errors.New(msg)
+	}
+	eligibleNodes, lockedByAnotherNodes, errEligibleNodes := eligibleNodes("root", dialedNodes)
+	curThresholds.LockedNodes += len(lockedByAnotherNodes)
+	curThresholds.ErrNodes += len(errEligibleNodes)
+	if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
+		closeNodes(dialedNodes)
+		return "", errors.New(msg)
+	}
+	lastApplyNodes, errUnknownRevNodes := nodeLastApply(eligibleNodes, repo, logger)
+	curThresholds.ErrNodes += len(errUnknownRevNodes)
+	if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
+		closeNodes(dialedNodes)
+		return "", errors.New(msg)
+	}
+	errNodes := make(map[string]error)
+	for host, err := range errDialNodes {
+		errNodes[host] = err
+	}
+	for host, err := range errEligibleNodes {
+		errNodes[host] = err
+	}
+	for host, err := range errUnknownRevNodes {
+		errNodes[host] = err
+	}
+	compressedErrNodes := compressErrorHosts(errNodes)
+	for host, err := range compressedErrNodes {
+		logger.Printf("errNodes: %s, %v", host, err)
+	}
+	compressedLockedByAnotherNodes := compressHostsStr(lockedByAnotherNodes)
+	for host, str := range compressedLockedByAnotherNodes {
+		logger.Printf("Locked by another: %s, %s", host, str)
+	}
+	commonTag, err := commonAncestorTag(lastApplyNodes, conf.EnvPrefix, repo, logger)
+	if err != nil {
+		closeNodes(dialedNodes)
+		return "", err
+	}
+	if commonTag == "" {
+		closeNodes(dialedNodes)
+		return "", errors.New("No common tag found, sleeping")
+	}
+	return commonTag, nil
 }
 
 //  Are there newer commits than our common last applied commit across "all"
@@ -2809,7 +3145,7 @@ func main() {
 		go noopLoop(conf, repo, templates)
 		go milestoneLoop(conf, repo)
 		go applyLoop(conf, repo)
-		go noopApprovalLoop(conf)
+		go noopApprovalLoop(conf, repo)
 		if conf.AutoTagCronSchedule != "" {
 			logger.Println("Starting tag loop")
 			c := cron.New()
