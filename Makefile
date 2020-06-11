@@ -30,6 +30,10 @@ docker-build: docker-build-image ## Build heckler via the container
 docker-vet: docker-build-image ## Vet heckler via the container
 	docker run --rm -v $(PWD):/home/builder/$(NAME) $(IMAGE) make -C /home/builder/$(NAME) vet
 
+.PHONY: docker-test
+docker-test: docker-build-image ## Test heckler via the container
+	docker run --rm -v $(PWD):/home/builder/$(NAME) $(IMAGE) make -C /home/builder/$(NAME) test
+
 .PHONY: docker-build-image
 docker-build-image: ## Build a docker image used for packaging
 	docker build --rm -t $(IMAGE) -t $(IMAGE_TAGGED) - < Dockerfile
@@ -63,6 +67,10 @@ build: vendor/github.com/libgit2/git2go/v30/static-build ## Build heckler, usual
 .PHONY: vet
 vet: ## Vet heckler, usually called inside the container
 	go vet ./...
+
+.PHONY: test
+test: ## Test heckler, usually called inside the container
+	go test ./...
 
 vendor/github.com/libgit2/git2go/v30/static-build: ## Build libgit2
 	./build-libgit2-static
