@@ -65,7 +65,7 @@ github.com/spf13/afero
 github.com/spf13/afero/mem
 # github.com/square/grange v0.0.0-20200108221412-2a4cb7b5b334
 github.com/square/grange
-# golang.org/x/crypto v0.0.0-20200317142112-1b76d66859c6
+# golang.org/x/crypto v0.0.0-20200604202706-70a84ac30bf9
 golang.org/x/crypto/bcrypt
 golang.org/x/crypto/blowfish
 golang.org/x/crypto/cast5
