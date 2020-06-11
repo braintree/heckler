@@ -1335,7 +1335,7 @@ func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue
 
 func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.Commit, groupedCommit []*groupedResource, templates *template.Template, logger *log.Logger) error {
 	prefix := conf.EnvPrefix
-	authors, err := commitAuthorsLogins(ghclient, commit, logger)
+	authors, err := commitAuthorsLogins(ghclient, commit)
 	if err != nil {
 		logger.Fatal(err)
 	}
@@ -1374,16 +1374,16 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 // Given a git commit return a slice of GitHub logins associated with the
 // commit author as well as any co-authors found in the commit message
 // trailers.
-func commitAuthorsLogins(ghclient *github.Client, commit *git.Commit, logger *log.Logger) ([]string, error) {
+func commitAuthorsLogins(ghclient *github.Client, commit *git.Commit) ([]string, error) {
 	githubUser, err := githubUserFromEmail(ghclient, commit.Author().Email)
 	if err != nil {
 		return []string{}, err
 	}
 	authors := make([]string, 0)
-	if githubUser != nil {
-		authors = append(authors, *githubUser.Login)
+	if githubUser == nil {
+		return nil, fmt.Errorf("Unable to find GitHub user for commit author email: '%s'", commit.Author().Email)
 	} else {
-		logger.Printf("Unable to find GitHub user for commit author email: '%s'", commit.Author().Email)
+		authors = append(authors, *githubUser.Login)
 	}
 	trailers, err := git.MessageTrailers(commit.Message())
 	if err != nil {
@@ -1403,7 +1403,11 @@ func commitAuthorsLogins(ghclient *github.Client, commit *git.Commit, logger *lo
 		if err != nil {
 			return []string{}, err
 		}
-		authors = append(authors, *githubUser.Login)
+		if githubUser == nil {
+			return nil, fmt.Errorf("Unable to find GitHub user for commit author email: '%s'", email[1])
+		} else {
+			authors = append(authors, *githubUser.Login)
+		}
 	}
 	return authors, nil
 }
