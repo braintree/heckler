@@ -683,7 +683,7 @@ func uniqueStrSlice(strSlice []string) []string {
 func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node) *groupedResource {
 	var nodeList []string
 	var desiredValue string
-	// XXX Remove this hack, only needed for old versions of puppet 4.5?
+	// TODO Remove this hack, only needed for old versions of puppet 4.5?
 	var regexRubySym = regexp.MustCompile(`^:`)
 	var gr *groupedResource
 	var ge *groupEvent
@@ -717,12 +717,12 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 		ge = new(groupEvent)
 
 		ge.PreviousValue = regexRubySym.ReplaceAllString(e.PreviousValue, "")
-		// XXX move base64 decode somewhere else
+		// TODO move base64 decode somewhere else
 		// also yell at puppet for this inconsistency!!!
 		if targetDeltaResource.Type == "File" && e.Property == "content" {
 			data, err := base64.StdEncoding.DecodeString(e.DesiredValue)
 			if err != nil {
-				// XXX nasty, fix?
+				// TODO nasty, fix?
 				desiredValue = e.DesiredValue
 			} else {
 				desiredValue = string(data[:])
@@ -2820,7 +2820,7 @@ func main() {
 		}
 	}
 
-	// XXX any reason to make this a separate goroutine?
+	// TODO any reason to make this a separate goroutine?
 	go func() {
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
