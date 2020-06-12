@@ -1353,17 +1353,17 @@ func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue
 	return err
 }
 
-func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.Commit, groupedCommit []*groupedResource, templates *template.Template, logger *log.Logger) error {
+func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.Commit, groupedCommit []*groupedResource, templates *template.Template) (*github.Issue, error) {
 	prefix := conf.EnvPrefix
 	authors, err := commitAuthorsLogins(ghclient, commit)
 	if err != nil {
-		logger.Fatal(err)
+		return nil, err
 	}
 	body := commitBodyToMarkdown(commit, conf, templates)
 	body += groupedResourcesToMarkdown(groupedCommit, commit, conf, templates)
 	noopOwnersMarkdown, err := noopOwnersToMarkdown(conf, commit, groupedCommit, templates)
 	if err != nil {
-		logger.Fatal(err)
+		return nil, err
 	}
 	body += noopOwnersMarkdown
 	githubIssue := &github.IssueRequest{
@@ -1374,10 +1374,9 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 	ctx := context.Background()
 	ni, _, err := ghclient.Issues.Create(ctx, conf.RepoOwner, conf.Repo, githubIssue)
 	if err != nil {
-		logger.Fatal(err)
+		return nil, err
 	}
-	logger.Printf("Successfully created new issue: '%v'", *ni.Title)
-	return nil
+	return ni, nil
 }
 
 // Given a git commit return a slice of GitHub logins associated with the
@@ -2770,11 +2769,12 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 				break
 			}
 			if issue == nil {
-				err = githubCreateIssue(ghclient, conf, commit, groupedCommit, templates, logger)
+				issue, err = githubCreateIssue(ghclient, conf, commit, groupedCommit, templates)
 				if err != nil {
 					logger.Printf("Unable to create github issue, sleeping: %v", err)
 					break
 				}
+				logger.Printf("Successfully created new issue: '%v'", issue)
 			}
 		}
 		closeNodes(dialedNodes)
