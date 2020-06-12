@@ -1,9 +1,0 @@
-No approvers were found for the node or resource files affected by this commit. Please update this repository's [CODEOWNERS](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/CODEOWNERS) file with an appropriate reviewer for the node files. Optionally owners may be added for the affected resource files as well:
-- *Node*
-{{- range $.NodeFiles }}
-  - [{{ . }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ . }})
-{{- end }}
-- *Resources*
-{{- range $.ResourceFiles }}
-  - [{{ . }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ . }})
-{{- end }}

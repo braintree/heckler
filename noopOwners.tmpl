@@ -1,0 +1,33 @@
+### Noop Approval Ownership
+
+#### Node Source Files
+
+{{- if gt (len $.NoopOwners.OwnedNodeFiles) 0 }}
+The following node file owners and optionally the resource source file owners may approve this noop.
+
+{{- range $file, $owners := $.NoopOwners.OwnedNodeFiles }}
+  - [{{ $file }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ $file }}): {{ $owners | join ", " }}
+{{- end }}
+{{- end }}
+{{- if gt (len $.NoopOwners.UnownedNodeFiles) 0 }}
+
+No approvers were found for the following node files affected by this commit. Please update this repository's [CODEOWNERS](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/CODEOWNERS) file with an appropriate reviewer for these node files:
+
+{{- range $file, $owners := $.NoopOwners.UnownedNodeFiles }}
+  - [{{ $file }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ $file }})
+{{- end }}
+{{- end }}
+{{- if or (gt (len $.NoopOwners.OwnedSourceFiles) 0) (gt (len $.NoopOwners.UnownedSourceFiles) 0) }}
+
+#### Resource Source Files
+
+Optionally if there are owners of the source files affecting this change they
+may approve this noop:
+
+{{- range $file, $owners := $.NoopOwners.OwnedSourceFiles }}
+  - [{{ $file }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ $file }}): {{ $owners | join ", " }}
+{{- end }}
+{{- range $file, $owners := $.NoopOwners.UnownedSourceFiles }}
+  - [{{ $file }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ $file }}): No owner
+{{- end }}
+{{- end }}

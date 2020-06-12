@@ -158,6 +158,13 @@ type groupedResourceApprovals struct {
 	NodeFiles map[string][]string
 }
 
+type noopOwners struct {
+	OwnedNodeFiles     map[string][]string
+	UnownedNodeFiles   map[string][]string
+	OwnedSourceFiles   map[string][]string
+	UnownedSourceFiles map[string][]string
+}
+
 type groupEvent struct {
 	PreviousValue string
 	DesiredValue  string
@@ -1354,6 +1361,11 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 	}
 	body := commitBodyToMarkdown(commit, conf, templates)
 	body += groupedResourcesToMarkdown(groupedCommit, commit, conf, templates)
+	noopOwnersMarkdown, err := noopOwnersToMarkdown(conf, commit, groupedCommit, templates)
+	if err != nil {
+		logger.Fatal(err)
+	}
+	body += noopOwnersMarkdown
 	githubIssue := &github.IssueRequest{
 		Title:     github.String(noopTitle(commit, prefix)),
 		Assignees: &authors,
@@ -1372,11 +1384,6 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 		}
 	} else if conf.AutoCloseIssues {
 		err := closeIssue(ghclient, conf, ni, "Auto close set, marking issue as 'closed'")
-		if err != nil {
-			logger.Fatal(err)
-		}
-	} else {
-		err = notifyApprovers(ghclient, conf, ni, commit, groupedCommit, templates, logger)
 		if err != nil {
 			logger.Fatal(err)
 		}
@@ -1425,52 +1432,34 @@ func commitAuthorsLogins(ghclient *github.Client, commit *git.Commit) ([]string,
 	return authors, nil
 }
 
-func notifyApprovers(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, commit *git.Commit, groupedCommit []*groupedResource, templates *template.Template, logger *log.Logger) error {
-	nodeApprovers, nodeFiles, err := approversFromNodes(groupedCommit)
+// Given a commit and groupedResources returns a markdown string showing the
+// owners of noop
+func noopOwnersToMarkdown(conf *HecklerdConf, commit *git.Commit, groupedResources []*groupedResource, templates *template.Template) (string, error) {
+	var err error
+	groupedResources, err = groupedResourcesNodeFiles(groupedResources, workRepo)
 	if err != nil {
-		return err
+		return "", err
 	}
-	resourceApprovers, resourceFiles, err := approversFromResources(groupedCommit)
+	groupedResources, err = groupedResourcesOwners(groupedResources, workRepo)
 	if err != nil {
-		return err
+		return "", err
 	}
-	approvers := make([]string, len(nodeApprovers))
-	copy(approvers, nodeApprovers)
-	approvers = append(approvers, resourceApprovers...)
-	approvers = uniqueStrSlice(approvers)
+	no := groupedResourcesUniqueOwners(groupedResources)
 	data := struct {
-		Commit        *git.Commit
-		Conf          *HecklerdConf
-		Approvers     []string
-		NodeFiles     []string
-		ResourceFiles []string
+		Commit     *git.Commit
+		Conf       *HecklerdConf
+		NoopOwners noopOwners
 	}{
 		commit,
 		conf,
-		approvers,
-		nodeFiles,
-		resourceFiles,
-	}
-	var tmpl string
-	if len(approvers) > 0 {
-		tmpl = "issueApprovers.tmpl"
-	} else {
-		tmpl = "issueApproversUnknown.tmpl"
+		no,
 	}
 	var body strings.Builder
-	err = templates.ExecuteTemplate(&body, tmpl, data)
+	err = templates.ExecuteTemplate(&body, "noopOwners.tmpl", data)
 	if err != nil {
-		return err
+		return "", err
 	}
-	comment := &github.IssueComment{
-		Body: github.String(body.String()),
-	}
-	ctx := context.Background()
-	_, _, err = ghclient.Issues.CreateComment(ctx, conf.RepoOwner, conf.Repo, *issue.Number, comment)
-	if err != nil {
-		return err
-	}
-	return nil
+	return body.String(), nil
 }
 
 // nodeFile takes node name and a map of a puppet node source file to its node
@@ -1485,54 +1474,6 @@ func nodeFile(node string, nodeFileRegexes map[string][]*regexp.Regexp, puppetCo
 		}
 	}
 	return "", fmt.Errorf("Unable to find node file for node: %v", node)
-}
-
-func approversFromResources(groupedResources []*groupedResource) ([]string, []string, error) {
-	co, err := codeowners.NewCodeowners(workRepo)
-	if err != nil {
-		return []string{}, []string{}, err
-	}
-	approvers := make([]string, 0)
-	files := make([]string, 0)
-	for _, gr := range groupedResources {
-		if gr.File != "" {
-			owners := co.Owners(gr.File)
-			approvers = append(approvers, owners...)
-			files = append(files, gr.File)
-		}
-	}
-	return uniqueStrSlice(approvers), files, nil
-}
-
-func approversFromNodes(groupedCommit []*groupedResource) ([]string, []string, error) {
-	nodes := make([]string, 0)
-	for _, gr := range groupedCommit {
-		nodes = append(nodes, gr.Nodes...)
-	}
-	nodes = uniqueStrSlice(nodes)
-	co, err := codeowners.NewCodeowners(workRepo)
-	if err != nil {
-		return []string{}, []string{}, err
-	}
-	nodeFileRegexes, err := puppetutil.NodeFileRegexes(workRepo + "/nodes")
-	if err != nil {
-		return []string{}, []string{}, err
-	}
-	nodesToFile := make(map[string]string)
-	for _, node := range nodes {
-		nodesToFile[node], err = nodeFile(node, nodeFileRegexes, workRepo)
-		if err != nil {
-			return []string{}, []string{}, err
-		}
-	}
-	approvers := make([]string, 0)
-	files := make([]string, 0)
-	for _, file := range nodesToFile {
-		owners := co.Owners(file)
-		approvers = append(approvers, owners...)
-		files = append(files, file)
-	}
-	return uniqueStrSlice(approvers), files, nil
 }
 
 func noopTitle(commit *git.Commit, prefix string) string {
@@ -2137,6 +2078,42 @@ func groupedResourcesOwners(groupedResources []*groupedResource, puppetCodePath 
 		}
 	}
 	return groupedResources, nil
+}
+
+// Given a slice of groupedResources return a noopOwners struct with a unique
+// set of owned node files and source code files. As well as the complementary
+// unique set of unowned node files and source code files.
+func groupedResourcesUniqueOwners(groupedResources []*groupedResource) noopOwners {
+	no := noopOwners{}
+	no.OwnedSourceFiles = make(map[string][]string)
+	no.OwnedNodeFiles = make(map[string][]string)
+	no.UnownedSourceFiles = make(map[string][]string)
+	no.UnownedNodeFiles = make(map[string][]string)
+	for _, gr := range groupedResources {
+		for nodeFile, owners := range gr.Owners.NodeFiles {
+			if len(owners) > 0 {
+				if _, ok := no.OwnedNodeFiles[nodeFile]; !ok {
+					no.OwnedNodeFiles[nodeFile] = owners
+				}
+			} else {
+				if _, ok := no.UnownedNodeFiles[nodeFile]; !ok {
+					no.UnownedNodeFiles[nodeFile] = owners
+				}
+			}
+		}
+		if gr.File != "" {
+			if len(gr.Owners.File) > 0 {
+				if _, ok := no.OwnedSourceFiles[gr.File]; !ok {
+					no.OwnedSourceFiles[gr.File] = gr.Owners.File
+				}
+			} else {
+				if _, ok := no.UnownedSourceFiles[gr.File]; !ok {
+					no.UnownedSourceFiles[gr.File] = gr.Owners.File
+				}
+			}
+		}
+	}
+	return no
 }
 
 // Given a github issue return the set of github logins which have approved the issue
