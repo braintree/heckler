@@ -1377,17 +1377,6 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 		logger.Fatal(err)
 	}
 	logger.Printf("Successfully created new issue: '%v'", *ni.Title)
-	if len(groupedCommit) == 0 {
-		err := closeIssue(ghclient, conf, ni, "No noop output marking issue as 'closed'")
-		if err != nil {
-			logger.Fatal(err)
-		}
-	} else if conf.AutoCloseIssues {
-		err := closeIssue(ghclient, conf, ni, "Auto close set, marking issue as 'closed'")
-		if err != nil {
-			logger.Fatal(err)
-		}
-	}
 	return nil
 }
 
@@ -1952,16 +1941,39 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 			if issue == nil {
 				continue
 			}
-			noopApproved, err := noopApproved(ghclient, conf, commit, issue)
+			groupedResources, err := unmarshalGroupedCommit(commit.Id(), groupedNoopDir)
+			if os.IsNotExist(err) {
+				continue
+			} else if err != nil {
+				logger.Printf("Unable to unmarshal grouped resources: %v", err)
+				continue
+			}
+			if issue.GetState() == "closed" {
+				continue
+			}
+			if len(groupedResources) == 0 {
+				err := closeIssue(ghclient, conf, issue, "No noop output marking issue as 'closed'")
+				if err != nil {
+					logger.Printf("Unable to close approved issue(%d): %v", issue.GetNumber(), err)
+					continue
+				}
+				continue
+			}
+			if conf.AutoCloseIssues {
+				err := closeIssue(ghclient, conf, issue, "Auto close set, marking issue as 'closed'")
+				if err != nil {
+					logger.Printf("Unable to close approved issue(%d): %v", issue.GetNumber(), err)
+					continue
+				}
+				continue
+			}
+			noopApproved, err := noopApproved(ghclient, conf, groupedResources, commit, issue)
 			if err != nil {
 				logger.Printf("Unable to determine if issue(%d) is approved: %v", issue.Number, err)
 				continue
 			}
 			if noopApproved {
-				if issue.GetState() == "closed" {
-					continue
-				}
-				err := closeIssue(ghclient, conf, issue, "Issue has been approved, closing")
+				err := closeIssue(ghclient, conf, issue, "Issue has been approved, marking issue as 'closed'")
 				if err != nil {
 					logger.Printf("Unable to close approved issue(%d): %v", issue.GetNumber(), err)
 					continue
@@ -1971,15 +1983,11 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 	}
 }
 
-// Given a commit & associated github issue check if each grouped resource has
-// been approved by a valid approver, excluding authors of the commit
-func noopApproved(ghclient *github.Client, conf *HecklerdConf, commit *git.Commit, issue *github.Issue) (bool, error) {
-	groupedResources, err := unmarshalGroupedCommit(commit.Id(), groupedNoopDir)
-	if os.IsNotExist(err) {
-		return false, fmt.Errorf("No marshaled groupedCommit file found for %s", commit.Id())
-	} else if err != nil {
-		return false, err
-	}
+// Given a commit, the associated github issue, and the groupedResources check
+// if each grouped resource has been approved by a valid approver, exclude
+// authors of the commit in the approvers set.
+func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources []*groupedResource, commit *git.Commit, issue *github.Issue) (bool, error) {
+	var err error
 	groupedResources, err = groupedResourcesNodeFiles(groupedResources, workRepo)
 	if err != nil {
 		return false, err
