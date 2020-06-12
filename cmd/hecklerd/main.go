@@ -1935,7 +1935,7 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 		for gi, commit := range commits {
 			issue, err := githubIssueFromCommit(ghclient, gi, conf)
 			if err != nil {
-				logger.Printf("Unable to determine if issues exists: %s", gi.String())
+				logger.Printf("Unable to determine if issue exists: %s", gi.String())
 				continue
 			}
 			if issue == nil {
@@ -2544,7 +2544,7 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 		for _, gi := range commitLogIds {
 			issue, err := githubIssueFromCommit(ghclient, gi, conf)
 			if err != nil {
-				logger.Fatalf("Unable to determine if issues exists: %s", gi.String())
+				logger.Fatalf("Unable to determine if issue exists: %s", gi.String())
 			}
 			if issue != nil {
 				issueMilestone := issue.GetMilestone()
