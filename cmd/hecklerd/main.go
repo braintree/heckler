@@ -2564,13 +2564,15 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 	}
 }
 
+// Given two node Threshold structs return a bool and a message indicating
+// whether the first threshold exceeded the second.
 func thresholdExceeded(cur Thresholds, max Thresholds) (string, bool) {
 	if cur.ErrNodes > max.ErrNodes {
 		return fmt.Sprintf("Error nodes(%d) exceeds the threshold(%d)", cur.ErrNodes, max.ErrNodes), true
 	} else if cur.LockedNodes > max.LockedNodes {
 		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", cur.LockedNodes, max.LockedNodes), true
 	}
-	return "", false
+	return "Thresholds not exceeded", false
 }
 
 // Return the most recent tag across all nodes in an environment
