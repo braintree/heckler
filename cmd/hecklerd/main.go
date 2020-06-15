@@ -2842,8 +2842,11 @@ func commitInAllNodeLineages(commit git.Oid, nodes map[string]*Node, repo *git.R
 	return commitInLineages
 }
 
+// Given a set of Node structs with their lastApply value populated, an
+// environment prefix, and a git repository. Determine if there is a common git
+// tag among the Nodes. If there is a common tag return the most recent one.
 func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Repository, logger *log.Logger) (string, error) {
-	// get set of tags
+	// Calculate the set of tags to Node slice
 	tagNodes := make(map[string][]string)
 	for _, node := range nodes {
 		tagStr, err := describeCommit(node.lastApply, prefix, repo)
@@ -2873,7 +2876,7 @@ func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Reposito
 		return "", err
 	}
 
-	// return the earliest version from the set, which should be the common
+	// Return the earliest version from the set, which should be the common
 	// ancestor tag for all nodes
 	return semverToOrig(tagSet[0], prefix), nil
 }
