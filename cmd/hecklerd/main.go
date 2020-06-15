@@ -2571,32 +2571,31 @@ func thresholdExceeded(cur Thresholds, max Thresholds) (string, bool) {
 
 // Return the most recent tag across all nodes in an environment
 func commonTag(conf *HecklerdConf, repo *git.Repository, nodeSet string, logger *log.Logger) (string, error) {
-	var curThresholds Thresholds
-	curThresholds.ErrNodes = 0
-	curThresholds.LockedNodes = 0
+	curThresholds := Thresholds{
+		ErrNodes:    0,
+		LockedNodes: 0,
+	}
 	nodesToDial, err := nodesFromSet(conf, nodeSet, logger)
 	if err != nil {
-		logger.Fatalf("Unable to load 'all' node set: %v", err)
+		return "", err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
+	defer closeNodes(dialedNodes)
 	curThresholds.ErrNodes += len(errDialNodes)
 	if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
-		closeNodes(dialedNodes)
 		return "", errors.New(msg)
 	}
 	eligibleNodes, lockedByAnotherNodes, errEligibleNodes := eligibleNodes("root", dialedNodes)
 	curThresholds.LockedNodes += len(lockedByAnotherNodes)
 	curThresholds.ErrNodes += len(errEligibleNodes)
 	if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
-		closeNodes(dialedNodes)
 		return "", errors.New(msg)
 	}
 	lastApplyNodes, errUnknownRevNodes := nodeLastApply(eligibleNodes, repo, logger)
 	curThresholds.ErrNodes += len(errUnknownRevNodes)
 	if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
-		closeNodes(dialedNodes)
 		return "", errors.New(msg)
 	}
 	errNodes := make(map[string]error)
@@ -2619,11 +2618,9 @@ func commonTag(conf *HecklerdConf, repo *git.Repository, nodeSet string, logger 
 	}
 	commonTag, err := commonAncestorTag(lastApplyNodes, conf.EnvPrefix, repo, logger)
 	if err != nil {
-		closeNodes(dialedNodes)
 		return "", err
 	}
 	if commonTag == "" {
-		closeNodes(dialedNodes)
 		return "", errors.New("No common tag found, sleeping")
 	}
 	return commonTag, nil
