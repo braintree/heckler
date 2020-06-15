@@ -1912,7 +1912,7 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 	logger := log.New(os.Stdout, "[noopApprovalLoop] ", log.Lshortfile)
 	for {
 		time.Sleep(10 * time.Second)
-		commonTag, err := commonTag(conf, repo, logger)
+		commonTag, err := commonTag(conf, repo, "all", logger)
 		if err != nil {
 			logger.Printf("Unable to query for commonTag: %v", err)
 			continue
@@ -2570,11 +2570,11 @@ func thresholdExceeded(cur Thresholds, max Thresholds) (string, bool) {
 }
 
 // Return the most recent tag across all nodes in an environment
-func commonTag(conf *HecklerdConf, repo *git.Repository, logger *log.Logger) (string, error) {
+func commonTag(conf *HecklerdConf, repo *git.Repository, nodeSet string, logger *log.Logger) (string, error) {
 	var curThresholds Thresholds
 	curThresholds.ErrNodes = 0
 	curThresholds.LockedNodes = 0
-	nodesToDial, err := nodesFromSet(conf, "all", logger)
+	nodesToDial, err := nodesFromSet(conf, nodeSet, logger)
 	if err != nil {
 		logger.Fatalf("Unable to load 'all' node set: %v", err)
 	}
