@@ -2434,6 +2434,10 @@ func tagIssuesReviewed(repo *git.Repository, ghclient *github.Client, conf *Heck
 	return true, nil
 }
 
+// Given nodes and a user this function returns the combined set of unlocked nodes and
+// nodes locked by the provided user. These combined nodes are eligible to be queried by
+// us for their status, since they are not locked by another user, or returning an
+// error.
 func eligibleNodes(user string, nodes map[string]*Node) (map[string]*Node, map[string]string, map[string]error) {
 	lockedNodes, unlockedNodes, lockedByAnotherNodes, errLockNodes := nodesLockState(user, nodes)
 	eligibleNodes := make(map[string]*Node)
