@@ -39,7 +39,7 @@ RUN make install
 ENV CC=/usr/local/musl/bin/musl-gcc
 
 WORKDIR /usr/local
-RUN curl -Ls https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-3.0.2.tar.gz | tar -xz
+RUN curl -Ls https://mirror.planetunix.net/pub/OpenBSD/LibreSSL/libressl-3.0.2.tar.gz | tar -xz
 WORKDIR libressl-3.0.2
 RUN ./configure --with-openssldir=/etc/ssl
 RUN make install
