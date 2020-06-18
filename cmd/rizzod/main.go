@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
+	"github.braintreeps.com/lollipopman/heckler/internal/heckler"
 	"github.braintreeps.com/lollipopman/heckler/internal/rizzopb"
 	"github.com/lollipopman/luser"
 	"gopkg.in/yaml.v3"
@@ -29,27 +30,12 @@ import (
 
 var Version string
 
-type lockStatus int
-
-const (
-	lockUnknown lockStatus = iota
-	lockedByUser
-	lockedByAnother
-	unlocked
-)
-
 const (
 	port     = ":50051"
 	stateDir = "/var/lib/rizzod"
 	repoDir  = stateDir + "/repo/puppetcode"
 	lockPath = "/var/tmp/puppet.lock"
 )
-
-type lockState struct {
-	lockStatus
-	user    string
-	comment string
-}
 
 // server is used to implement rizzo.RizzoServer.
 type rizzoServer struct {
@@ -114,7 +100,7 @@ func (s *rizzoServer) PuppetLastApply(ctx context.Context, req *rizzopb.PuppetLa
 
 func (s *rizzoServer) PuppetLock(ctx context.Context, req *rizzopb.PuppetLockRequest) (*rizzopb.PuppetLockReport, error) {
 	log.Printf("PuppetLock: request received, %v", req)
-	var li lockState
+	var li heckler.LockState
 	var err error
 	switch req.Type {
 	case rizzopb.LockReqType_lock:
@@ -137,50 +123,50 @@ func (s *rizzoServer) PuppetLock(ctx context.Context, req *rizzopb.PuppetLockReq
 	return res, nil
 }
 
-func lockStateToReport(lockState lockState) *rizzopb.PuppetLockReport {
+func lockStateToReport(lockState heckler.LockState) *rizzopb.PuppetLockReport {
 	res := new(rizzopb.PuppetLockReport)
-	switch lockState.lockStatus {
-	case lockUnknown:
+	switch lockState.LockStatus {
+	case heckler.LockUnknown:
 		res.LockStatus = rizzopb.LockStatus_lock_unknown
-	case lockedByUser:
+	case heckler.LockedByUser:
 		res.LockStatus = rizzopb.LockStatus_locked_by_user
-	case lockedByAnother:
+	case heckler.LockedByAnother:
 		res.LockStatus = rizzopb.LockStatus_locked_by_another
-	case unlocked:
+	case heckler.Unlocked:
 		res.LockStatus = rizzopb.LockStatus_unlocked
 	default:
-		log.Fatal("Unknown lockStatus!")
+		log.Fatal("Unknown LockStatus!")
 	}
-	res.Comment = lockState.comment
-	res.User = lockState.user
+	res.Comment = lockState.Comment
+	res.User = lockState.User
 	return res
 }
 
-func puppetLockState(reqUser string) (lockState, error) {
-	var li lockState
+func puppetLockState(reqUser string) (heckler.LockState, error) {
+	var li heckler.LockState
 	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
-		li.lockStatus = unlocked
+		li.LockStatus = heckler.Unlocked
 		return li, nil
 	}
 	lockOwner, err := lockOwner()
 	if err != nil {
 		return li, nil
 	}
-	li.user = lockOwner.Username
-	li.comment, err = lockComment()
+	li.User = lockOwner.Username
+	li.Comment, err = lockComment()
 	if err != nil {
 		return li, nil
 	}
 	if reqUser == lockOwner.Username {
-		li.lockStatus = lockedByUser
+		li.LockStatus = heckler.LockedByUser
 	} else {
-		li.lockStatus = lockedByAnother
+		li.LockStatus = heckler.LockedByAnother
 	}
 	return li, nil
 }
 
-func puppetLock(locker string, comment string, forceLock bool) (lockState, error) {
-	var li lockState
+func puppetLock(locker string, comment string, forceLock bool) (heckler.LockState, error) {
+	var li heckler.LockState
 	tmpfile, err := ioutil.TempFile("/var/tmp", "rizzoPuppetLockTmpFile.*")
 	if err != nil {
 		return li, err
@@ -219,28 +205,28 @@ func puppetLock(locker string, comment string, forceLock bool) (lockState, error
 		if err != nil {
 			return li, err
 		} else {
-			li.lockStatus = lockedByUser
+			li.LockStatus = heckler.LockedByUser
 			return li, nil
 		}
 	}
 
 	err = renameAndCheck(tmpfile.Name(), lockPath)
 	if errors.Is(err, os.ErrExist) {
-		li.lockStatus = lockedByAnother
+		li.LockStatus = heckler.LockedByAnother
 		lockOwner, err := lockOwner()
 		if err != nil {
 			return li, err
 		}
-		li.user = lockOwner.Username
-		li.comment, err = lockComment()
+		li.User = lockOwner.Username
+		li.Comment, err = lockComment()
 		if err != nil {
 			return li, err
 		}
 		return li, nil
 	} else {
-		li.user = locker
-		li.comment = comment
-		li.lockStatus = lockedByUser
+		li.User = locker
+		li.Comment = comment
+		li.LockStatus = heckler.LockedByUser
 		return li, nil
 	}
 }
@@ -268,10 +254,10 @@ func renameAndCheck(src, dst string) error {
 	return os.Remove(src)
 }
 
-func puppetUnlock(unlocker string, forceUnlock bool) (lockState, error) {
-	var li lockState
+func puppetUnlock(unlocker string, forceUnlock bool) (heckler.LockState, error) {
+	var li heckler.LockState
 	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
-		li.lockStatus = unlocked
+		li.LockStatus = heckler.Unlocked
 		return li, nil
 	}
 	lockOwner, err := lockOwner()
@@ -283,14 +269,14 @@ func puppetUnlock(unlocker string, forceUnlock bool) (lockState, error) {
 		if err != nil {
 			return li, err
 		}
-		li.lockStatus = unlocked
+		li.LockStatus = heckler.Unlocked
 	} else {
-		li.user = lockOwner.Username
-		li.comment, err = lockComment()
+		li.User = lockOwner.Username
+		li.Comment, err = lockComment()
 		if err != nil {
 			return li, nil
 		}
-		li.lockStatus = lockedByAnother
+		li.LockStatus = heckler.LockedByAnother
 	}
 	return li, nil
 }

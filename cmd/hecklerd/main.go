@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
+	"github.braintreeps.com/lollipopman/heckler/internal/heckler"
 	"github.braintreeps.com/lollipopman/heckler/internal/hecklerpb"
 	"github.braintreeps.com/lollipopman/heckler/internal/puppetutil"
 	"github.braintreeps.com/lollipopman/heckler/internal/rizzopb"
@@ -45,6 +46,7 @@ import (
 
 var Version string
 var ErrLastApplyUnknown = errors.New("Unable to determine lastApply commit, use force flag to update")
+var ErrThresholdExceeded = errors.New("Threshold for err nodes or lock nodes exceeded")
 
 const (
 	ApplicationName = "git-cgi-server"
@@ -67,26 +69,40 @@ var Debug = false
 var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 
 type HecklerdConf struct {
-	Repo                 string             `yaml:"repo"`
-	RepoOwner            string             `yaml:"repo_owner"`
-	GitHubDomain         string             `yaml:"github_domain"`
-	GitHubPrivateKeyPath string             `yaml:"github_private_key_path"`
-	GitHubAppSlug        string             `yaml:"github_app_slug"`
-	GitHubAppId          int64              `yaml:"github_app_id"`
-	GitHubAppInstallId   int64              `yaml:"github_app_install_id"`
-	NodeSets             map[string]NodeSet `yaml:"node_sets"`
-	AutoTagCronSchedule  string             `yaml:"auto_tag_cron_schedule"`
-	AutoCloseIssues      bool               `yaml:"auto_close_issues"`
-	EnvPrefix            string             `yaml:"env_prefix"`
-	MaxThresholds        Thresholds         `yaml:"max_thresholds"`
-	GitServerMaxClients  int                `yaml:"git_server_max_clients"`
-	ManualMode           bool               `yaml:"manual_mode"`
-	LockMessage          string             `yaml:"lock_message"`
+	Repo                 string                `yaml:"repo"`
+	RepoOwner            string                `yaml:"repo_owner"`
+	GitHubDomain         string                `yaml:"github_domain"`
+	GitHubPrivateKeyPath string                `yaml:"github_private_key_path"`
+	GitHubAppSlug        string                `yaml:"github_app_slug"`
+	GitHubAppId          int64                 `yaml:"github_app_id"`
+	GitHubAppInstallId   int64                 `yaml:"github_app_install_id"`
+	NodeSets             map[string]NodeSetCfg `yaml:"node_sets"`
+	AutoTagCronSchedule  string                `yaml:"auto_tag_cron_schedule"`
+	AutoCloseIssues      bool                  `yaml:"auto_close_issues"`
+	EnvPrefix            string                `yaml:"env_prefix"`
+	MaxThresholds        Thresholds            `yaml:"max_thresholds"`
+	GitServerMaxClients  int                   `yaml:"git_server_max_clients"`
+	ManualMode           bool                  `yaml:"manual_mode"`
+	LockMessage          string                `yaml:"lock_message"`
+}
+
+type NodeSetCfg struct {
+	Cmd       []string `yaml:"cmd"`
+	Blacklist []string `yaml:"blacklist"`
 }
 
 type NodeSet struct {
-	Cmd       []string `yaml:"cmd"`
-	Blacklist []string `yaml:"blacklist"`
+	name       string
+	commonTag  string
+	thresholds Thresholds
+	nodes      Nodes
+}
+
+type Nodes struct {
+	active  map[string]*Node
+	dialed  map[string]*Node
+	errored map[string]*Node
+	locked  map[string]*Node
 }
 
 type Thresholds struct {
@@ -110,6 +126,7 @@ type Node struct {
 	grpcConn             *grpc.ClientConn
 	lastApply            git.Oid
 	err                  error
+	lockState            heckler.LockState
 }
 
 type applyResult struct {
@@ -375,22 +392,18 @@ func unmarshalGroupedCommit(oid *git.Oid, groupedNoopDir string) ([]*groupedReso
 	return groupedCommit, nil
 }
 
-func noopCommit(reqNodes map[string]*Node, commit *git.Commit, deltaNoop bool, repo *git.Repository, logger *log.Logger) ([]*groupedResource, map[string]*Node, error) {
+func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, logger *log.Logger) ([]*groupedResource, error) {
 	var err error
 
-	nodes := make(map[string]*Node)
-	for k, v := range reqNodes {
-		nodes[k] = v
-	}
-	for host, _ := range nodes {
+	for host, _ := range ns.nodes.active {
 		os.Mkdir(noopDir+"/"+host, 0755)
 	}
 
 	// TODO: if we are only requesting a single noop via heckler, we probably
 	// always want to noop, rather than returning an empty noop if the commit is
 	// not part of a nodes lineage.
-	if !commitInAllNodeLineages(*commit.Id(), nodes, repo) {
-		return make([]*groupedResource, 0), nil, nil
+	if !commitInAllNodeLineages(*commit.Id(), ns.nodes.active, repo, logger) {
+		return make([]*groupedResource, 0), nil
 	}
 
 	commitsToNoop := make([]git.Oid, 0)
@@ -398,10 +411,10 @@ func noopCommit(reqNodes map[string]*Node, commit *git.Commit, deltaNoop bool, r
 
 	parentCount := commit.ParentCount()
 	for i := uint(0); i < parentCount; i++ {
-		if deltaNoop && commitInAllNodeLineages(*commit.ParentId(i), nodes, repo) {
+		if deltaNoop && commitInAllNodeLineages(*commit.ParentId(i), ns.nodes.active, repo, logger) {
 			commitsToNoop = append(commitsToNoop, *commit.ParentId(i))
 		} else {
-			for _, node := range nodes {
+			for _, node := range ns.nodes.active {
 				node.commitReports[*commit.ParentId(i)] = &rizzopb.PuppetReport{}
 				node.commitDeltaResources[*commit.ParentId(i)] = make(map[ResourceTitle]*deltaResource)
 			}
@@ -415,7 +428,7 @@ func noopCommit(reqNodes map[string]*Node, commit *git.Commit, deltaNoop bool, r
 	for i, commitToNoop := range commitsToNoop {
 		logger.Printf("Nooping: %s (%d of %d)", commitToNoop.String(), i+1, len(commitsToNoop))
 		noopHosts := make(map[string]bool)
-		for _, node := range nodes {
+		for _, node := range ns.nodes.active {
 			// PERMA-DIFF: We need a noop report of the last applied commit so we can
 			// use it to subtract away perma-diffs from children.
 			if commitToNoop != *commit.Id() && commitAlreadyApplied(node.lastApply, commitToNoop, repo) {
@@ -424,7 +437,7 @@ func noopCommit(reqNodes map[string]*Node, commit *git.Commit, deltaNoop bool, r
 				nodeCommitToNoop = commitToNoop
 			}
 			if rprt, err = loadNoop(nodeCommitToNoop, node, noopDir, repo, logger); err == nil {
-				nodes[node.host].commitReports[nodeCommitToNoop] = rprt
+				ns.nodes.active[node.host].commitReports[nodeCommitToNoop] = rprt
 			} else if os.IsNotExist(err) {
 				par := rizzopb.PuppetApplyRequest{Rev: nodeCommitToNoop.String(), Noop: true}
 				go hecklerApply(node, puppetReportChan, par)
@@ -441,10 +454,10 @@ func noopCommit(reqNodes map[string]*Node, commit *git.Commit, deltaNoop bool, r
 			logger.Printf("Waiting for (%d) outstanding noop requests: %s", noopRequests-j, compressHostsMap(noopHosts))
 			r := <-puppetReportChan
 			if r.err != nil {
-				nodes[r.host].err = fmt.Errorf("Noop failed for %s: %w", r.host, r.err)
-				errNoopNodes[r.host] = nodes[r.host]
+				ns.nodes.active[r.host].err = fmt.Errorf("Noop failed for %s: %w", r.host, r.err)
+				errNoopNodes[r.host] = ns.nodes.active[r.host]
 				logger.Println(errNoopNodes[r.host].err)
-				delete(nodes, r.host)
+				delete(ns.nodes.active, r.host)
 				delete(noopHosts, r.host)
 				continue
 			}
@@ -455,7 +468,7 @@ func noopCommit(reqNodes map[string]*Node, commit *git.Commit, deltaNoop bool, r
 			if err != nil {
 				logger.Fatalf("Unable to marshal report: %v", err)
 			}
-			nodes[newRprt.Host].commitReports[*commitId] = &newRprt
+			ns.nodes.active[newRprt.Host].commitReports[*commitId] = &newRprt
 			err = marshalReport(newRprt, noopDir, *commitId)
 			if err != nil {
 				logger.Fatalf("Unable to marshal report: %v", err)
@@ -463,7 +476,7 @@ func noopCommit(reqNodes map[string]*Node, commit *git.Commit, deltaNoop bool, r
 		}
 	}
 
-	for _, node := range nodes {
+	for _, node := range ns.nodes.active {
 		// PERMA-DIFF: If the commit is already applied we can assume that the
 		// delta of resources is empty. NOTE: Ideally we would not need this
 		// special case as the noop for an already applied commit should be empty,
@@ -480,12 +493,17 @@ func noopCommit(reqNodes map[string]*Node, commit *git.Commit, deltaNoop bool, r
 
 	logger.Printf("Grouping: %s", commit.Id().String())
 	groupedCommit := make([]*groupedResource, 0)
-	for _, node := range nodes {
+	for _, node := range ns.nodes.active {
 		for _, nodeDeltaRes := range node.commitDeltaResources[*commit.Id()] {
-			groupedCommit = append(groupedCommit, groupResources(*commit.Id(), nodeDeltaRes, nodes))
+			groupedCommit = append(groupedCommit, groupResources(*commit.Id(), nodeDeltaRes, ns.nodes.active))
 		}
 	}
-	return groupedCommit, errNoopNodes, nil
+	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errNoopNodes)
+	if msg, ok := thresholdExceededNodeSet(ns); ok {
+		logger.Printf("%s", msg)
+		return nil, ErrThresholdExceeded
+	}
+	return groupedCommit, nil
 }
 
 func priorEvent(event *rizzopb.Event, resourceTitleStr string, priorCommitNoops []*rizzopb.PuppetReport) bool {
@@ -665,6 +683,22 @@ func compressErrorNodes(nodes map[string]*Node) map[string]error {
 		compressedHostErr[compressHosts(hosts)] = fmt.Errorf("Error: %s", errType)
 	}
 	return compressedHostErr
+}
+
+func compressLockNodes(nodes map[string]*Node) map[string]string {
+	lockedHosts := make(map[heckler.LockState][]string)
+	for host, node := range nodes {
+		if hosts, ok := lockedHosts[node.lockState]; ok {
+			lockedHosts[node.lockState] = append(hosts, host)
+		} else {
+			lockedHosts[node.lockState] = []string{host}
+		}
+	}
+	compressedHostStr := make(map[string]string)
+	for ls, hosts := range lockedHosts {
+		compressedHostStr[compressHosts(hosts)] = fmt.Sprintf("%s: %s", ls.User, ls.Comment)
+	}
+	return compressedHostStr
 }
 
 func compressHostsStr(hostsStr map[string]string) map[string]string {
@@ -880,18 +914,34 @@ func parseTemplates() *template.Template {
 	return template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob(templatesPath))
 }
 
-func reqNodes(conf *HecklerdConf, nodes []string, nodeSetName string, logger *log.Logger) ([]string, error) {
-	if len(nodes) > 0 {
-		return nodes, nil
+func dialReqNodes(conf *HecklerdConf, hosts []string, nodeSetName string, logger *log.Logger) (*NodeSet, error) {
+	var hostsToDial []string
+	var err error
+	ns := &NodeSet{}
+	if len(hosts) > 0 {
+		hostsToDial = hosts
+	} else {
+		ns.name = nodeSetName
+		hostsToDial, err = setNameToNodes(conf, nodeSetName, logger)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return nodesFromSet(conf, nodeSetName, logger)
+	// Disable thresholds for a heckler client request
+	ns.thresholds.ErrNodes = len(hostsToDial)
+	ns.thresholds.LockedNodes = len(hostsToDial)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	ns.nodes.dialed, ns.nodes.errored = dialNodes(ctx, hostsToDial)
+	ns.nodes.active = ns.nodes.dialed
+	return ns, nil
 }
 
-func nodesFromSet(conf *HecklerdConf, nodeSetName string, logger *log.Logger) ([]string, error) {
+func setNameToNodes(conf *HecklerdConf, nodeSetName string, logger *log.Logger) ([]string, error) {
 	if nodeSetName == "" {
 		return nil, errors.New("Empty nodeSetName provided")
 	}
-	var nodeSet NodeSet
+	var nodeSet NodeSetCfg
 	var ok bool
 	if nodeSet, ok = conf.NodeSets[nodeSetName]; !ok {
 		return nil, errors.New(fmt.Sprintf("nodeSetName '%s' not found in hecklerd config", nodeSetName))
@@ -956,66 +1006,76 @@ func mergeNodeMaps(nodeMaps ...map[string]*Node) map[string]*Node {
 }
 
 func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.HecklerApplyRequest) (*hecklerpb.HecklerApplyReport, error) {
+	var err error
 	logger := log.New(os.Stdout, "[HecklerApply] ", log.Lshortfile)
 	commit, err := gitutil.RevparseToCommit(req.Rev, hs.repo)
 	if err != nil {
 		return nil, err
 	}
-	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
+	ns, err := dialReqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
 	}
-	dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-	defer closeNodes(dialedNodes)
-	lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes(req.User, hs.conf.LockMessage, false, dialedNodes)
-	defer unlockNodes(req.User, false, lockedNodes, logger)
-	errNodes := mergeNodeMaps(errDialNodes, errLockNodes)
+	defer closeNodeSet(ns)
+	err = lockNodeSet(req.User, hs.conf.LockMessage, false, ns, logger)
+	if err != nil {
+		return nil, err
+	}
+	defer unlockNodeSet(req.User, false, ns, logger)
 	har := new(hecklerpb.HecklerApplyReport)
 	if req.Noop {
-		lastApplyNodes, errUnknownRevNodes := nodeLastApply(lockedNodes, hs.repo, logger)
-		for _, node := range lastApplyNodes {
-			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
-			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
-		}
-		groupedCommit, errNoopNodes, err := noopCommit(lastApplyNodes, commit, req.DeltaNoop, hs.repo, logger)
+		err := lastApplyNodeSet(ns, hs.repo, logger)
 		if err != nil {
 			return nil, err
 		}
-		errNodes = mergeNodeMaps(errNodes, errUnknownRevNodes, errNoopNodes)
+		for _, node := range ns.nodes.active {
+			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
+			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
+		}
+		groupedCommit, err := noopNodeSet(ns, commit, req.DeltaNoop, hs.repo, logger)
+		if err != nil {
+			return nil, err
+		}
 		har.Output = commitToMarkdown(hs.conf, commit, groupedCommit, hs.templates)
 	} else {
-		appliedNodes, beyondRevNodes, errApplyNodes := applyNodes(lockedNodes, req.Force, req.Noop, req.Rev, hs.repo, logger)
-		errNodes = mergeNodeMaps(errNodes, errApplyNodes)
+		appliedNodes, beyondRevNodes, err := applyNodeSet(ns, req.Force, req.Noop, req.Rev, hs.repo, logger)
+		if err != nil {
+			return nil, err
+		}
 		if req.Force {
-			har.Output = fmt.Sprintf("Applied nodes: (%d); Error nodes: (%d)", len(appliedNodes), len(errNodes))
+			har.Output = fmt.Sprintf("Applied nodes: (%d); Error nodes: (%d)", len(appliedNodes), len(ns.nodes.errored))
 		} else {
-			har.Output = fmt.Sprintf("Applied nodes: (%d); Beyond rev nodes: (%d); Error nodes: (%d)", len(appliedNodes), len(beyondRevNodes), len(errNodes))
+			har.Output = fmt.Sprintf("Applied nodes: (%d); Beyond rev nodes: (%d); Error nodes: (%d)", len(appliedNodes), len(beyondRevNodes), len(ns.nodes.errored))
 		}
 	}
 	har.NodeErrors = make(map[string]string)
-	for host, node := range errNodes {
+	for host, node := range ns.nodes.errored {
 		har.NodeErrors[host] = node.err.Error()
 	}
-	for host, lockState := range lockedByAnotherNodes {
-		har.NodeErrors[host] = lockState
+	for host, node := range ns.nodes.locked {
+		har.NodeErrors[host] = fmt.Sprintf("%s: %s", node.lockState.User, node.lockState.Comment)
 	}
 	return har, nil
 }
 
-func applyNodes(lockedNodes map[string]*Node, forceApply bool, noop bool, rev string, repo *git.Repository, logger *log.Logger) (appliedNodes map[string]*Node, beyondRevNodes map[string]*Node, errNodes map[string]*Node) {
+func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git.Repository, logger *log.Logger) (map[string]*Node, map[string]*Node, error) {
 	var nodesToApply map[string]*Node
-	beyondRevNodes = make(map[string]*Node)
+	var err error
+	beyondRevNodes := make(map[string]*Node)
 	lastApplyNodes := make(map[string]*Node)
 	errUnknownRevNodes := make(map[string]*Node)
-	appliedNodes = make(map[string]*Node)
+	appliedNodes := make(map[string]*Node)
 	// No need to check node revision if force applying
 	if forceApply {
-		nodesToApply = lockedNodes
+		nodesToApply = ns.nodes.active
 	} else {
-		lastApplyNodes, errUnknownRevNodes = nodeLastApply(lockedNodes, repo, logger)
+		err = lastApplyNodeSet(ns, repo, logger)
+		if err != nil {
+			return nil, nil, err
+		}
 		obj, err := gitutil.RevparseToCommit(rev, repo)
 		if err != nil {
-			logger.Fatalf("Unable to parse rev: '%s'", rev)
+			return nil, nil, err
 		}
 		revId := *obj.Id()
 		nodesToApply = make(map[string]*Node)
@@ -1051,50 +1111,54 @@ func applyNodes(lockedNodes map[string]*Node, forceApply bool, noop bool, rev st
 			appliedNodes[r.report.Host] = nodesToApply[r.report.Host]
 		}
 	}
-	errNodes = mergeNodeMaps(errUnknownRevNodes, errApplyNodes)
-	return appliedNodes, beyondRevNodes, errNodes
+	ns.nodes.active = mergeNodeMaps(appliedNodes, beyondRevNodes)
+	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errUnknownRevNodes, errApplyNodes)
+	return appliedNodes, beyondRevNodes, nil
 }
 
 func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.HecklerNoopRangeRequest) (*hecklerpb.HecklerNoopRangeReport, error) {
+	var err error
 	logger := log.New(os.Stdout, "[HecklerNoopRange] ", log.Lshortfile)
-	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
+	ns, err := dialReqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
 	}
-	dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-	defer closeNodes(dialedNodes)
-	lastApplyNodes, errUnknownRevNodes := nodeLastApply(dialedNodes, hs.repo, logger)
-	lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", hs.conf.LockMessage, false, lastApplyNodes)
+	defer closeNodeSet(ns)
+	err = lastApplyNodeSet(ns, hs.repo, logger)
+	if err != nil {
+		return nil, err
+	}
+	err = lockNodeSet(req.User, hs.conf.LockMessage, false, ns, logger)
+	if err != nil {
+		return nil, err
+	}
+	defer unlockNodeSet(req.User, false, ns, logger)
 	commitLogIds, commits, err := commitLogIdList(hs.repo, req.BeginRev, req.EndRev)
 	if err != nil {
 		return nil, err
 	}
-	for _, node := range lockedNodes {
+	for _, node := range ns.nodes.active {
 		node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 		node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 	}
 	rprt := new(hecklerpb.HecklerNoopRangeReport)
-	errNodes := mergeNodeMaps(errDialNodes, errLockNodes, errUnknownRevNodes)
 	groupedCommits := make(map[git.Oid][]*groupedResource)
 	for gi, commit := range commits {
-		groupedCommit, errNoopNodes, err := noopCommit(lockedNodes, commit, true, hs.repo, logger)
+		groupedCommit, err := noopNodeSet(ns, commit, true, hs.repo, logger)
 		if err != nil {
-			unlockNodes("root", false, lockedNodes, logger)
 			return nil, err
 		}
-		errNodes = mergeNodeMaps(errNodes, errNoopNodes)
 		groupedCommits[gi] = groupedCommit
 	}
-	unlockNodes("root", false, lockedNodes, logger)
 	if req.OutputFormat == hecklerpb.OutputFormat_markdown {
 		rprt.Output = commitRangeToMarkdown(hs.conf, commitLogIds, commits, groupedCommits, hs.templates)
 	}
 	rprt.NodeErrors = make(map[string]string)
-	for host, node := range errNodes {
+	for host, node := range ns.nodes.errored {
 		rprt.NodeErrors[host] = node.err.Error()
 	}
-	for host, lockState := range lockedByAnotherNodes {
-		rprt.NodeErrors[host] = fmt.Sprintf("lockedByAnother: %s, %v", host, lockState)
+	for host, node := range ns.nodes.locked {
+		rprt.NodeErrors[host] = fmt.Sprintf("%s: %s", node.lockState.User, node.lockState.Comment)
 	}
 	return rprt, nil
 }
@@ -1519,18 +1583,21 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource, commit *git
 }
 
 func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.HecklerStatusRequest) (*hecklerpb.HecklerStatusReport, error) {
+	var err error
 	logger := log.New(os.Stdout, "[HecklerStatus] ", log.Lshortfile)
-	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
+	ns, err := dialReqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
 	}
-	dialedNodes, errNodes := dialNodes(ctx, nodesToDial)
-	defer closeNodes(dialedNodes)
-	lastApplyNodes, errUnknownRevNodes := nodeLastApply(dialedNodes, hs.repo, logger)
+	defer closeNodeSet(ns)
+	err = lastApplyNodeSet(ns, hs.repo, logger)
+	if err != nil {
+		return nil, err
+	}
 	hsr := new(hecklerpb.HecklerStatusReport)
 	hsr.NodeStatuses = make(map[string]string)
 	var tagStr string
-	for _, node := range lastApplyNodes {
+	for _, node := range ns.nodes.active {
 		tagStr, err = describeCommit(node.lastApply, hs.conf.EnvPrefix, hs.repo)
 		if err != nil {
 			tagStr = "NONE"
@@ -1538,10 +1605,7 @@ func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.Heckl
 		hsr.NodeStatuses[node.host] = "commit: " + node.lastApply.String() + ", last-tag: " + tagStr
 	}
 	hsr.NodeErrors = make(map[string]string)
-	for host, node := range errNodes {
-		hsr.NodeErrors[host] = node.err.Error()
-	}
-	for host, node := range errUnknownRevNodes {
+	for host, node := range ns.nodes.errored {
 		hsr.NodeErrors[host] = node.err.Error()
 	}
 	return hsr, nil
@@ -1549,25 +1613,23 @@ func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.Heckl
 
 func (hs *hecklerServer) HecklerUnlock(ctx context.Context, req *hecklerpb.HecklerUnlockRequest) (*hecklerpb.HecklerUnlockReport, error) {
 	logger := log.New(os.Stdout, "[HecklerUnlock] ", log.Lshortfile)
-	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
+	ns, err := dialReqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
 	}
-	dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-	defer closeNodes(dialedNodes)
-	unlockedNodes, lockedByAnotherNodes, errUnlockNodes := unlockNodes(req.User, req.Force, dialedNodes, logger)
+	defer closeNodeSet(ns)
+	unlockNodeSet(req.User, req.Force, ns, logger)
 	res := new(hecklerpb.HecklerUnlockReport)
-	res.UnlockedNodes = make([]string, 0, len(unlockedNodes))
-	for k := range unlockedNodes {
-		res.UnlockedNodes = append(res.UnlockedNodes, k)
+	res.UnlockedNodes = make([]string, 0)
+	for node := range ns.nodes.active {
+		res.UnlockedNodes = append(res.UnlockedNodes, node)
 	}
-	errNodes := mergeNodeMaps(errDialNodes, errUnlockNodes)
 	res.NodeErrors = make(map[string]string)
-	for host, node := range errNodes {
+	for host, node := range ns.nodes.errored {
 		res.NodeErrors[host] = node.err.Error()
 	}
-	for host, str := range lockedByAnotherNodes {
-		res.NodeErrors[host] = "Locked by another, " + str
+	for host, node := range ns.nodes.locked {
+		res.NodeErrors[host] = fmt.Sprintf("%s: %s", node.lockState.User, node.lockState.Comment)
 	}
 	return res, nil
 }
@@ -1580,66 +1642,80 @@ func closeNodes(nodes map[string]*Node) {
 	}
 }
 
+func closeNodeSet(ns *NodeSet) {
+	closeNodes(ns.nodes.dialed)
+}
+
 func (hs *hecklerServer) HecklerLock(ctx context.Context, req *hecklerpb.HecklerLockRequest) (*hecklerpb.HecklerLockReport, error) {
+	var err error
 	logger := log.New(os.Stdout, "[HecklerLock] ", log.Lshortfile)
-	nodesToDial, err := reqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
+	ns, err := dialReqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
 	}
-	dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-	defer closeNodes(dialedNodes)
-	lockedNodes, lockedByAnother, errLockNodes := lockNodes(req.User, req.Comment, req.Force, dialedNodes)
-	res := new(hecklerpb.HecklerLockReport)
-	res.LockedNodes = make([]string, 0, len(lockedNodes))
-	for k := range lockedNodes {
-		res.LockedNodes = append(res.LockedNodes, k)
+	defer closeNodeSet(ns)
+	err = lockNodeSet(req.User, req.Comment, req.Force, ns, logger)
+	if err != nil {
+		return nil, err
 	}
-	errNodes := mergeNodeMaps(errDialNodes, errLockNodes)
+	res := new(hecklerpb.HecklerLockReport)
+	res.LockedNodes = make([]string, 0)
+	for node := range ns.nodes.active {
+		res.LockedNodes = append(res.LockedNodes, node)
+	}
 	res.NodeErrors = make(map[string]string)
-	for host, node := range errNodes {
+	for host, node := range ns.nodes.errored {
 		res.NodeErrors[host] = node.err.Error()
 	}
-	for host, lockState := range lockedByAnother {
-		res.NodeErrors[host] = lockState
+	for host, node := range ns.nodes.locked {
+		res.NodeErrors[host] = fmt.Sprintf("%s: %s", node.lockState.User, node.lockState.Comment)
 	}
 	return res, nil
 }
 
-func lockNodes(user string, comment string, force bool, nodes map[string]*Node) (map[string]*Node, map[string]string, map[string]*Node) {
+func lockNodeSet(user string, comment string, force bool, ns *NodeSet, logger *log.Logger) error {
 	lockReq := rizzopb.PuppetLockRequest{
 		Type:    rizzopb.LockReqType_lock,
 		User:    user,
 		Comment: comment,
 		Force:   force,
 	}
-	lockedNodes, _, lockedByAnotherNodes, errLockNodes := rizzoLockNodes(lockReq, nodes)
-	return lockedNodes, lockedByAnotherNodes, errLockNodes
+	lockedNodes, _, lockedByAnotherNodes, errLockNodes := rizzoLockNodes(lockReq, ns.nodes.active)
+	ns.nodes.active = lockedNodes
+	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errLockNodes)
+	ns.nodes.locked = lockedByAnotherNodes
+	if msg, ok := thresholdExceededNodeSet(ns); ok {
+		logger.Printf("%s", msg)
+		return ErrThresholdExceeded
+	}
+	return nil
 }
 
-func unlockNodes(user string, force bool, nodes map[string]*Node, logger *log.Logger) (map[string]*Node, map[string]string, map[string]*Node) {
+func unlockNodeSet(user string, force bool, ns *NodeSet, logger *log.Logger) {
 	lockReq := rizzopb.PuppetLockRequest{
 		Type:  rizzopb.LockReqType_unlock,
 		User:  user,
 		Force: force,
 	}
-	_, unlockedNodes, lockedByAnotherNodes, errLockNodes := rizzoLockNodes(lockReq, nodes)
-	compressedLockedByAnotherNodes := compressHostsStr(lockedByAnotherNodes)
-	if len(unlockedNodes) == len(nodes) {
+	_, unlockedNodes, lockedByAnotherNodes, errLockNodes := rizzoLockNodes(lockReq, ns.nodes.active)
+	ns.nodes.active = unlockedNodes
+	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errLockNodes)
+	ns.nodes.locked = mergeNodeMaps(ns.nodes.locked, lockedByAnotherNodes)
+	if len(unlockedNodes) == len(ns.nodes.active) {
 		logger.Printf("Unlocked all %d requested nodes", len(unlockedNodes))
 	} else {
-		logger.Printf("Tried to unlock %d nodes, but only succeeded in unlocking, %d", len(nodes), len(unlockedNodes))
+		logger.Printf("Tried to unlock %d nodes, but only succeeded in unlocking, %d", len(ns.nodes.active), len(unlockedNodes))
 	}
-	for host, str := range compressedLockedByAnotherNodes {
+	for host, str := range compressLockNodes(lockedByAnotherNodes) {
 		logger.Printf("Unlock requested, but locked by another: %s, %s", host, str)
 	}
 	compressedErrNodes := compressErrorNodes(errLockNodes)
 	for host, err := range compressedErrNodes {
 		logger.Printf("Unlock failed, errNodes: %s, %v", host, err)
 	}
-	return unlockedNodes, lockedByAnotherNodes, errLockNodes
 }
 
-func nodesLockState(user string, nodes map[string]*Node) (map[string]*Node, map[string]*Node, map[string]string, map[string]*Node) {
+func nodesLockState(user string, nodes map[string]*Node) (map[string]*Node, map[string]*Node, map[string]*Node, map[string]*Node) {
 	lockReq := rizzopb.PuppetLockRequest{
 		Type: rizzopb.LockReqType_state,
 		User: user,
@@ -1648,7 +1724,7 @@ func nodesLockState(user string, nodes map[string]*Node) (map[string]*Node, map[
 	return lockedNodes, unlockedNodes, lockedByAnotherNodes, errLockNodes
 }
 
-func rizzoLockNodes(req rizzopb.PuppetLockRequest, nodes map[string]*Node) (map[string]*Node, map[string]*Node, map[string]string, map[string]*Node) {
+func rizzoLockNodes(req rizzopb.PuppetLockRequest, nodes map[string]*Node) (map[string]*Node, map[string]*Node, map[string]*Node, map[string]*Node) {
 	reportChan := make(chan rizzopb.PuppetLockReport)
 	for _, node := range nodes {
 		go rizzoLock(node.host, node.rizzoClient, req, reportChan)
@@ -1656,20 +1732,23 @@ func rizzoLockNodes(req rizzopb.PuppetLockRequest, nodes map[string]*Node) (map[
 
 	lockedNodes := make(map[string]*Node)
 	unlockedNodes := make(map[string]*Node)
-	lockedByAnotherNodes := make(map[string]string)
+	lockedByAnotherNodes := make(map[string]*Node)
 	errNodes := make(map[string]*Node)
+	var node *Node
 	for i := 0; i < len(nodes); i++ {
 		r := <-reportChan
-		switch r.LockStatus {
-		case rizzopb.LockStatus_unlocked:
-			unlockedNodes[r.Host] = nodes[r.Host]
-		case rizzopb.LockStatus_locked_by_user:
-			lockedNodes[r.Host] = nodes[r.Host]
-		case rizzopb.LockStatus_locked_by_another:
-			lockedByAnotherNodes[r.Host] = fmt.Sprintf("%s: %s", r.User, r.Comment)
-		case rizzopb.LockStatus_lock_unknown:
-			nodes[r.Host].err = errors.New(r.Error)
-			errNodes[r.Host] = nodes[r.Host]
+		node = nodes[r.Host]
+		node.lockState = heckler.LockReportToLockState(r)
+		switch node.lockState.LockStatus {
+		case heckler.Unlocked:
+			unlockedNodes[r.Host] = node
+		case heckler.LockedByUser:
+			lockedNodes[r.Host] = node
+		case heckler.LockedByAnother:
+			lockedByAnotherNodes[r.Host] = node
+		case heckler.LockUnknown:
+			node.err = errors.New(r.Error)
+			errNodes[r.Host] = node
 		default:
 			log.Fatal("Unknown lockStatus!")
 		}
@@ -1711,39 +1790,43 @@ func hecklerLastApply(node *Node, c chan<- rizzopb.PuppetReport, logger *log.Log
 	return
 }
 
-func nodeLastApply(nodes map[string]*Node, repo *git.Repository, logger *log.Logger) (map[string]*Node, map[string]*Node) {
+func lastApplyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) error {
 	var err error
 	errNodes := make(map[string]*Node)
 	lastApplyNodes := make(map[string]*Node)
 
 	puppetReportChan := make(chan rizzopb.PuppetReport)
-	for _, node := range nodes {
+	for _, node := range ns.nodes.active {
 		go hecklerLastApply(node, puppetReportChan, logger)
 	}
 
 	var obj *git.Object
-	for range nodes {
+	for range ns.nodes.active {
 		r := <-puppetReportChan
+		if _, ok := ns.nodes.active[r.Host]; !ok {
+			return fmt.Errorf("No Node struct found for report from: %s", r.Host)
+		}
 		if r.ConfigurationVersion == "" {
-			nodes[r.Host].err = ErrLastApplyUnknown
-			errNodes[r.Host] = nodes[r.Host]
+			errNodes[r.Host] = ns.nodes.active[r.Host]
+			errNodes[r.Host].err = ErrLastApplyUnknown
 			continue
 		}
 		obj, err = repo.RevparseSingle(r.ConfigurationVersion)
 		if err != nil {
-			nodes[r.Host].err = fmt.Errorf("Unable to revparse ConfigurationVersion, %s@%s: %v %w", r.ConfigurationVersion, r.Host, err, ErrLastApplyUnknown)
-			errNodes[r.Host] = nodes[r.Host]
+			errNodes[r.Host] = ns.nodes.active[r.Host]
+			errNodes[r.Host].err = fmt.Errorf("Unable to revparse ConfigurationVersion, %s@%s: %v %w", r.ConfigurationVersion, r.Host, err, ErrLastApplyUnknown)
 			continue
 		}
-		if node, ok := nodes[r.Host]; ok {
-			node.lastApply = *obj.Id()
-			lastApplyNodes[r.Host] = node
-		} else {
-			logger.Fatalf("No Node struct found for report from: %s", r.Host)
-		}
+		lastApplyNodes[r.Host] = ns.nodes.active[r.Host]
+		lastApplyNodes[r.Host].lastApply = *obj.Id()
 	}
-
-	return lastApplyNodes, errNodes
+	ns.nodes.active = lastApplyNodes
+	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errNodes)
+	if msg, ok := thresholdExceededNodeSet(ns); ok {
+		logger.Printf("%s", msg)
+		return ErrThresholdExceeded
+	}
+	return nil
 }
 
 func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
@@ -1794,50 +1877,44 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 //             If no, do nothing
 //   If no, do nothing
 func applyLoop(conf *HecklerdConf, repo *git.Repository) {
+	var err error
+	var allNodes *NodeSet
 	logger := log.New(os.Stdout, "[applyLoop] ", log.Lshortfile)
-	prefix := conf.EnvPrefix
 	for {
 		time.Sleep(10 * time.Second)
-		nodesToDial, err := nodesFromSet(conf, "all", logger)
-		if err != nil {
-			logger.Fatalf("Unable to load 'all' node set: %v", err)
+		allNodes = &NodeSet{
+			name:       "all",
+			thresholds: conf.MaxThresholds,
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-		defer cancel()
-		dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-		eligibleNodes, lockedByAnotherNodes, errEligibleNodes := eligibleNodes("root", dialedNodes)
-		compressedLockedByAnotherNodes := compressHostsStr(lockedByAnotherNodes)
-		for host, str := range compressedLockedByAnotherNodes {
-			logger.Printf("Locked by another: %s, %s", host, str)
-		}
-		lastApplyNodes, errUnknownRevNodes := nodeLastApply(eligibleNodes, repo, logger)
-		errNodes := mergeNodeMaps(errDialNodes, errEligibleNodes, errUnknownRevNodes)
-		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo, logger)
+		err = dialNodeSet(conf, allNodes, logger)
 		if err != nil {
-			logger.Printf("Unable to find common tag, sleeping: %v", err)
-			closeNodes(dialedNodes)
+			logger.Printf("Unable to dial node set: %v", err)
 			continue
 		}
-		if commonTag == "" {
-			logger.Println("No common tag found, sleeping")
-			closeNodes(dialedNodes)
+		err = commonTagNodeSet(conf, allNodes, repo, logger)
+		if err != nil {
+			logger.Printf("Unable to query for commonTag: %v", err)
+			closeNodeSet(allNodes)
 			continue
 		}
-		logger.Printf("Found common tag: %s", commonTag)
+		logger.Printf("Found common tag: %s", allNodes.commonTag)
 		ghclient, _, err := githubConn(conf)
 		if err != nil {
-			logger.Fatalf("Unable to connect to github: %v", err)
+			logger.Printf("Unable to connect to github, sleeping: %v", err)
+			closeNodeSet(allNodes)
+			continue
 		}
-		nextTag, err := nextTag(commonTag, conf.EnvPrefix, repo)
+		nextTag, err := nextTag(allNodes.commonTag, conf.EnvPrefix, repo)
 		if err != nil {
+			closeNodeSet(allNodes)
 			logger.Fatalf("Unable to find next tag: %v", err)
 		}
 		if nextTag == "" {
 			logger.Println("No nextTag found, sleeping")
-			closeNodes(dialedNodes)
+			closeNodeSet(allNodes)
 			continue
 		}
-		priorTag := commonTag
+		priorTag := allNodes.commonTag
 		tagIssuesReviewed, err := tagIssuesReviewed(repo, ghclient, conf, priorTag, nextTag)
 		if err != nil {
 			logger.Fatalf("Unable to find next tag: %v", err)
@@ -1849,24 +1926,30 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			}
 		} else {
 			logger.Printf("Tag '%s' is not ready to apply, sleeping", nextTag)
-			closeNodes(dialedNodes)
+			closeNodeSet(allNodes)
 			continue
 		}
 		logger.Printf("Tag '%s' is ready to apply, applying...", nextTag)
-		lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", conf.LockMessage, false, lastApplyNodes)
-		appliedNodes, beyondRevNodes, errApplyNodes := applyNodes(lockedNodes, false, false, nextTag, repo, logger)
-		unlockNodes("root", false, lockedNodes, logger)
-		errNodes = mergeNodeMaps(errNodes, errLockNodes, errApplyNodes)
-		for host, lockState := range lockedByAnotherNodes {
-			logger.Printf("lockedByAnother: %s, %v", host, lockState)
+		err = lockNodeSet("root", conf.LockMessage, false, allNodes, logger)
+		if err != nil {
+			logger.Printf("Unable to lock nodes, sleeping: %v", err)
+			closeNodeSet(allNodes)
+			continue
 		}
-		compressedErrNodes := compressErrorNodes(errNodes)
+		appliedNodes, beyondRevNodes, err := applyNodeSet(allNodes, false, false, nextTag, repo, logger)
+		if err != nil {
+			logger.Printf("Unable to apply nodes, sleeping: %v", err)
+			closeNodeSet(allNodes)
+			continue
+		}
+		unlockNodeSet("root", false, allNodes, logger)
+		closeNodeSet(allNodes)
+		compressedErrNodes := compressErrorNodes(allNodes.nodes.errored)
 		for host, err := range compressedErrNodes {
 			logger.Printf("errNodes: %s, %v", host, err)
 		}
-		logger.Printf("Applied nodes: (%d); Beyond rev nodes: (%d); Error nodes: (%d)", len(appliedNodes), len(beyondRevNodes), len(errNodes))
+		logger.Printf("Applied nodes: (%d); Beyond rev nodes: (%d); Error nodes: (%d)", len(appliedNodes), len(beyondRevNodes), len(allNodes.nodes.errored))
 		logger.Println("Apply complete, sleeping")
-		closeNodes(dialedNodes)
 	}
 }
 
@@ -1878,15 +1961,29 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 //        If No, do nothing
 //        If Yes, note approval and close the issue
 func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
+	var err error
+	var allNodes *NodeSet
 	logger := log.New(os.Stdout, "[noopApprovalLoop] ", log.Lshortfile)
 	for {
 		time.Sleep(10 * time.Second)
-		commonTag, err := commonTag(conf, repo, "all", logger)
+		allNodes = &NodeSet{
+			name:       "all",
+			thresholds: conf.MaxThresholds,
+		}
+		err = dialNodeSet(conf, allNodes, logger)
 		if err != nil {
-			logger.Printf("Unable to query for commonTag: %v", err)
+			logger.Printf("Unable to dial node set: %v", err)
 			continue
 		}
-		_, commits, err := commitLogIdList(repo, commonTag, "master")
+		err = commonTagNodeSet(conf, allNodes, repo, logger)
+		if err != nil {
+			logger.Printf("Unable to query for commonTag: %v", err)
+			closeNodeSet(allNodes)
+			continue
+		}
+		logger.Printf("Found common tag: %s", allNodes.commonTag)
+		closeNodeSet(allNodes)
+		_, commits, err := commitLogIdList(repo, allNodes.commonTag, "master")
 		if err != nil {
 			logger.Printf("Unable to obtain commit log ids: %v", err)
 			continue
@@ -2232,29 +2329,26 @@ func intersectionOwnersApprovers(owners []string, approvers []string, groups map
 	return intersection
 }
 
-func unlockAll(conf *HecklerdConf, logger *log.Logger) {
-	nodesToDial, err := nodesFromSet(conf, "all", logger)
-	if err != nil {
-		logger.Fatalf("Unable to load 'all' node set: %v", err)
+func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
+	var err error
+	allNodes := &NodeSet{
+		name: "all",
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-	dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-	unlockedNodes, lockedByAnotherNodes, errUnlockNodes := unlockNodes("root", false, dialedNodes, logger)
+	err = dialNodeSet(conf, allNodes, logger)
+	if err != nil {
+		return err
+	}
+	unlockNodeSet("root", false, allNodes, logger)
 	unlockedHosts := make([]string, 0)
-	for host, _ := range unlockedNodes {
+	for host, _ := range allNodes.nodes.active {
 		unlockedHosts = append(unlockedHosts, host)
 	}
 	logger.Printf("Unlocked: %s", compressHosts(unlockedHosts))
-	errNodes := mergeNodeMaps(errDialNodes, errUnlockNodes)
-	compressedLockedByAnotherNodes := compressHostsStr(lockedByAnotherNodes)
-	for host, str := range compressedLockedByAnotherNodes {
-		logger.Printf("Locked by another: %s, %s", host, str)
-	}
-	compressedErrNodes := compressErrorNodes(errNodes)
+	compressedErrNodes := compressErrorNodes(allNodes.nodes.errored)
 	for host, err := range compressedErrNodes {
 		logger.Printf("Unlock errNodes: %s, %v", host, err)
 	}
+	return nil
 }
 
 // Are their commits beyond the last tag?
@@ -2397,20 +2491,15 @@ func tagIssuesReviewed(repo *git.Repository, ghclient *github.Client, conf *Heck
 	return true, nil
 }
 
-// Given nodes and a user this function returns the combined set of unlocked nodes and
-// nodes locked by the provided user. These combined nodes are eligible to be queried by
-// us for their status, since they are not locked by another user, or returning an
-// error.
-func eligibleNodes(user string, nodes map[string]*Node) (map[string]*Node, map[string]string, map[string]*Node) {
-	lockedNodes, unlockedNodes, lockedByAnotherNodes, errLockNodes := nodesLockState(user, nodes)
-	eligibleNodes := make(map[string]*Node)
-	for host, node := range lockedNodes {
-		eligibleNodes[host] = node
-	}
-	for host, node := range unlockedNodes {
-		eligibleNodes[host] = node
-	}
-	return eligibleNodes, lockedByAnotherNodes, errLockNodes
+// Given a node set and a user this function returns the combined set of
+// unlocked nodes and nodes locked by the provided user as the active set.
+// These combined nodes are eligible to be queried by us for their status,
+// since they are not locked by another user, or returning an error.
+func eligibleNodeSet(user string, ns *NodeSet) {
+	lockedNodes, unlockedNodes, lockedByAnotherNodes, errLockNodes := nodesLockState(user, ns.nodes.active)
+	ns.nodes.active = mergeNodeMaps(lockedNodes, unlockedNodes)
+	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errLockNodes)
+	ns.nodes.locked = lockedByAnotherNodes
 }
 
 // Is there a newer release tag than our common lastApply tag across "all"
@@ -2425,62 +2514,53 @@ func eligibleNodes(user string, nodes map[string]*Node) (map[string]*Node, map[s
 //       If no, do nothing
 //   If no, do nothing
 func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
+	var err error
+	var allNodes *NodeSet
 	logger := log.New(os.Stdout, "[milestoneLoop] ", log.Lshortfile)
-	prefix := conf.EnvPrefix
 	for {
 		time.Sleep(10 * time.Second)
-		nodesToDial, err := nodesFromSet(conf, "all", logger)
+		allNodes = &NodeSet{
+			name:       "all",
+			thresholds: conf.MaxThresholds,
+		}
+		err = dialNodeSet(conf, allNodes, logger)
 		if err != nil {
-			logger.Fatalf("Unable to load 'all' node set: %v", err)
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-		defer cancel()
-		dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-		eligibleNodes, lockedByAnotherNodes, errEligibleNodes := eligibleNodes("root", dialedNodes)
-		compressedLockedByAnotherNodes := compressHostsStr(lockedByAnotherNodes)
-		for host, str := range compressedLockedByAnotherNodes {
-			logger.Printf("Locked by another: %s, %s", host, str)
-		}
-		lastApplyNodes, errUnknownRevNodes := nodeLastApply(eligibleNodes, repo, logger)
-		errNodes := mergeNodeMaps(errEligibleNodes, errDialNodes, errUnknownRevNodes)
-		compressedErrNodes := compressErrorNodes(errNodes)
-		for host, err := range compressedErrNodes {
-			logger.Printf("errNodes: %s, %v", host, err)
-		}
-		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo, logger)
-		if err != nil {
-			logger.Printf("Unable to find common tag, sleeping: %v", err)
-			closeNodes(dialedNodes)
+			logger.Printf("Unable to dial node set: %v", err)
 			continue
 		}
-		if commonTag == "" {
-			logger.Println("No common tag found, sleeping")
-			closeNodes(dialedNodes)
+		err = commonTagNodeSet(conf, allNodes, repo, logger)
+		if err != nil {
+			logger.Printf("Unable to query for commonTag: %v", err)
+			closeNodeSet(allNodes)
 			continue
 		}
-		logger.Printf("Found common tag: %s", commonTag)
+		logger.Printf("Found common tag: %s", allNodes.commonTag)
 		ghclient, _, err := githubConn(conf)
 		if err != nil {
-			logger.Fatalf("Unable to connect to github: %v", err)
+			logger.Printf("Unable to connect to github, sleeping: %v", err)
+			closeNodeSet(allNodes)
+			continue
 		}
-		nextTag, err := nextTag(commonTag, prefix, repo)
+		nextTag, err := nextTag(allNodes.commonTag, conf.EnvPrefix, repo)
 		if err != nil {
+			closeNodeSet(allNodes)
 			logger.Fatalf("Unable to find next tag: %v", err)
 		}
 		if nextTag == "" {
 			logger.Println("No nextTag found, sleeping")
-			closeNodes(dialedNodes)
+			closeNodeSet(allNodes)
 			continue
 		}
-		priorTag := commonTag
+		closeNodeSet(allNodes)
+		priorTag := allNodes.commonTag
 		var nextTagMilestone *github.Milestone
 		nextTagMilestone, err = milestoneFromTag(nextTag, ghclient, conf)
 		if err == context.DeadlineExceeded {
 			logger.Println("Timeout reaching github for milestone, sleeping")
-			closeNodes(dialedNodes)
 			continue
 		} else if err != nil {
-			logger.Fatalf("Unable to find milestone from tag, '%s': %v", nextTag, err)
+			logger.Printf("Unable to find milestone from tag, '%s', sleeping: %v", nextTag, err)
+			continue
 		}
 		if nextTagMilestone == nil {
 			nextTagMilestone, err = createMilestone(nextTag, ghclient, conf)
@@ -2514,7 +2594,6 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 			}
 		}
 		logger.Println("All issues updated with milestone, sleeping")
-		closeNodes(dialedNodes)
 	}
 }
 
@@ -2529,194 +2608,158 @@ func thresholdExceeded(cur Thresholds, max Thresholds) (string, bool) {
 	return "Thresholds not exceeded", false
 }
 
-// Return the most recent tag across all nodes in an environment
-func commonTag(conf *HecklerdConf, repo *git.Repository, nodeSet string, logger *log.Logger) (string, error) {
-	curThresholds := Thresholds{
-		ErrNodes:    0,
-		LockedNodes: 0,
+// Given two node Threshold structs return a bool and a message indicating
+// whether the first threshold exceeded the second.
+func thresholdExceededNodeSet(ns *NodeSet) (string, bool) {
+	if len(ns.nodes.errored) > ns.thresholds.ErrNodes {
+		return fmt.Sprintf("Error nodes(%d) exceeds the threshold(%d)", len(ns.nodes.errored), ns.thresholds.ErrNodes), true
+	} else if len(ns.nodes.locked) > ns.thresholds.LockedNodes {
+		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", len(ns.nodes.locked), ns.thresholds.LockedNodes), true
 	}
-	nodesToDial, err := nodesFromSet(conf, nodeSet, logger)
+	return "Thresholds not exceeded", false
+}
+
+func dialNodeSet(conf *HecklerdConf, ns *NodeSet, logger *log.Logger) error {
+	nodesToDial, err := setNameToNodes(conf, ns.name, logger)
 	if err != nil {
-		return "", err
+		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-	defer closeNodes(dialedNodes)
-	curThresholds.ErrNodes += len(errDialNodes)
-	if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
-		return "", errors.New(msg)
+	ns.nodes.dialed, ns.nodes.errored = dialNodes(ctx, nodesToDial)
+	ns.nodes.active = ns.nodes.dialed
+	if msg, ok := thresholdExceededNodeSet(ns); ok {
+		logger.Printf("%s", msg)
+		return ErrThresholdExceeded
 	}
-	eligibleNodes, lockedByAnotherNodes, errEligibleNodes := eligibleNodes("root", dialedNodes)
-	curThresholds.LockedNodes += len(lockedByAnotherNodes)
-	curThresholds.ErrNodes += len(errEligibleNodes)
-	if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
-		return "", errors.New(msg)
-	}
-	lastApplyNodes, errUnknownRevNodes := nodeLastApply(eligibleNodes, repo, logger)
-	curThresholds.ErrNodes += len(errUnknownRevNodes)
-	if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
-		return "", errors.New(msg)
-	}
-	errNodes := mergeNodeMaps(errDialNodes, errEligibleNodes, errUnknownRevNodes)
-	compressedErrNodes := compressErrorNodes(errNodes)
-	for host, err := range compressedErrNodes {
-		logger.Printf("errNodes: %s, %v", host, err)
-	}
-	compressedLockedByAnotherNodes := compressHostsStr(lockedByAnotherNodes)
-	for host, str := range compressedLockedByAnotherNodes {
-		logger.Printf("Locked by another: %s, %s", host, str)
-	}
-	commonTag, err := commonAncestorTag(lastApplyNodes, conf.EnvPrefix, repo, logger)
-	if err != nil {
-		return "", err
-	}
-	if commonTag == "" {
-		return "", errors.New("No common tag found, sleeping")
-	}
-	return commonTag, nil
+	return nil
 }
 
-//  Are there newer commits than our common last applied commit across "all"
-//  nodes?
+// Return the most recent tag across all nodes in an environment
+func commonTagNodeSet(conf *HecklerdConf, ns *NodeSet, repo *git.Repository, logger *log.Logger) error {
+	eligibleNodeSet("root", ns)
+	if msg, ok := thresholdExceededNodeSet(ns); ok {
+		logger.Printf("%s", msg)
+		return ErrThresholdExceeded
+	}
+	err := lastApplyNodeSet(ns, repo, logger)
+	if err != nil {
+		return err
+	}
+	commonTag, err := commonAncestorTag(ns.nodes.active, conf.EnvPrefix, repo, logger)
+	if err != nil {
+		return err
+	}
+	if commonTag == "" {
+		return errors.New("No common tag found, sleeping")
+	}
+	ns.commonTag = commonTag
+	return nil
+}
+
+//  Are there newer commits than our common last applied tag across the "all"
+//  node set?
 //    If No, do nothing
-//    If Yes, do all commits have issues created on github?
-//      If Yes, do nothing
-//      If No, run a noop per commit & create a github issue
+//    If Yes,
+//      - noop each commit or load serialzed copy
+//      - create github issue, if it does not exist
 func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
+	var err error
+	var allNodes *NodeSet
 	logger := log.New(os.Stdout, "[noopLoop] ", log.Lshortfile)
-	prefix := conf.EnvPrefix
-	var curThresholds Thresholds
 	for {
 		time.Sleep(10 * time.Second)
-		curThresholds.ErrNodes = 0
-		curThresholds.LockedNodes = 0
-		nodesToDial, err := nodesFromSet(conf, "all", logger)
+		allNodes = &NodeSet{
+			name:       "all",
+			thresholds: conf.MaxThresholds,
+		}
+		err = dialNodeSet(conf, allNodes, logger)
 		if err != nil {
-			logger.Fatalf("Unable to load 'all' node set: %v", err)
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-		defer cancel()
-		dialedNodes, errDialNodes := dialNodes(ctx, nodesToDial)
-		curThresholds.ErrNodes += len(errDialNodes)
-		if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
-			logger.Printf("%s, sleeping", msg)
-			closeNodes(dialedNodes)
+			logger.Printf("Unable to dial node set: %v", err)
 			continue
 		}
-		eligibleNodes, lockedByAnotherNodes, errEligibleNodes := eligibleNodes("root", dialedNodes)
-		curThresholds.LockedNodes += len(lockedByAnotherNodes)
-		curThresholds.ErrNodes += len(errEligibleNodes)
-		if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
-			logger.Printf("%s, sleeping", msg)
-			closeNodes(dialedNodes)
-			continue
-		}
-		lastApplyNodes, errUnknownRevNodes := nodeLastApply(eligibleNodes, repo, logger)
-		curThresholds.ErrNodes += len(errUnknownRevNodes)
-		if msg, ok := thresholdExceeded(curThresholds, conf.MaxThresholds); ok {
-			logger.Printf("%s, sleeping", msg)
-			closeNodes(dialedNodes)
-			continue
-		}
-		errNodes := mergeNodeMaps(errDialNodes, errEligibleNodes, errUnknownRevNodes)
-		compressedErrNodes := compressErrorNodes(errNodes)
-		for host, err := range compressedErrNodes {
-			logger.Printf("errNodes: %s, %v", host, err)
-		}
-		compressedLockedByAnotherNodes := compressHostsStr(lockedByAnotherNodes)
-		for host, str := range compressedLockedByAnotherNodes {
-			logger.Printf("Locked by another: %s, %s", host, str)
-		}
-		commonTag, err := commonAncestorTag(lastApplyNodes, prefix, repo, logger)
+		err = commonTagNodeSet(conf, allNodes, repo, logger)
 		if err != nil {
-			logger.Printf("Unable to find common tag, sleeping: %v", err)
-			closeNodes(dialedNodes)
+			logger.Printf("Unable to query for commonTag: %v", err)
+			closeNodeSet(allNodes)
 			continue
 		}
-		if commonTag == "" {
-			logger.Println("No common tag found, sleeping")
-			closeNodes(dialedNodes)
-			continue
-		}
-		logger.Printf("Found common tag: %s", commonTag)
+		logger.Printf("Found common tag: %s", allNodes.commonTag)
 		// TODO support other branches?
-		_, commits, err := commitLogIdList(repo, commonTag, "master")
+		_, commits, err := commitLogIdList(repo, allNodes.commonTag, "master")
 		if err != nil {
 			logger.Fatalf("Unable to obtain commit log ids: %v", err)
 		}
 		if len(commits) == 0 {
 			logger.Println("No new commits, sleeping")
-			closeNodes(dialedNodes)
+			closeNodeSet(allNodes)
 			continue
 		}
-		ghclient, _, err := githubConn(conf)
-		if err != nil {
-			closeNodes(dialedNodes)
-			logger.Printf("Unable to connect to github, sleeping: %v", err)
-			continue
-		}
-		for _, node := range lastApplyNodes {
-			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
-			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
-		}
+		closeNodeSet(allNodes)
 		var groupedCommit []*groupedResource
+		var perNoop *NodeSet
 		for gi, commit := range commits {
 			groupedCommit, err = unmarshalGroupedCommit(commit.Id(), groupedNoopDir)
 			if os.IsNotExist(err) {
-				perNoopThresholds := Thresholds{
-					ErrNodes:    curThresholds.ErrNodes,
-					LockedNodes: curThresholds.LockedNodes,
+				perNoop = &NodeSet{
+					name:       "all",
+					thresholds: conf.MaxThresholds,
 				}
-				lockedNodes, lockedByAnotherNodes, errLockNodes := lockNodes("root", conf.LockMessage, false, lastApplyNodes)
-				perNoopThresholds.LockedNodes += len(lockedByAnotherNodes)
-				perNoopThresholds.ErrNodes += len(errLockNodes)
-				if msg, ok := thresholdExceeded(perNoopThresholds, conf.MaxThresholds); ok {
-					logger.Printf("%s, sleeping", msg)
-					unlockNodes("root", false, lockedNodes, logger)
+				err = dialNodeSet(conf, perNoop, logger)
+				if err != nil {
+				}
+				err = lastApplyNodeSet(perNoop, repo, logger)
+				if err != nil {
+					logger.Printf("Unable to get last apply for node set: %v", err)
+					continue
+				}
+				err = lockNodeSet("root", conf.LockMessage, false, perNoop, logger)
+				if err != nil {
+					logger.Printf("Unable to lock nodes, sleeping, %v", err)
+					unlockNodeSet("root", false, perNoop, logger)
+					// This error will likely occur in the next iteration, so break and sleep
 					break
 				}
-				var errNoopCommitNodes map[string]*Node
-				groupedCommit, errNoopCommitNodes, err = noopCommit(lockedNodes, commit, true, repo, logger)
+				for _, node := range perNoop.nodes.active {
+					node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
+					node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
+				}
+				groupedCommit, err = noopNodeSet(perNoop, commit, true, repo, logger)
 				if err != nil {
 					logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
-					unlockNodes("root", false, lockedNodes, logger)
-					break
+					unlockNodeSet("root", false, perNoop, logger)
+					closeNodeSet(perNoop)
+					continue
 				}
-				perNoopThresholds.ErrNodes += len(errNoopCommitNodes)
-				if msg, ok := thresholdExceeded(perNoopThresholds, conf.MaxThresholds); ok {
-					compressedErrNodes := compressErrorNodes(errNoopCommitNodes)
-					for host, err := range compressedErrNodes {
-						logger.Printf("errNodes: %s, %v", host, err)
-					}
-					logger.Printf("%s, sleeping", msg)
-					unlockNodes("root", false, lockedNodes, logger)
-					break
-				}
-				unlockNodes("root", false, lockedNodes, logger)
+				unlockNodeSet("root", false, perNoop, logger)
+				closeNodeSet(perNoop)
 				err = marshalGroupedCommit(commit.Id(), groupedCommit, groupedNoopDir)
 				if err != nil {
 					logger.Printf("Unable to marshal group commit: %v", err)
 				}
 			} else if err != nil {
-				logger.Printf("Error trying to unmarshal groupedCommit, sleeping: %v", err)
+				logger.Printf("Error trying to unmarshal groupedCommit: %v", err)
+				continue
+			}
+			ghclient, _, err := githubConn(conf)
+			if err != nil {
+				logger.Printf("Unable to connect to github: %v", err)
 				continue
 			}
 			issue, err := githubIssueFromCommit(ghclient, gi, conf)
 			if err != nil {
-				logger.Printf("Unable to determine if issue for commit %s exists, sleeping: %v", gi.String(), err)
-				break
+				logger.Printf("Unable to determine if issue for commit %s exists: %v", gi.String(), err)
+				continue
 			}
 			if issue == nil {
 				issue, err = githubCreateIssue(ghclient, conf, commit, groupedCommit, templates)
 				if err != nil {
-					logger.Printf("Unable to create github issue, sleeping: %v", err)
-					break
+					logger.Printf("Unable to create github issue: %v", err)
+					continue
 				}
-				logger.Printf("Successfully created new issue: '%v'", issue)
+				logger.Printf("Successfully created new issue: '%v'", issue.GetTitle())
 			}
 		}
-		closeNodes(dialedNodes)
 		logger.Println("Nooping complete, sleeping")
 	}
 }
@@ -2748,26 +2791,33 @@ func describeCommit(gi git.Oid, prefix string, repo *git.Repository) (string, er
 	return tagStr, nil
 }
 
+// Takes repo, a commit in the repo, and a list of nodes with their lastApply
+// populated. Returns true if all the nodes lastApplies are in the lineage of
+// the provided commit.
+//
 // If a commit is not, equal, an ancestor, or a descendant of a node's last
 // applied commit, then we cannot noop that commit accurately, because the last
-// applied commit has children which we do not have in our graph and
-// consequently changes which we do not have.
-func commitInAllNodeLineages(commit git.Oid, nodes map[string]*Node, repo *git.Repository) bool {
+// applied commit has children which we do not have in our graph and those
+// children may have source code changes which we do not have.
+func commitInAllNodeLineages(commit git.Oid, nodes map[string]*Node, repo *git.Repository, logger *log.Logger) bool {
 	commitInLineages := true
 	for _, node := range nodes {
+		if node.lastApply.IsZero() {
+			logger.Fatalf("lastApply for node, '%s', is zero", node.host)
+		}
 		if node.lastApply.Equal(&commit) {
 			continue
 		}
 		descendant, err := repo.DescendantOf(&node.lastApply, &commit)
 		if err != nil {
-			log.Fatalf("Cannot determine descendant status: %v", err)
+			logger.Fatalf("Cannot determine descendant status: %v", err)
 		}
 		if descendant {
 			continue
 		}
 		descendant, err = repo.DescendantOf(&commit, &node.lastApply)
 		if err != nil {
-			log.Fatalf("Cannot determine descendant status: %v", err)
+			logger.Fatalf("Cannot determine descendant status: %v", err)
 		}
 		if descendant {
 			continue
