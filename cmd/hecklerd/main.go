@@ -1898,31 +1898,36 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			continue
 		}
 		logger.Printf("Found common tag: %s", allNodes.commonTag)
-		ghclient, _, err := githubConn(conf)
+		priorTag := allNodes.commonTag
+		nextTag, err := nextTag(priorTag, conf.EnvPrefix, repo)
 		if err != nil {
-			logger.Printf("Unable to connect to github, sleeping: %v", err)
+			logger.Printf("Error: unable to query for nextTag after '%s', sleeping: %v", priorTag, err)
 			closeNodeSet(allNodes)
 			continue
-		}
-		nextTag, err := nextTag(allNodes.commonTag, conf.EnvPrefix, repo)
-		if err != nil {
-			closeNodeSet(allNodes)
-			logger.Fatalf("Unable to find next tag: %v", err)
 		}
 		if nextTag == "" {
-			logger.Println("No nextTag found, sleeping")
+			logger.Printf("No nextTag found after tag '%s', sleeping", priorTag)
 			closeNodeSet(allNodes)
 			continue
 		}
-		priorTag := allNodes.commonTag
+		ghclient, _, err := githubConn(conf)
+		if err != nil {
+			logger.Printf("Error: unable to connect to GitHub, sleeping: %v", err)
+			closeNodeSet(allNodes)
+			continue
+		}
 		tagIssuesReviewed, err := tagIssuesReviewed(repo, ghclient, conf, priorTag, nextTag)
 		if err != nil {
-			logger.Fatalf("Unable to find next tag: %v", err)
+			logger.Printf("Error: unable to determine if noops have been reviewed, sleeping: %v", err)
+			closeNodeSet(allNodes)
+			continue
 		}
 		if tagIssuesReviewed {
 			err = closeMilestone(nextTag, ghclient, conf)
 			if err != nil {
-				logger.Fatalf("Unable to close miletstone: %v", err)
+				logger.Printf("Error: unable to close milestone, sleeping: %v", err)
+				closeNodeSet(allNodes)
+				continue
 			}
 		} else {
 			logger.Printf("Tag '%s' is not ready to apply, sleeping", nextTag)
@@ -1994,7 +1999,7 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 		}
 		ghclient, _, err := githubConn(conf)
 		if err != nil {
-			logger.Printf("Unable to connect to github, sleeping: %v", err)
+			logger.Printf("Error: unable to connect to GitHub, sleeping: %v", err)
 			continue
 		}
 		for gi, commit := range commits {
@@ -2389,27 +2394,33 @@ func tagNewCommits(conf *HecklerdConf, repo *git.Repository) {
 		logger.Printf("No new commits since last tag: '%s'", mostRecentTag)
 		return
 	}
-	ghclient, _, err := githubConn(conf)
-	if err != nil {
-		logger.Fatalf("Unable to connect to github: %v", err)
-	}
 	mostRecentVersion, err := tagToSemver(mostRecentTag, prefix)
 	if err != nil {
 		logger.Fatalf("Unable to parse version: %v", err)
 	}
 	newVersion := mostRecentVersion.IncMajor()
 	newTag := fmt.Sprintf("%sv%d", tagPrefix(prefix), newVersion.Major())
+	ghclient, _, err := githubConn(conf)
+	if err != nil {
+		logger.Printf("Error: unable to connect to GitHub, returning: %v", err)
+		return
+	}
+	// Check if tag ref already exists on GitHub
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	// Check if tag ref already exists
 	refs, _, err := ghclient.Git.GetRefs(ctx, conf.RepoOwner, conf.Repo, fmt.Sprintf("refs/tags/%s", newTag))
+	if err != nil {
+		logger.Printf("Error: unable to get refs from github, returning: %v", err)
+		return
+	}
 	if len(refs) == 1 {
 		logger.Printf("New tag ref already exists on github, skipping creation, '%s'", newTag)
 		return
 	}
 	err = createTag(newTag, conf, ghclient, repo)
 	if err != nil {
-		logger.Fatalf("Unable to create new tag: %v", err)
+		logger.Printf("Error: unable to create new tag, returning: %v", err)
+		return
 	}
 }
 
@@ -2535,37 +2546,38 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 			continue
 		}
 		logger.Printf("Found common tag: %s", allNodes.commonTag)
-		ghclient, _, err := githubConn(conf)
+		priorTag := allNodes.commonTag
+		nextTag, err := nextTag(priorTag, conf.EnvPrefix, repo)
 		if err != nil {
-			logger.Printf("Unable to connect to github, sleeping: %v", err)
+			logger.Printf("Error: unable to query for nextTag after '%s', sleeping: %v", priorTag, err)
 			closeNodeSet(allNodes)
 			continue
 		}
-		nextTag, err := nextTag(allNodes.commonTag, conf.EnvPrefix, repo)
-		if err != nil {
-			closeNodeSet(allNodes)
-			logger.Fatalf("Unable to find next tag: %v", err)
-		}
 		if nextTag == "" {
-			logger.Println("No nextTag found, sleeping")
+			logger.Printf("No nextTag found after tag '%s', sleeping", priorTag)
 			closeNodeSet(allNodes)
 			continue
 		}
 		closeNodeSet(allNodes)
-		priorTag := allNodes.commonTag
+		ghclient, _, err := githubConn(conf)
+		if err != nil {
+			logger.Printf("Error: unable to connect to GitHub, sleeping: %v", err)
+			continue
+		}
 		var nextTagMilestone *github.Milestone
 		nextTagMilestone, err = milestoneFromTag(nextTag, ghclient, conf)
 		if err == context.DeadlineExceeded {
-			logger.Println("Timeout reaching github for milestone, sleeping")
+			logger.Println("Error: timeout reaching GitHub for milestone, sleeping")
 			continue
 		} else if err != nil {
-			logger.Printf("Unable to find milestone from tag, '%s', sleeping: %v", nextTag, err)
+			logger.Printf("Error: unable to find milestone from tag, '%s', sleeping: %v", nextTag, err)
 			continue
 		}
 		if nextTagMilestone == nil {
 			nextTagMilestone, err = createMilestone(nextTag, ghclient, conf)
 			if err != nil {
-				logger.Fatalf("Unable to create new milestone for tag '%s': %v", nextTag, err)
+				logger.Printf("Error: unable to create new milestone for tag '%s': %v", nextTag, err)
+				continue
 			}
 			logger.Printf("Successfully created new milestone: %v", *nextTagMilestone.Title)
 		}
@@ -2576,20 +2588,25 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 		}
 		// No new commits
 		if len(commitLogIds) == 0 {
-			logger.Fatalf("No commits between versions: %s..%s", priorTag, nextTag)
+			logger.Printf("Error: No commits between versions: %s..%s, sleeping", priorTag, nextTag)
+			continue
 		}
 		for _, gi := range commitLogIds {
 			issue, err := githubIssueFromCommit(ghclient, gi, conf)
 			if err != nil {
-				logger.Fatalf("Unable to determine if issue exists: %s", gi.String())
+				logger.Printf("Error: unable to determine if issue exists, %s", gi.String())
+				continue
 			}
-			if issue != nil {
-				issueMilestone := issue.GetMilestone()
-				if issueMilestone == nil || *issueMilestone != *nextTagMilestone {
-					err = updateIssueMilestone(ghclient, conf, issue, nextTagMilestone)
-					if err != nil {
-						logger.Fatalf("Unable to update issue milestone: %v", err)
-					}
+			if issue == nil {
+				logger.Printf("No issue exists for, %s", gi.String())
+				continue
+			}
+			issueMilestone := issue.GetMilestone()
+			if issueMilestone == nil || *issueMilestone != *nextTagMilestone {
+				err = updateIssueMilestone(ghclient, conf, issue, nextTagMilestone)
+				if err != nil {
+					logger.Printf("Error: unable to update issue milestone: %v", err)
+					continue
 				}
 			}
 		}
@@ -2743,7 +2760,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			}
 			ghclient, _, err := githubConn(conf)
 			if err != nil {
-				logger.Printf("Unable to connect to github: %v", err)
+				logger.Printf("Error: unable to connect to GitHub, sleeping: %v", err)
 				continue
 			}
 			issue, err := githubIssueFromCommit(ghclient, gi, conf)
@@ -3059,7 +3076,7 @@ func main() {
 			}
 			_, err = fetchRepo(conf)
 			if err != nil {
-				logger.Fatalf("Unable to fetch repo: %v", err)
+				logger.Printf("Unable to fetch repo, sleeping: %v", err)
 			}
 		}
 	}()
