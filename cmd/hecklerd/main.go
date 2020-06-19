@@ -2466,6 +2466,8 @@ func createTag(newTag string, conf *HecklerdConf, ghclient *github.Client, repo 
 	return nil
 }
 
+// Given two git tags, a git repo, and a github client, this function returns
+// true if the noops for each commit have been approved.
 func tagIssuesReviewed(repo *git.Repository, ghclient *github.Client, conf *HecklerdConf, priorTag string, nextTag string) (bool, error) {
 	var nextTagMilestone *github.Milestone
 	nextTagMilestone, err := milestoneFromTag(nextTag, ghclient, conf)
