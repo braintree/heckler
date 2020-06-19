@@ -1888,12 +1888,12 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 		}
 		err = dialNodeSet(conf, allNodes, logger)
 		if err != nil {
-			logger.Printf("Unable to dial node set: %v", err)
+			logger.Printf("Error: unable to dial node set: %v", err)
 			continue
 		}
 		err = commonTagNodeSet(conf, allNodes, repo, logger)
 		if err != nil {
-			logger.Printf("Unable to query for commonTag: %v", err)
+			logger.Printf("Error: unable to query for commonTag: %v", err)
 			closeNodeSet(allNodes)
 			continue
 		}
@@ -1937,13 +1937,13 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 		logger.Printf("Tag '%s' is ready to apply, applying...", nextTag)
 		err = lockNodeSet("root", conf.LockMessage, false, allNodes, logger)
 		if err != nil {
-			logger.Printf("Unable to lock nodes, sleeping: %v", err)
+			logger.Printf("Error: unable to lock nodes, sleeping: %v", err)
 			closeNodeSet(allNodes)
 			continue
 		}
 		appliedNodes, beyondRevNodes, err := applyNodeSet(allNodes, false, false, nextTag, repo, logger)
 		if err != nil {
-			logger.Printf("Unable to apply nodes, sleeping: %v", err)
+			logger.Printf("Error: unable to apply nodes, sleeping: %v", err)
 			closeNodeSet(allNodes)
 			continue
 		}
@@ -1977,12 +1977,12 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 		}
 		err = dialNodeSet(conf, allNodes, logger)
 		if err != nil {
-			logger.Printf("Unable to dial node set: %v", err)
+			logger.Printf("Error: unable to dial node set: %v", err)
 			continue
 		}
 		err = commonTagNodeSet(conf, allNodes, repo, logger)
 		if err != nil {
-			logger.Printf("Unable to query for commonTag: %v", err)
+			logger.Printf("Error: unable to query for commonTag: %v", err)
 			closeNodeSet(allNodes)
 			continue
 		}
@@ -1990,7 +1990,7 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 		closeNodeSet(allNodes)
 		_, commits, err := commitLogIdList(repo, allNodes.commonTag, "master")
 		if err != nil {
-			logger.Printf("Unable to obtain commit log ids: %v", err)
+			logger.Printf("Error: unable to obtain commit log ids: %v", err)
 			continue
 		}
 		if len(commits) == 0 {
@@ -2005,7 +2005,7 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 		for gi, commit := range commits {
 			issue, err := githubIssueFromCommit(ghclient, gi, conf)
 			if err != nil {
-				logger.Printf("Unable to determine if issue exists: %s", gi.String())
+				logger.Printf("Error: unable to determine if issue exists: %s", gi.String())
 				continue
 			}
 			if issue == nil {
@@ -2015,8 +2015,7 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 			if os.IsNotExist(err) {
 				continue
 			} else if err != nil {
-				logger.Printf("Unable to unmarshal grouped resources: %v", err)
-				continue
+				logger.Fatalf("Error: unable to unmarshal groupedCommit: %v", err)
 			}
 			if issue.GetState() == "closed" {
 				continue
@@ -2024,7 +2023,7 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 			if len(groupedResources) == 0 {
 				err := closeIssue(ghclient, conf, issue, "No noop output marking issue as 'closed'")
 				if err != nil {
-					logger.Printf("Unable to close approved issue(%d): %v", issue.GetNumber(), err)
+					logger.Printf("Error: unable to close approved issue(%d): %v", issue.GetNumber(), err)
 					continue
 				}
 				continue
@@ -2032,20 +2031,20 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 			if conf.AutoCloseIssues {
 				err := closeIssue(ghclient, conf, issue, "Auto close set, marking issue as 'closed'")
 				if err != nil {
-					logger.Printf("Unable to close approved issue(%d): %v", issue.GetNumber(), err)
+					logger.Printf("Error: unable to close approved issue(%d): %v", issue.GetNumber(), err)
 					continue
 				}
 				continue
 			}
 			noopApproved, err := noopApproved(ghclient, conf, groupedResources, commit, issue)
 			if err != nil {
-				logger.Printf("Unable to determine if issue(%d) is approved: %v", issue.Number, err)
+				logger.Printf("Error: unable to determine if issue(%d) is approved: %v", issue.Number, err)
 				continue
 			}
 			if noopApproved {
 				err := closeIssue(ghclient, conf, issue, "Issue has been approved, marking issue as 'closed'")
 				if err != nil {
-					logger.Printf("Unable to close approved issue(%d): %v", issue.GetNumber(), err)
+					logger.Printf("Error: unable to close approved issue(%d): %v", issue.GetNumber(), err)
 					continue
 				}
 			}
@@ -2726,17 +2725,19 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 				}
 				err = dialNodeSet(conf, perNoop, logger)
 				if err != nil {
+					logger.Printf("Unable to dial node set: %v", err)
+					break
 				}
 				err = lastApplyNodeSet(perNoop, repo, logger)
 				if err != nil {
 					logger.Printf("Unable to get last apply for node set: %v", err)
-					continue
+					closeNodeSet(perNoop)
+					break
 				}
 				err = lockNodeSet("root", conf.LockMessage, false, perNoop, logger)
 				if err != nil {
 					logger.Printf("Unable to lock nodes, sleeping, %v", err)
 					unlockNodeSet("root", false, perNoop, logger)
-					// This error will likely occur in the next iteration, so break and sleep
 					break
 				}
 				for _, node := range perNoop.nodes.active {
@@ -2754,11 +2755,10 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 				closeNodeSet(perNoop)
 				err = marshalGroupedCommit(commit.Id(), groupedCommit, groupedNoopDir)
 				if err != nil {
-					logger.Printf("Unable to marshal group commit: %v", err)
+					logger.Fatalf("Error: unable to marshal groupedCommit: %v", err)
 				}
 			} else if err != nil {
-				logger.Printf("Error trying to unmarshal groupedCommit: %v", err)
-				continue
+				logger.Fatalf("Error: unable to unmarshal groupedCommit: %v", err)
 			}
 			ghclient, _, err := githubConn(conf)
 			if err != nil {
@@ -2767,13 +2767,13 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			}
 			issue, err := githubIssueFromCommit(ghclient, gi, conf)
 			if err != nil {
-				logger.Printf("Unable to determine if issue for commit %s exists: %v", gi.String(), err)
+				logger.Printf("Error: unable to determine if issue for commit %s exists: %v", gi.String(), err)
 				continue
 			}
 			if issue == nil {
 				issue, err = githubCreateIssue(ghclient, conf, commit, groupedCommit, templates)
 				if err != nil {
-					logger.Printf("Unable to create github issue: %v", err)
+					logger.Printf("Error: unable to create github issue: %v", err)
 					continue
 				}
 				logger.Printf("Successfully created new issue: '%v'", issue.GetTitle())
