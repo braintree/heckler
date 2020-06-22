@@ -1068,7 +1068,6 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 	var nodesToApply map[string]*Node
 	var err error
 	beyondRevNodes := make(map[string]*Node)
-	lastApplyNodes := make(map[string]*Node)
 	errUnknownRevNodes := make(map[string]*Node)
 	appliedNodes := make(map[string]*Node)
 	// No need to check node revision if force applying
@@ -1085,7 +1084,7 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 		}
 		revId := *obj.Id()
 		nodesToApply = make(map[string]*Node)
-		for host, node := range lastApplyNodes {
+		for host, node := range ns.nodes.active {
 			if commitAlreadyApplied(node.lastApply, revId, repo) {
 				beyondRevNodes[host] = node
 			} else {
