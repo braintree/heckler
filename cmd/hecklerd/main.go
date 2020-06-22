@@ -1416,11 +1416,13 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 	}
 	body := commitBodyToMarkdown(commit, conf, templates)
 	body += groupedResourcesToMarkdown(groupedCommit, commit, conf, templates)
-	noopOwnersMarkdown, err := noopOwnersToMarkdown(conf, commit, groupedCommit, templates)
-	if err != nil {
-		return nil, err
+	if len(groupedCommit) > 0 {
+		noopOwnersMarkdown, err := noopOwnersToMarkdown(conf, commit, groupedCommit, templates)
+		if err != nil {
+			return nil, err
+		}
+		body += noopOwnersMarkdown
 	}
-	body += noopOwnersMarkdown
 	githubIssue := &github.IssueRequest{
 		Title:     github.String(noopTitle(commit, prefix)),
 		Assignees: &authors,
