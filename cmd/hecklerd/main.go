@@ -71,6 +71,7 @@ var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 type HecklerdConf struct {
 	Repo                 string                `yaml:"repo"`
 	RepoOwner            string                `yaml:"repo_owner"`
+	RepoBranch           string                `yaml:"repo_branch"`
 	GitHubDomain         string                `yaml:"github_domain"`
 	GitHubPrivateKeyPath string                `yaml:"github_private_key_path"`
 	GitHubAppSlug        string                `yaml:"github_app_slug"`
@@ -1988,7 +1989,7 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 		}
 		logger.Printf("Found common tag: %s", allNodes.commonTag)
 		closeNodeSet(allNodes)
-		_, commits, err := commitLogIdList(repo, allNodes.commonTag, "master")
+		_, commits, err := commitLogIdList(repo, allNodes.commonTag, conf.RepoBranch)
 		if err != nil {
 			logger.Printf("Error: unable to obtain commit log ids: %v", err)
 			continue
@@ -2360,11 +2361,11 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 // If no, do nothing
 func tagNewCommits(conf *HecklerdConf, repo *git.Repository) {
 	logger := log.New(os.Stdout, "[tagNewCommits] ", log.Lshortfile)
-	headCommit, err := gitutil.RevparseToCommit("master", repo)
+	headCommit, err := gitutil.RevparseToCommit(conf.RepoBranch, repo)
 	if err != nil {
 		logger.Fatalf("Unable to revparse: %v", err)
 	}
-	logger.Printf("Master commit, '%s'", headCommit.AsObject().Id().String())
+	logger.Printf("Commit on branch '%s', '%s'", conf.RepoBranch, headCommit.AsObject().Id().String())
 	describeOpts, err := git.DefaultDescribeOptions()
 	if err != nil {
 		logger.Fatalf("Unable to set describe opts: %v", err)
@@ -2385,7 +2386,7 @@ func tagNewCommits(conf *HecklerdConf, repo *git.Repository) {
 		logger.Fatalf("Unable to format describe output: %v", err)
 	}
 	logger.Printf("Most recent tag from commit, %s tag: '%s'", headCommit.AsObject().Id().String(), mostRecentTag)
-	commitLogIds, _, err := commitLogIdList(repo, mostRecentTag, "master")
+	commitLogIds, _, err := commitLogIdList(repo, mostRecentTag, conf.RepoBranch)
 	if err != nil {
 		logger.Fatalf("Unable to obtain commit log ids: %v", err)
 	}
@@ -2430,7 +2431,7 @@ func createTag(newTag string, conf *HecklerdConf, ghclient *github.Client, repo 
 		Name:  github.String("Heckler"),
 		Email: github.String("hathaway@paypal.com"),
 	}
-	commit, err := gitutil.RevparseToCommit("master", repo)
+	commit, err := gitutil.RevparseToCommit(conf.RepoBranch, repo)
 	if err != nil {
 		return err
 	}
@@ -2703,8 +2704,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			continue
 		}
 		logger.Printf("Found common tag: %s", allNodes.commonTag)
-		// TODO support other branches?
-		_, commits, err := commitLogIdList(repo, allNodes.commonTag, "master")
+		_, commits, err := commitLogIdList(repo, allNodes.commonTag, conf.RepoBranch)
 		if err != nil {
 			logger.Fatalf("Unable to obtain commit log ids: %v", err)
 		}
@@ -3030,6 +3030,11 @@ func main() {
 		logger.Fatalf("Cannot unmarshal config: %v", err)
 	}
 	file.Close()
+
+	if conf.RepoBranch == "" {
+		logger.Println("No branch specified in config, please add RepoBranch")
+		os.Exit(1)
+	}
 
 	if clearState && clearGitHub {
 		logger.Println("clear & ghclear are mutually exclusive")

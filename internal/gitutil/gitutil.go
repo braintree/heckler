@@ -39,19 +39,30 @@ func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptio
 func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 	var err error
 
+	headRef, err := repo.Head()
+	if err != nil {
+		return err
+	}
+
+	headBranchName, err := headRef.Branch().Name()
+	if err != nil {
+		return err
+	} else if headBranchName == "" {
+		return errors.New("HEAD branch name is empty, ''")
+	}
+
 	remote, err := repo.Remotes.Lookup("origin")
 	if err != nil {
 		return err
 	}
 
-	// XXX only fetch specific branch?
 	err = remote.Fetch([]string{}, fetchOptions, "")
 	if err != nil {
 		return err
 	}
 
-	// open master branch of remote
-	remoteBranch, err := repo.References.Lookup("refs/remotes/origin/master")
+	// Open HEAD branch of remote
+	remoteBranch, err := repo.References.Lookup("refs/remotes/origin/" + headBranchName)
 	if err != nil {
 		return err
 	}
@@ -71,6 +82,7 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 		return err
 	}
 
+	// Repo is up to date
 	if (analysis & git.MergeAnalysisUpToDate) != 0 {
 		return nil
 	}
@@ -79,7 +91,7 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 		return errors.New("Not a fast forward, bailing")
 	}
 
-	branchRef, err := repo.References.Lookup("refs/heads/master")
+	branchRef, err := repo.References.Lookup("refs/heads/" + headBranchName)
 	if err != nil {
 		return err
 	}
@@ -123,31 +135,9 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 		}
 	}
 
-	err = repo.SetHead("refs/heads/master")
+	err = repo.SetHead("refs/heads/" + headBranchName)
 	if err != nil {
 		return err
-	}
-
-	return nil
-}
-
-func Walk(repo *git.Repository) error {
-	var err error
-
-	rv, err := repo.Walk()
-	rv.Sorting(git.SortTopological)
-	if err != nil {
-		return err
-	}
-	err = rv.PushRef("refs/tags/v2")
-	err = rv.HideRef("refs/tags/v1")
-	if err != nil {
-		return err
-	}
-
-	var gi git.Oid
-	for rv.Next(&gi) == nil {
-		fmt.Printf("%v\n", gi.String())
 	}
 
 	return nil
@@ -226,6 +216,12 @@ func RevparseToCommit(rev string, repo *git.Repository) (*git.Commit, error) {
 
 func Checkout(rev string, repo *git.Repository) (string, error) {
 	var err error
+	var branchRef bool
+
+	ref, err := repo.References.Dwim(rev)
+	if err == nil {
+		branchRef = ref.IsBranch()
+	}
 
 	commit, err := RevparseToCommit(rev, repo)
 	if err != nil {
@@ -257,10 +253,16 @@ func Checkout(rev string, repo *git.Repository) (string, error) {
 		return "", err
 	}
 	commitId := commit.Id()
-	err = repo.SetHeadDetached(commitId)
-	if err != nil {
-		return "", err
+	if branchRef {
+		err = repo.SetHead(ref.Name())
+		if err != nil {
+			return "", err
+		}
+	} else {
+		err = repo.SetHeadDetached(commitId)
+		if err != nil {
+			return "", err
+		}
 	}
-
 	return commitId.String(), nil
 }

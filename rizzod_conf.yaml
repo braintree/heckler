@@ -9,3 +9,4 @@ puppet_cmd:
     BUTTER: "bubbles"
 puppet_reportdir: "/var/tmp/reports"
 heckler_host: "heckler.example.com"
+repo_branch: "master"

@@ -51,7 +51,7 @@ func (s *rizzoServer) PuppetApply(ctx context.Context, req *rizzopb.PuppetApplyR
 	log.Printf("Received: %v", req.Rev)
 
 	repoUrl := "http://" + s.conf.HecklerHost + ":8080/puppetcode"
-	repo, err := gitutil.PullBranch(repoUrl, "master", repoDir)
+	repo, err := gitutil.PullBranch(repoUrl, s.conf.RepoBranch, repoDir)
 	if err != nil {
 		return &rizzopb.PuppetReport{}, err
 	}
@@ -353,6 +353,7 @@ type RizzoConf struct {
 	PuppetCmd       `yaml:"puppet_cmd"`
 	PuppetReportDir string `yaml:"puppet_reportdir"`
 	HecklerHost     string `yaml:"heckler_host"`
+	RepoBranch      string `yaml:"repo_branch"`
 }
 
 func main() {
@@ -411,6 +412,11 @@ func main() {
 	}
 	file.Close()
 
+	if conf.RepoBranch == "" {
+		log.Println("No branch specified in config, please add RepoBranch")
+		os.Exit(1)
+	}
+
 	if clearState {
 		log.Printf("Removing state directory: %v", stateDir)
 		os.RemoveAll(stateDir)
@@ -423,7 +429,7 @@ func main() {
 	repoPulled := false
 	for repoPulled == false {
 		log.Printf("Pulling: %s", repoUrl)
-		_, err := gitutil.PullBranch(repoUrl, "master", repoDir)
+		_, err := gitutil.PullBranch(repoUrl, conf.RepoBranch, repoDir)
 		if err != nil {
 			sleepDur := 10 * time.Second
 			log.Printf("Pull error, trying again after sleeping for %s: %v", sleepDur, err)
