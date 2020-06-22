@@ -1956,6 +1956,7 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 		appliedNodes, beyondRevNodes, err := applyNodeSet(allNodes, false, false, nextTag, repo, logger)
 		if err != nil {
 			logger.Printf("Error: unable to apply nodes, sleeping: %v", err)
+			unlockNodeSet("root", false, allNodes, logger)
 			closeNodeSet(allNodes)
 			continue
 		}
