@@ -69,26 +69,27 @@ var Debug = false
 var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 
 type HecklerdConf struct {
-	Repo                      string                `yaml:"repo"`
-	RepoOwner                 string                `yaml:"repo_owner"`
-	RepoBranch                string                `yaml:"repo_branch"`
-	GitHubDomain              string                `yaml:"github_domain"`
-	GitHubPrivateKeyPath      string                `yaml:"github_private_key_path"`
-	GitHubAppSlug             string                `yaml:"github_app_slug"`
-	GitHubAppId               int64                 `yaml:"github_app_id"`
-	GitHubAppInstallId        int64                 `yaml:"github_app_install_id"`
-	NodeSets                  map[string]NodeSetCfg `yaml:"node_sets"`
-	AutoTagCronSchedule       string                `yaml:"auto_tag_cron_schedule"`
-	AutoCloseIssues           bool                  `yaml:"auto_close_issues"`
-	EnvPrefix                 string                `yaml:"env_prefix"`
-	MaxThresholds             Thresholds            `yaml:"max_thresholds"`
-	GitServerMaxClients       int                   `yaml:"git_server_max_clients"`
-	ManualMode                bool                  `yaml:"manual_mode"`
-	LockMessage               string                `yaml:"lock_message"`
-	LoopNoopSleepSeconds      int                   `yaml:"loop_noop_sleep_seconds"`
-	LoopMilestoneSleepSeconds int                   `yaml:"loop_milestone_sleep_seconds"`
-	LoopApplySleepSeconds     int                   `yaml:"loop_apply_sleep_seconds"`
-	LoopApprovalSleepSeconds  int                   `yaml:"loop_approval_sleep_seconds"`
+	Repo                       string                `yaml:"repo"`
+	RepoOwner                  string                `yaml:"repo_owner"`
+	RepoBranch                 string                `yaml:"repo_branch"`
+	GitHubDomain               string                `yaml:"github_domain"`
+	GitHubPrivateKeyPath       string                `yaml:"github_private_key_path"`
+	GitHubAppSlug              string                `yaml:"github_app_slug"`
+	GitHubAppId                int64                 `yaml:"github_app_id"`
+	GitHubAppInstallId         int64                 `yaml:"github_app_install_id"`
+	GitHubDisableNotifications bool                  `yaml:"github_disable_notifications"`
+	NodeSets                   map[string]NodeSetCfg `yaml:"node_sets"`
+	AutoTagCronSchedule        string                `yaml:"auto_tag_cron_schedule"`
+	AutoCloseIssues            bool                  `yaml:"auto_close_issues"`
+	EnvPrefix                  string                `yaml:"env_prefix"`
+	MaxThresholds              Thresholds            `yaml:"max_thresholds"`
+	GitServerMaxClients        int                   `yaml:"git_server_max_clients"`
+	ManualMode                 bool                  `yaml:"manual_mode"`
+	LockMessage                string                `yaml:"lock_message"`
+	LoopNoopSleepSeconds       int                   `yaml:"loop_noop_sleep_seconds"`
+	LoopMilestoneSleepSeconds  int                   `yaml:"loop_milestone_sleep_seconds"`
+	LoopApplySleepSeconds      int                   `yaml:"loop_apply_sleep_seconds"`
+	LoopApprovalSleepSeconds   int                   `yaml:"loop_approval_sleep_seconds"`
 }
 
 type NodeSetCfg struct {
@@ -1487,6 +1488,9 @@ func noopOwnersToMarkdown(conf *HecklerdConf, commit *git.Commit, groupedResourc
 		return "", err
 	}
 	no := groupedResourcesUniqueOwners(groupedResources)
+	if conf.GitHubDisableNotifications {
+		stripAtSigns(&no)
+	}
 	data := struct {
 		Commit     *git.Commit
 		Conf       *HecklerdConf
@@ -2200,6 +2204,21 @@ func groupedResourcesUniqueOwners(groupedResources []*groupedResource) noopOwner
 		}
 	}
 	return no
+}
+
+// Strips the `@` prefix from users and groups so that they are not notified on
+// GitHub
+func stripAtSigns(no *noopOwners) {
+	for _, owners := range no.OwnedSourceFiles {
+		for i, owner := range owners {
+			owners[i] = strings.TrimPrefix(owner, "@")
+		}
+	}
+	for _, owners := range no.OwnedNodeFiles {
+		for i, owner := range owners {
+			owners[i] = strings.TrimPrefix(owner, "@")
+		}
+	}
 }
 
 // Given a github issue return the set of github logins which have approved the issue
