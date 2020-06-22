@@ -3137,11 +3137,11 @@ func main() {
 		}
 	}()
 
+	logger.Println("Unlocking 'all' in case they are locked, from a segfault")
+	unlockAll(conf, logger)
 	if conf.ManualMode {
 		logger.Println("Manual mode: not starting noop, milestone, apply, & tag loops")
 	} else {
-		logger.Println("Unlocking 'all' in case they are locked, from a segfault")
-		unlockAll(conf, logger)
 		logger.Println("Starting noop, milestone, & apply loops")
 		go noopLoop(conf, repo, templates)
 		go milestoneLoop(conf, repo)
