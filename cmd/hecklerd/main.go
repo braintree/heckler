@@ -69,22 +69,26 @@ var Debug = false
 var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 
 type HecklerdConf struct {
-	Repo                 string                `yaml:"repo"`
-	RepoOwner            string                `yaml:"repo_owner"`
-	RepoBranch           string                `yaml:"repo_branch"`
-	GitHubDomain         string                `yaml:"github_domain"`
-	GitHubPrivateKeyPath string                `yaml:"github_private_key_path"`
-	GitHubAppSlug        string                `yaml:"github_app_slug"`
-	GitHubAppId          int64                 `yaml:"github_app_id"`
-	GitHubAppInstallId   int64                 `yaml:"github_app_install_id"`
-	NodeSets             map[string]NodeSetCfg `yaml:"node_sets"`
-	AutoTagCronSchedule  string                `yaml:"auto_tag_cron_schedule"`
-	AutoCloseIssues      bool                  `yaml:"auto_close_issues"`
-	EnvPrefix            string                `yaml:"env_prefix"`
-	MaxThresholds        Thresholds            `yaml:"max_thresholds"`
-	GitServerMaxClients  int                   `yaml:"git_server_max_clients"`
-	ManualMode           bool                  `yaml:"manual_mode"`
-	LockMessage          string                `yaml:"lock_message"`
+	Repo                      string                `yaml:"repo"`
+	RepoOwner                 string                `yaml:"repo_owner"`
+	RepoBranch                string                `yaml:"repo_branch"`
+	GitHubDomain              string                `yaml:"github_domain"`
+	GitHubPrivateKeyPath      string                `yaml:"github_private_key_path"`
+	GitHubAppSlug             string                `yaml:"github_app_slug"`
+	GitHubAppId               int64                 `yaml:"github_app_id"`
+	GitHubAppInstallId        int64                 `yaml:"github_app_install_id"`
+	NodeSets                  map[string]NodeSetCfg `yaml:"node_sets"`
+	AutoTagCronSchedule       string                `yaml:"auto_tag_cron_schedule"`
+	AutoCloseIssues           bool                  `yaml:"auto_close_issues"`
+	EnvPrefix                 string                `yaml:"env_prefix"`
+	MaxThresholds             Thresholds            `yaml:"max_thresholds"`
+	GitServerMaxClients       int                   `yaml:"git_server_max_clients"`
+	ManualMode                bool                  `yaml:"manual_mode"`
+	LockMessage               string                `yaml:"lock_message"`
+	LoopNoopSleepSeconds      int                   `yaml:"loop_noop_sleep_seconds"`
+	LoopMilestoneSleepSeconds int                   `yaml:"loop_milestone_sleep_seconds"`
+	LoopApplySleepSeconds     int                   `yaml:"loop_apply_sleep_seconds"`
+	LoopApprovalSleepSeconds  int                   `yaml:"loop_approval_sleep_seconds"`
 }
 
 type NodeSetCfg struct {
@@ -1881,8 +1885,10 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 	var err error
 	var allNodes *NodeSet
 	logger := log.New(os.Stdout, "[applyLoop] ", log.Lshortfile)
+	loopSleep := (time.Duration(conf.LoopApplySleepSeconds) * time.Second)
+	logger.Printf("Looping every %v", loopSleep)
 	for {
-		time.Sleep(10 * time.Second)
+		time.Sleep(loopSleep)
 		allNodes = &NodeSet{
 			name:       "all",
 			thresholds: conf.MaxThresholds,
@@ -1970,8 +1976,10 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 	var err error
 	var allNodes *NodeSet
 	logger := log.New(os.Stdout, "[noopApprovalLoop] ", log.Lshortfile)
+	loopSleep := time.Duration(conf.LoopApprovalSleepSeconds) * time.Second
+	logger.Printf("Looping every %v", loopSleep)
 	for {
-		time.Sleep(10 * time.Second)
+		time.Sleep(loopSleep)
 		allNodes = &NodeSet{
 			name:       "all",
 			thresholds: conf.MaxThresholds,
@@ -2530,8 +2538,10 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 	var err error
 	var allNodes *NodeSet
 	logger := log.New(os.Stdout, "[milestoneLoop] ", log.Lshortfile)
+	loopSleep := time.Duration(conf.LoopMilestoneSleepSeconds) * time.Second
+	logger.Printf("Looping every %v", loopSleep)
 	for {
-		time.Sleep(10 * time.Second)
+		time.Sleep(loopSleep)
 		allNodes = &NodeSet{
 			name:       "all",
 			thresholds: conf.MaxThresholds,
@@ -2686,8 +2696,10 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 	var err error
 	var allNodes *NodeSet
 	logger := log.New(os.Stdout, "[noopLoop] ", log.Lshortfile)
+	loopSleep := time.Duration(conf.LoopNoopSleepSeconds) * time.Second
+	logger.Printf("Looping every %v", loopSleep)
 	for {
-		time.Sleep(10 * time.Second)
+		time.Sleep(loopSleep)
 		allNodes = &NodeSet{
 			name:       "all",
 			thresholds: conf.MaxThresholds,
@@ -3025,6 +3037,11 @@ func main() {
 		logger.Fatalf("Cannot read config: %v", err)
 	}
 	conf = new(HecklerdConf)
+	// Set some defaults
+	conf.LoopNoopSleepSeconds = 10
+	conf.LoopMilestoneSleepSeconds = 10
+	conf.LoopApplySleepSeconds = 10
+	conf.LoopApprovalSleepSeconds = 10
 	err = yaml.Unmarshal([]byte(data), conf)
 	if err != nil {
 		logger.Fatalf("Cannot unmarshal config: %v", err)
@@ -3140,15 +3157,32 @@ func main() {
 	logger.Println("Unlocking 'all' in case they are locked, from a segfault")
 	unlockAll(conf, logger)
 	if conf.ManualMode {
-		logger.Println("Manual mode: not starting noop, milestone, apply, & tag loops")
+		logger.Println("Manual mode, not starting loops")
 	} else {
-		logger.Println("Starting noop, milestone, & apply loops")
-		go noopLoop(conf, repo, templates)
-		go milestoneLoop(conf, repo)
-		go applyLoop(conf, repo)
-		go noopApprovalLoop(conf, repo)
-		if conf.AutoTagCronSchedule != "" {
-			logger.Println("Starting tag loop")
+		if conf.LoopNoopSleepSeconds == 0 {
+			logger.Println("Noop loop disabled")
+		} else {
+			go noopLoop(conf, repo, templates)
+		}
+		if conf.LoopMilestoneSleepSeconds == 0 {
+			logger.Println("Milestone loop disabled")
+		} else {
+			go milestoneLoop(conf, repo)
+		}
+		if conf.LoopApplySleepSeconds == 0 {
+			logger.Println("Apply loop disabled")
+		} else {
+			go applyLoop(conf, repo)
+		}
+		if conf.LoopApprovalSleepSeconds == 0 {
+			logger.Println("Approval loop disabled")
+		} else {
+			go noopApprovalLoop(conf, repo)
+		}
+		if conf.AutoTagCronSchedule == "" {
+			logger.Println("Auto tag schedule disabled")
+		} else {
+			logger.Printf("Starting tag cron schedule of '%s'", conf.AutoTagCronSchedule)
 			c := cron.New()
 			c.AddFunc(
 				conf.AutoTagCronSchedule,
