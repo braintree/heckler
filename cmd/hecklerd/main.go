@@ -2506,7 +2506,6 @@ func tagIssuesReviewed(repo *git.Repository, ghclient *github.Client, conf *Heck
 	if nextTagMilestone == nil {
 		return false, nil
 	}
-	// TODO support other branches?
 	commitLogIds, _, err := commitLogIdList(repo, priorTag, nextTag)
 	if err != nil {
 		return false, err
@@ -2614,7 +2613,6 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 			}
 			logger.Printf("Successfully created new milestone: %v", *nextTagMilestone.Title)
 		}
-		// TODO support other branches?
 		commitLogIds, _, err := commitLogIdList(repo, priorTag, nextTag)
 		if err != nil {
 			logger.Fatalf("Unable to obtain commit log ids: %v", err)
