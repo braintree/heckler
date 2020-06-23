@@ -2768,7 +2768,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 				err = lockNodeSet("root", conf.LockMessage, false, perNoop, logger)
 				if err != nil {
 					logger.Printf("Unable to lock nodes, sleeping, %v", err)
-					unlockNodeSet("root", false, perNoop, logger)
+					closeNodeSet(perNoop)
 					break
 				}
 				for _, node := range perNoop.nodes.active {
