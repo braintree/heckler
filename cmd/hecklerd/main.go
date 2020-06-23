@@ -105,10 +105,10 @@ type NodeSet struct {
 }
 
 type Nodes struct {
-	active  map[string]*Node
-	dialed  map[string]*Node
-	errored map[string]*Node
-	locked  map[string]*Node
+	active          map[string]*Node
+	dialed          map[string]*Node
+	errored         map[string]*Node
+	lockedByAnother map[string]*Node
 }
 
 type Thresholds struct {
@@ -1058,7 +1058,7 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 	for host, node := range ns.nodes.errored {
 		har.NodeErrors[host] = node.err.Error()
 	}
-	for host, node := range ns.nodes.locked {
+	for host, node := range ns.nodes.lockedByAnother {
 		har.NodeErrors[host] = fmt.Sprintf("%s: %s", node.lockState.User, node.lockState.Comment)
 	}
 	return har, nil
@@ -1162,7 +1162,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	for host, node := range ns.nodes.errored {
 		rprt.NodeErrors[host] = node.err.Error()
 	}
-	for host, node := range ns.nodes.locked {
+	for host, node := range ns.nodes.lockedByAnother {
 		rprt.NodeErrors[host] = fmt.Sprintf("%s: %s", node.lockState.User, node.lockState.Comment)
 	}
 	return rprt, nil
@@ -1638,7 +1638,7 @@ func (hs *hecklerServer) HecklerUnlock(ctx context.Context, req *hecklerpb.Heckl
 	for host, node := range ns.nodes.errored {
 		res.NodeErrors[host] = node.err.Error()
 	}
-	for host, node := range ns.nodes.locked {
+	for host, node := range ns.nodes.lockedByAnother {
 		res.NodeErrors[host] = fmt.Sprintf("%s: %s", node.lockState.User, node.lockState.Comment)
 	}
 	return res, nil
@@ -1677,7 +1677,7 @@ func (hs *hecklerServer) HecklerLock(ctx context.Context, req *hecklerpb.Heckler
 	for host, node := range ns.nodes.errored {
 		res.NodeErrors[host] = node.err.Error()
 	}
-	for host, node := range ns.nodes.locked {
+	for host, node := range ns.nodes.lockedByAnother {
 		res.NodeErrors[host] = fmt.Sprintf("%s: %s", node.lockState.User, node.lockState.Comment)
 	}
 	return res, nil
@@ -1693,7 +1693,7 @@ func lockNodeSet(user string, comment string, force bool, ns *NodeSet, logger *l
 	lockedNodes, _, lockedByAnotherNodes, errLockNodes := rizzoLockNodes(lockReq, ns.nodes.active)
 	ns.nodes.active = lockedNodes
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errLockNodes)
-	ns.nodes.locked = lockedByAnotherNodes
+	ns.nodes.lockedByAnother = lockedByAnotherNodes
 	if msg, ok := thresholdExceededNodeSet(ns); ok {
 		logger.Printf("%s", msg)
 		return ErrThresholdExceeded
@@ -1710,7 +1710,7 @@ func unlockNodeSet(user string, force bool, ns *NodeSet, logger *log.Logger) {
 	_, unlockedNodes, lockedByAnotherNodes, errLockNodes := rizzoLockNodes(lockReq, ns.nodes.active)
 	ns.nodes.active = unlockedNodes
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errLockNodes)
-	ns.nodes.locked = mergeNodeMaps(ns.nodes.locked, lockedByAnotherNodes)
+	ns.nodes.lockedByAnother = mergeNodeMaps(ns.nodes.lockedByAnother, lockedByAnotherNodes)
 	if len(unlockedNodes) == len(ns.nodes.active) {
 		logger.Printf("Unlocked all %d requested nodes", len(unlockedNodes))
 	} else {
@@ -2540,7 +2540,7 @@ func eligibleNodeSet(user string, ns *NodeSet) {
 	lockedNodes, unlockedNodes, lockedByAnotherNodes, errLockNodes := nodesLockState(user, ns.nodes.active)
 	ns.nodes.active = mergeNodeMaps(lockedNodes, unlockedNodes)
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errLockNodes)
-	ns.nodes.locked = lockedByAnotherNodes
+	ns.nodes.lockedByAnother = lockedByAnotherNodes
 }
 
 // Is there a newer release tag than our common lastApply tag across "all"
@@ -2661,8 +2661,8 @@ func thresholdExceeded(cur Thresholds, max Thresholds) (string, bool) {
 func thresholdExceededNodeSet(ns *NodeSet) (string, bool) {
 	if len(ns.nodes.errored) > ns.thresholds.ErrNodes {
 		return fmt.Sprintf("Error nodes(%d) exceeds the threshold(%d)", len(ns.nodes.errored), ns.thresholds.ErrNodes), true
-	} else if len(ns.nodes.locked) > ns.thresholds.LockedNodes {
-		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", len(ns.nodes.locked), ns.thresholds.LockedNodes), true
+	} else if len(ns.nodes.lockedByAnother) > ns.thresholds.LockedNodes {
+		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", len(ns.nodes.lockedByAnother), ns.thresholds.LockedNodes), true
 	}
 	return "Thresholds not exceeded", false
 }
