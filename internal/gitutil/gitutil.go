@@ -91,18 +91,7 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 		return errors.New("Not a fast forward, bailing")
 	}
 
-	branchRef, err := repo.References.Lookup("refs/heads/" + headBranchName)
-	if err != nil {
-		return err
-	}
-
 	remoteBranchID := remoteBranch.Target()
-	// Point branch to the same object as the remote branch
-	_, err = branchRef.SetTarget(remoteBranchID, "")
-	if err != nil {
-		return err
-	}
-
 	if repo.IsBare() == false {
 		remoteBranchCommit, err := repo.LookupCommit(remoteBranchID)
 		if err != nil {
@@ -121,18 +110,17 @@ func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 		if err != nil {
 			return err
 		}
-		index, err := repo.Index()
-		if err != nil {
-			return err
-		}
-		err = index.ReadTree(remoteTree)
-		if err != nil {
-			return err
-		}
-		err = index.Write()
-		if err != nil {
-			return err
-		}
+	}
+
+	branchRef, err := repo.References.Lookup("refs/heads/" + headBranchName)
+	if err != nil {
+		return err
+	}
+
+	// Point branch to the same object as the remote branch
+	_, err = branchRef.SetTarget(remoteBranchID, "")
+	if err != nil {
+		return err
 	}
 
 	err = repo.SetHead("refs/heads/" + headBranchName)
