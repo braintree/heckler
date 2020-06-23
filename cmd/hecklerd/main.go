@@ -1629,6 +1629,7 @@ func (hs *hecklerServer) HecklerUnlock(ctx context.Context, req *hecklerpb.Heckl
 		return nil, err
 	}
 	defer closeNodeSet(ns)
+	ns.nodes.locked = ns.nodes.dialed
 	unlockNodeSet(req.User, req.Force, ns, logger)
 	res := new(hecklerpb.HecklerUnlockReport)
 	res.UnlockedNodes = make([]string, 0)
@@ -2376,6 +2377,7 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 	if err != nil {
 		return err
 	}
+	allNodes.nodes.locked = allNodes.nodes.dialed
 	unlockNodeSet("root", false, allNodes, logger)
 	unlockedHosts := make([]string, 0)
 	for host, _ := range allNodes.nodes.active {
