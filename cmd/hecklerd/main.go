@@ -1933,23 +1933,35 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			closeNodeSet(allNodes)
 			continue
 		}
-		tagIssuesReviewed, err := tagIssuesReviewed(repo, ghclient, conf, priorTag, nextTag)
+		nextTagMilestone, err := milestoneFromTag(nextTag, ghclient, conf)
 		if err != nil {
-			logger.Printf("Error: unable to determine if noops have been reviewed, sleeping: %v", err)
+			logger.Printf("Error: unable to query GitHub for milestone, sleeping: %v", err)
 			closeNodeSet(allNodes)
 			continue
 		}
-		if tagIssuesReviewed {
+		if nextTagMilestone == nil {
+			logger.Printf("Milestone for next tag '%s', not created, sleeping", nextTag)
+			closeNodeSet(allNodes)
+			continue
+		}
+		approved, err := tagApproved(repo, ghclient, conf, priorTag, nextTag, logger)
+		if err != nil {
+			logger.Printf("Error: unable to determine if tag has been approved, sleeping: %v", err)
+			closeNodeSet(allNodes)
+			continue
+		}
+		if !approved {
+			logger.Printf("Tag '%s' is not approved, sleeping", nextTag)
+			closeNodeSet(allNodes)
+			continue
+		}
+		if nextTagMilestone.GetState() != "closed" {
 			err = closeMilestone(nextTag, ghclient, conf)
 			if err != nil {
 				logger.Printf("Error: unable to close milestone, sleeping: %v", err)
 				closeNodeSet(allNodes)
 				continue
 			}
-		} else {
-			logger.Printf("Tag '%s' is not ready to apply, sleeping", nextTag)
-			closeNodeSet(allNodes)
-			continue
 		}
 		logger.Printf("Tag '%s' is ready to apply, applying...", nextTag)
 		err = lockNodeSet("root", conf.LockMessage, false, allNodes, logger)
@@ -2069,6 +2081,7 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 				}
 			}
 		}
+		logger.Println("Noop approval complete, sleeping")
 	}
 }
 
@@ -2101,6 +2114,9 @@ func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources 
 	// authors approving their own noops.
 	// TODO make this configurable
 	approvers := setDifferenceStrSlice(noopApprovers, commitAuthors)
+	// TODO Use the populated groupedResources to provide helpful debug messages
+	// on what a noop still needs for approval, need to determine the best way to
+	// present the information.
 	approved, groupedResources := resourcesApproved(groupedResources, groups, approvers)
 	return approved, nil
 }
@@ -2503,39 +2519,66 @@ func createTag(newTag string, conf *HecklerdConf, ghclient *github.Client, repo 
 
 // Given two git tags, a git repo, and a github client, this function returns
 // true if the noops for each commit have been approved.
-func tagIssuesReviewed(repo *git.Repository, ghclient *github.Client, conf *HecklerdConf, priorTag string, nextTag string) (bool, error) {
-	var nextTagMilestone *github.Milestone
-	nextTagMilestone, err := milestoneFromTag(nextTag, ghclient, conf)
+func tagApproved(repo *git.Repository, ghclient *github.Client, conf *HecklerdConf, priorTag string, nextTag string, logger *log.Logger) (bool, error) {
+	_, commits, err := commitLogIdList(repo, priorTag, nextTag)
 	if err != nil {
 		return false, err
 	}
-	if nextTagMilestone == nil {
-		return false, nil
+	if len(commits) == 0 {
+		return false, fmt.Errorf("No commits between versions: %s..%s", priorTag, nextTag)
 	}
-	commitLogIds, _, err := commitLogIdList(repo, priorTag, nextTag)
-	if err != nil {
-		return false, err
-	}
-	// No new commits
-	if len(commitLogIds) == 0 {
-		return false, errors.New(fmt.Sprintf("No commits between versions: %s..%s", priorTag, nextTag))
-	}
-	for _, gi := range commitLogIds {
+	approved := make(map[git.Oid]string)
+	unapproved := make(map[git.Oid]string)
+	for gi, commit := range commits {
 		issue, err := githubIssueFromCommit(ghclient, gi, conf)
 		if err != nil {
 			return false, err
 		}
 		if issue == nil {
-			return false, nil
+			unapproved[gi] = "Unapproved, GitHub issue does not exist, yet"
+			continue
 		}
 		if issue.GetMilestone() == nil || *issue.GetMilestone().Title != nextTag {
-			return false, nil
+			unapproved[gi] = fmt.Sprintf("Unapproved, GitHub issue not assigned to milestone '%s', yet", nextTag)
+			continue
 		}
-		if issue.GetState() != "closed" {
-			return false, nil
+		groupedResources, err := unmarshalGroupedCommit(commit.Id(), groupedNoopDir)
+		if os.IsNotExist(err) {
+			unapproved[gi] = "Unapproved, Noop not found on disk, yet"
+			continue
+		} else if err != nil {
+			return false, fmt.Errorf("Unable to unmarshal groupedCommit: %w", err)
+		}
+		if len(groupedResources) == 0 {
+			approved[gi] = "Approved, no changes in noop"
+			continue
+		}
+		if conf.AutoCloseIssues {
+			approved[gi] = "Approved, AutoClose enabled"
+			continue
+		}
+		noopApproved, err := noopApproved(ghclient, conf, groupedResources, commit, issue)
+		if err != nil {
+			return false, fmt.Errorf("Unable to determine if issue(%d) is approved: %w", issue.Number, err)
+		}
+		if noopApproved {
+			approved[gi] = "Approved, noop issue approved by CODEOWNERS"
+		} else {
+			unapproved[gi] = "Unapproved, noop issue awaiting approval from CODEOWNERS"
 		}
 	}
-	return true, nil
+	logger.Printf("Tag range %s..%s has %d commits, approved(%d), unapproved(%d)", priorTag, nextTag, len(commits), len(approved), len(unapproved))
+	for gi, reason := range unapproved {
+		logger.Printf("Commit: %s - '%s'", gi.String(), reason)
+	}
+	for gi, reason := range approved {
+		logger.Printf("Commit: %s - '%s'", gi.String(), reason)
+	}
+	if len(commits) == len(approved) {
+		return true, nil
+	} else {
+		return false, nil
+	}
 }
 
 // Given a node set and a user this function returns the combined set of
