@@ -1,1 +1,14 @@
-*
+*.deb
+*.pem
+*.tar
+/.go-build
+/debian/
+/heckler
+/hecklerd
+/muppetshow
+/rizzo-rev
+/rizzod
+/tmp
+# C files, that go won't vendor
+/vendor/github.com/libgit2/git2go/v30/script/**
+/vendor/github.com/libgit2/git2go/v30/vendor/**
