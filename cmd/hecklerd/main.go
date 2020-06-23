@@ -82,7 +82,7 @@ type HecklerdConf struct {
 	AutoTagCronSchedule        string                `yaml:"auto_tag_cron_schedule"`
 	AutoCloseIssues            bool                  `yaml:"auto_close_issues"`
 	EnvPrefix                  string                `yaml:"env_prefix"`
-	MaxThresholds              Thresholds            `yaml:"max_thresholds"`
+	MaxNodeThresholds          NodeThresholds        `yaml:"max_node_thresholds"`
 	GitServerMaxClients        int                   `yaml:"git_server_max_clients"`
 	ManualMode                 bool                  `yaml:"manual_mode"`
 	LockMessage                string                `yaml:"lock_message"`
@@ -98,10 +98,10 @@ type NodeSetCfg struct {
 }
 
 type NodeSet struct {
-	name       string
-	commonTag  string
-	thresholds Thresholds
-	nodes      Nodes
+	name           string
+	commonTag      string
+	nodeThresholds NodeThresholds
+	nodes          Nodes
 }
 
 type Nodes struct {
@@ -111,9 +111,9 @@ type Nodes struct {
 	lockedByAnother map[string]*Node
 }
 
-type Thresholds struct {
-	ErrNodes    int `yaml:"err_nodes"`
-	LockedNodes int `yaml:"locked_nodes"`
+type NodeThresholds struct {
+	Errored         int `yaml:"errored"`
+	lockedByAnother int `yaml:"locked_by_another"`
 }
 
 // hecklerServer is used to implement heckler.HecklerServer
@@ -934,8 +934,8 @@ func dialReqNodes(conf *HecklerdConf, hosts []string, nodeSetName string, logger
 		}
 	}
 	// Disable thresholds for a heckler client request
-	ns.thresholds.ErrNodes = len(hostsToDial)
-	ns.thresholds.LockedNodes = len(hostsToDial)
+	ns.nodeThresholds.Errored = len(hostsToDial)
+	ns.nodeThresholds.lockedByAnother = len(hostsToDial)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	ns.nodes.dialed, ns.nodes.errored = dialNodes(ctx, hostsToDial)
@@ -1895,8 +1895,8 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 	for {
 		time.Sleep(loopSleep)
 		allNodes = &NodeSet{
-			name:       "all",
-			thresholds: conf.MaxThresholds,
+			name:           "all",
+			nodeThresholds: conf.MaxNodeThresholds,
 		}
 		err = dialNodeSet(conf, allNodes, logger)
 		if err != nil {
@@ -1987,8 +1987,8 @@ func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
 	for {
 		time.Sleep(loopSleep)
 		allNodes = &NodeSet{
-			name:       "all",
-			thresholds: conf.MaxThresholds,
+			name:           "all",
+			nodeThresholds: conf.MaxNodeThresholds,
 		}
 		err = dialNodeSet(conf, allNodes, logger)
 		if err != nil {
@@ -2563,8 +2563,8 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 	for {
 		time.Sleep(loopSleep)
 		allNodes = &NodeSet{
-			name:       "all",
-			thresholds: conf.MaxThresholds,
+			name:           "all",
+			nodeThresholds: conf.MaxNodeThresholds,
 		}
 		err = dialNodeSet(conf, allNodes, logger)
 		if err != nil {
@@ -2647,22 +2647,11 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 
 // Given two node Threshold structs return a bool and a message indicating
 // whether the first threshold exceeded the second.
-func thresholdExceeded(cur Thresholds, max Thresholds) (string, bool) {
-	if cur.ErrNodes > max.ErrNodes {
-		return fmt.Sprintf("Error nodes(%d) exceeds the threshold(%d)", cur.ErrNodes, max.ErrNodes), true
-	} else if cur.LockedNodes > max.LockedNodes {
-		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", cur.LockedNodes, max.LockedNodes), true
-	}
-	return "Thresholds not exceeded", false
-}
-
-// Given two node Threshold structs return a bool and a message indicating
-// whether the first threshold exceeded the second.
 func thresholdExceededNodeSet(ns *NodeSet) (string, bool) {
-	if len(ns.nodes.errored) > ns.thresholds.ErrNodes {
-		return fmt.Sprintf("Error nodes(%d) exceeds the threshold(%d)", len(ns.nodes.errored), ns.thresholds.ErrNodes), true
-	} else if len(ns.nodes.lockedByAnother) > ns.thresholds.LockedNodes {
-		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", len(ns.nodes.lockedByAnother), ns.thresholds.LockedNodes), true
+	if len(ns.nodes.errored) > ns.nodeThresholds.Errored {
+		return fmt.Sprintf("Error nodes(%d) exceeds the threshold(%d)", len(ns.nodes.errored), ns.nodeThresholds.Errored), true
+	} else if len(ns.nodes.lockedByAnother) > ns.nodeThresholds.lockedByAnother {
+		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", len(ns.nodes.lockedByAnother), ns.nodeThresholds.lockedByAnother), true
 	}
 	return "Thresholds not exceeded", false
 }
@@ -2720,8 +2709,8 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 	for {
 		time.Sleep(loopSleep)
 		allNodes = &NodeSet{
-			name:       "all",
-			thresholds: conf.MaxThresholds,
+			name:           "all",
+			nodeThresholds: conf.MaxNodeThresholds,
 		}
 		err = dialNodeSet(conf, allNodes, logger)
 		if err != nil {
@@ -2751,8 +2740,8 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 			groupedCommit, err = unmarshalGroupedCommit(commit.Id(), groupedNoopDir)
 			if os.IsNotExist(err) {
 				perNoop = &NodeSet{
-					name:       "all",
-					thresholds: conf.MaxThresholds,
+					name:           "all",
+					nodeThresholds: conf.MaxNodeThresholds,
 				}
 				err = dialNodeSet(conf, perNoop, logger)
 				if err != nil {

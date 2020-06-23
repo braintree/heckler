@@ -9,9 +9,9 @@ auto_tag_cron_schedule: "* * * * *"
 auto_close_issues: true
 # This is the number of nodes that can be missing when creating a noop for an
 # environment
-max_thresholds:
-  err_nodes: 0
-  locked_nodes: 0
+max_node_thresholds:
+  errored: 0
+  locked_by_another: 0
 env_prefix: ""
 manual_mode: false
 lock_message: |
