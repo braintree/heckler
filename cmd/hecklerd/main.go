@@ -108,6 +108,7 @@ type Nodes struct {
 	active          map[string]*Node
 	dialed          map[string]*Node
 	errored         map[string]*Node
+	locked          map[string]*Node
 	lockedByAnother map[string]*Node
 }
 
@@ -1692,10 +1693,12 @@ func lockNodeSet(user string, comment string, force bool, ns *NodeSet, logger *l
 	}
 	lockedNodes, _, lockedByAnotherNodes, errLockNodes := rizzoLockNodes(lockReq, ns.nodes.active)
 	ns.nodes.active = lockedNodes
+	ns.nodes.locked = lockedNodes
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errLockNodes)
 	ns.nodes.lockedByAnother = lockedByAnotherNodes
 	if msg, ok := thresholdExceededNodeSet(ns); ok {
 		logger.Printf("%s", msg)
+		unlockNodeSet(user, false, ns, logger)
 		return ErrThresholdExceeded
 	}
 	return nil
@@ -1707,14 +1710,11 @@ func unlockNodeSet(user string, force bool, ns *NodeSet, logger *log.Logger) {
 		User:  user,
 		Force: force,
 	}
-	_, unlockedNodes, lockedByAnotherNodes, errLockNodes := rizzoLockNodes(lockReq, ns.nodes.active)
-	ns.nodes.active = unlockedNodes
-	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errLockNodes)
-	ns.nodes.lockedByAnother = mergeNodeMaps(ns.nodes.lockedByAnother, lockedByAnotherNodes)
-	if len(unlockedNodes) == len(ns.nodes.active) {
+	_, unlockedNodes, lockedByAnotherNodes, errLockNodes := rizzoLockNodes(lockReq, ns.nodes.locked)
+	if len(unlockedNodes) == len(ns.nodes.locked) {
 		logger.Printf("Unlocked all %d requested nodes", len(unlockedNodes))
 	} else {
-		logger.Printf("Tried to unlock %d nodes, but only succeeded in unlocking, %d", len(ns.nodes.active), len(unlockedNodes))
+		logger.Printf("Tried to unlock %d nodes, but only succeeded in unlocking, %d", len(ns.nodes.locked), len(unlockedNodes))
 	}
 	for host, str := range compressLockNodes(lockedByAnotherNodes) {
 		logger.Printf("Unlock requested, but locked by another: %s, %s", host, str)
@@ -1723,6 +1723,10 @@ func unlockNodeSet(user string, force bool, ns *NodeSet, logger *log.Logger) {
 	for host, err := range compressedErrNodes {
 		logger.Printf("Unlock failed, errNodes: %s, %v", host, err)
 	}
+	ns.nodes.active = unlockedNodes
+	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errLockNodes)
+	ns.nodes.locked = nil
+	ns.nodes.lockedByAnother = mergeNodeMaps(ns.nodes.lockedByAnother, lockedByAnotherNodes)
 }
 
 func nodesLockState(user string, nodes map[string]*Node) (map[string]*Node, map[string]*Node, map[string]*Node, map[string]*Node) {
