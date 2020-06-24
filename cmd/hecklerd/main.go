@@ -2459,18 +2459,20 @@ func tagNewCommits(conf *HecklerdConf, repo *git.Repository) {
 	// Check if tag ref already exists on GitHub
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	refs, _, err := ghclient.Git.GetRefs(ctx, conf.RepoOwner, conf.Repo, fmt.Sprintf("refs/tags/%s", newTag))
-	if err != nil {
-		logger.Printf("Error: unable to get refs from github, returning: %v", err)
+	ref, resp, err := ghclient.Git.GetRef(ctx, conf.RepoOwner, conf.Repo, fmt.Sprintf("refs/tags/%s", newTag))
+	if ref == nil && resp.StatusCode == 404 {
+		err = createTag(newTag, conf, ghclient, repo)
+		if err != nil {
+			logger.Printf("Error: unable to create new tag '%s' on GitHub, returning: %v", newTag, err)
+			return
+		}
+		logger.Printf("Created new tag '%s' on GitHub", newTag)
 		return
-	}
-	if len(refs) == 1 {
-		logger.Printf("New tag ref already exists on github, skipping creation, '%s'", newTag)
+	} else if err != nil {
+		logger.Printf("Error: unable to get ref for tag '%s' on GitHub, returning: %v", newTag, err)
 		return
-	}
-	err = createTag(newTag, conf, ghclient, repo)
-	if err != nil {
-		logger.Printf("Error: unable to create new tag, returning: %v", err)
+	} else {
+		logger.Printf("New tag ref already exists on GitHub, skipping creation, '%s'", newTag)
 		return
 	}
 }
