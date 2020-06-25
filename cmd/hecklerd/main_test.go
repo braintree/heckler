@@ -79,7 +79,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 						File: nil,
 						NodeFiles: map[string][]string{
 							"nodes/fozzie.pp":  {"@braintree/muppets"},
-							"nodes/statler.pp": nil,
+							"nodes/statler.pp": {"@braintree/muppets"},
 							"nodes/waldorf.pp": {"@braintree/muppets"},
 						},
 					},
@@ -113,7 +113,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 						File: []string{"@misspiggy"},
 						NodeFiles: map[string][]string{
 							"nodes/fozzie.pp":  {"@braintree/muppets"},
-							"nodes/statler.pp": nil,
+							"nodes/statler.pp": {"@braintree/muppets"},
 							"nodes/waldorf.pp": {"@braintree/muppets"},
 						},
 					},
