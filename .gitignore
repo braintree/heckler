@@ -1,6 +1,8 @@
 *.deb
 *.pem
 *.tar
+# deb build dir
+/_build
 /.go-build
 /debian/
 /heckler
