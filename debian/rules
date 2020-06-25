@@ -3,7 +3,7 @@
 HECKLER_VERSION := $(shell git describe --abbrev=0 | sed 's/^v//')
 export DH_VERBOSE := 1
 export DH_GOLANG_INSTALL_EXTRA := vendor/github.com/libgit2/git2go/v30/static-build \
-	$(shell find . -name '*.tmpl')
+	$(shell find . -name '*.tmpl') muppetshow
 export DEB_BUILD_OPTIONS := nostrip
 export CC := /usr/local/musl/bin/musl-gcc
 GO_LDFLAGS := -X main.Version=$(HECKLER_VERSION) -extldflags=-static -linkmode=external
