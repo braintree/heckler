@@ -948,13 +948,13 @@ func setNameToNodes(conf *HecklerdConf, nodeSetName string, logger *log.Logger) 
 	if nodeSetName == "" {
 		return nil, errors.New("Empty nodeSetName provided")
 	}
-	var nodeSet NodeSetCfg
+	var setCfg NodeSetCfg
 	var ok bool
-	if nodeSet, ok = conf.NodeSets[nodeSetName]; !ok {
+	if setCfg, ok = conf.NodeSets[nodeSetName]; !ok {
 		return nil, errors.New(fmt.Sprintf("nodeSetName '%s' not found in hecklerd config", nodeSetName))
 	}
 	// Change to code dir, so hiera relative paths resolve
-	cmd := exec.Command(nodeSet.Cmd[0], nodeSet.Cmd[1:]...)
+	cmd := exec.Command(setCfg.Cmd[0], setCfg.Cmd[1:]...)
 	cmd.Dir = stateDir + "/work_repo/puppetcode"
 	stdout, err := cmd.Output()
 	if err != nil {
@@ -968,7 +968,7 @@ func setNameToNodes(conf *HecklerdConf, nodeSetName string, logger *log.Logger) 
 	}
 
 	regexes := make([]*regexp.Regexp, 0)
-	for _, sregex := range nodeSet.Blacklist {
+	for _, sregex := range setCfg.Blacklist {
 		regex, err := regexp.Compile(sregex)
 		if err != nil {
 			return nil, err
@@ -994,7 +994,7 @@ func setNameToNodes(conf *HecklerdConf, nodeSetName string, logger *log.Logger) 
 	}
 
 	if len(filteredNodes) == 0 {
-		return nil, errors.New(fmt.Sprintf("Node set '%s': '%v' produced zero nodes", nodeSetName, nodeSet))
+		return nil, errors.New(fmt.Sprintf("Node set '%s': '%v' produced zero nodes", nodeSetName, setCfg))
 	}
 	logger.Printf("Node set '%s' loaded, nodes (%d), blacklisted nodes (%d): %s", nodeSetName, len(filteredNodes), len(blacklistedNodes), compressHosts(blacklistedNodes))
 	return filteredNodes, nil
