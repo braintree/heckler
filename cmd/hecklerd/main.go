@@ -924,7 +924,13 @@ func parseTemplates() *template.Template {
 func dialReqNodes(conf *HecklerdConf, hosts []string, nodeSetName string, logger *log.Logger) (*NodeSet, error) {
 	var hostsToDial []string
 	var err error
-	ns := &NodeSet{}
+	ns := &NodeSet{
+		// Disable thresholds for a heckler client request
+		nodeThresholds: NodeThresholds{
+			Errored:         -1,
+			lockedByAnother: -1,
+		},
+	}
 	if len(hosts) > 0 {
 		hostsToDial = hosts
 	} else {
@@ -934,9 +940,6 @@ func dialReqNodes(conf *HecklerdConf, hosts []string, nodeSetName string, logger
 			return nil, err
 		}
 	}
-	// Disable thresholds for a heckler client request
-	ns.nodeThresholds.Errored = len(hostsToDial)
-	ns.nodeThresholds.lockedByAnother = len(hostsToDial)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	ns.nodes.dialed, ns.nodes.errored = dialNodes(ctx, hostsToDial)
@@ -2388,6 +2391,11 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 	var err error
 	allNodes := &NodeSet{
 		name: "all",
+		// Disable thresholds when unlocking all
+		nodeThresholds: NodeThresholds{
+			Errored:         -1,
+			lockedByAnother: -1,
+		},
 	}
 	err = dialNodeSet(conf, allNodes, logger)
 	if err != nil {
@@ -2697,11 +2705,12 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 }
 
 // Given two node Threshold structs return a bool and a message indicating
-// whether the first threshold exceeded the second.
+// whether the first threshold exceeded the second. If a threshold is less than
+// zero than it is disabled or infinite.
 func thresholdExceededNodeSet(ns *NodeSet) (string, bool) {
-	if len(ns.nodes.errored) > ns.nodeThresholds.Errored {
+	if ns.nodeThresholds.Errored > -1 && len(ns.nodes.errored) > ns.nodeThresholds.Errored {
 		return fmt.Sprintf("Error nodes(%d) exceeds the threshold(%d)", len(ns.nodes.errored), ns.nodeThresholds.Errored), true
-	} else if len(ns.nodes.lockedByAnother) > ns.nodeThresholds.lockedByAnother {
+	} else if ns.nodeThresholds.lockedByAnother > -1 && len(ns.nodes.lockedByAnother) > ns.nodeThresholds.lockedByAnother {
 		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", len(ns.nodes.lockedByAnother), ns.nodeThresholds.lockedByAnother), true
 	}
 	return "Thresholds not exceeded", false
