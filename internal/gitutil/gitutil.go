@@ -29,6 +29,17 @@ func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptio
 			return nil, err
 		}
 	}
+	// If the repo is empty, or returns an error, we assume it was a bad clone,
+	// so delete the cloned directory.
+	empty, err := repo.IsEmpty()
+	if err != nil {
+		os.RemoveAll(cloneDir)
+		return nil, err
+	}
+	if empty {
+		os.RemoveAll(cloneDir)
+		return nil, errors.New("Repo is empty, removing repo dir!")
+	}
 	err = repo.Remotes.SetUrl("origin", remoteUrl)
 	if err != nil {
 		return nil, err
