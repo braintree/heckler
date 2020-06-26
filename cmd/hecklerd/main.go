@@ -114,7 +114,7 @@ type Nodes struct {
 
 type NodeThresholds struct {
 	Errored         int `yaml:"errored"`
-	lockedByAnother int `yaml:"locked_by_another"`
+	LockedByAnother int `yaml:"locked_by_another"`
 }
 
 // hecklerServer is used to implement heckler.HecklerServer
@@ -928,7 +928,7 @@ func dialReqNodes(conf *HecklerdConf, hosts []string, nodeSetName string, logger
 		// Disable thresholds for a heckler client request
 		nodeThresholds: NodeThresholds{
 			Errored:         -1,
-			lockedByAnother: -1,
+			LockedByAnother: -1,
 		},
 	}
 	if len(hosts) > 0 {
@@ -2394,7 +2394,7 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 		// Disable thresholds when unlocking all
 		nodeThresholds: NodeThresholds{
 			Errored:         -1,
-			lockedByAnother: -1,
+			LockedByAnother: -1,
 		},
 	}
 	err = dialNodeSet(conf, allNodes, logger)
@@ -2710,8 +2710,8 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 func thresholdExceededNodeSet(ns *NodeSet) (string, bool) {
 	if ns.nodeThresholds.Errored > -1 && len(ns.nodes.errored) > ns.nodeThresholds.Errored {
 		return fmt.Sprintf("Error nodes(%d) exceeds the threshold(%d)", len(ns.nodes.errored), ns.nodeThresholds.Errored), true
-	} else if ns.nodeThresholds.lockedByAnother > -1 && len(ns.nodes.lockedByAnother) > ns.nodeThresholds.lockedByAnother {
-		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", len(ns.nodes.lockedByAnother), ns.nodeThresholds.lockedByAnother), true
+	} else if ns.nodeThresholds.LockedByAnother > -1 && len(ns.nodes.lockedByAnother) > ns.nodeThresholds.LockedByAnother {
+		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", len(ns.nodes.lockedByAnother), ns.nodeThresholds.LockedByAnother), true
 	}
 	return "Thresholds not exceeded", false
 }
