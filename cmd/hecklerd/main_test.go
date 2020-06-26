@@ -4,7 +4,12 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
+
+func lessStr(x, y string) bool {
+	return x < y
+}
 
 func TestGroupedResourceNodeFiles(t *testing.T) {
 	t.Parallel()
@@ -40,7 +45,7 @@ func TestGroupedResourceNodeFiles(t *testing.T) {
 			t.Fatalf("groupedResourcesNodeFiles returned an unexpected error: %v", err)
 			return
 		}
-		if diff := cmp.Diff(test.expected, actual); diff != "" {
+		if diff := cmp.Diff(test.expected, actual, cmpopts.SortSlices(lessStr)); diff != "" {
 			t.Errorf("groupedResourcesNodeFiles() mismatch (-expected +actual):\n%s", diff)
 		}
 	}
@@ -127,7 +132,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 			t.Fatalf("groupedResourcesOwners returned an unexpected error: %v", err)
 			return
 		}
-		if diff := cmp.Diff(test.expected, actual); diff != "" {
+		if diff := cmp.Diff(test.expected, actual, cmpopts.SortSlices(lessStr)); diff != "" {
 			t.Errorf("groupedResourcesOwners() mismatch (-expected +actual):\n%s", diff)
 		}
 	}
@@ -253,7 +258,7 @@ func TestResourcesApproved(t *testing.T) {
 		if test.expected.approved != approved {
 			t.Errorf("resourcesApproved() mismatch expected '%v' actual '%v'", test.expected.approved, approved)
 		}
-		if diff := cmp.Diff(test.expected.gr, gr); diff != "" {
+		if diff := cmp.Diff(test.expected.gr, gr, cmpopts.SortSlices(lessStr)); diff != "" {
 			t.Errorf("resourcesApproved() mismatch (-expected +actual):\n%s", diff)
 		}
 	}
@@ -284,7 +289,7 @@ func TestIntersectionOwnersApprovers(t *testing.T) {
 	}
 	for _, test := range tests {
 		actual := intersectionOwnersApprovers(test.inputOwners, test.inputApprovers, test.inputGroups)
-		if diff := cmp.Diff(test.expected, actual); diff != "" {
+		if diff := cmp.Diff(test.expected, actual, cmpopts.SortSlices(lessStr)); diff != "" {
 			t.Errorf("resourcesApproved() mismatch (-expected +actual):\n%s", diff)
 		}
 	}
