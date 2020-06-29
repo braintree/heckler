@@ -1427,9 +1427,11 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 		body += noopOwnersMarkdown
 	}
 	githubIssue := &github.IssueRequest{
-		Title:     github.String(noopTitle(commit, prefix)),
-		Assignees: &authors,
-		Body:      github.String(body),
+		Title: github.String(noopTitle(commit, prefix)),
+		Body:  github.String(body),
+	}
+	if !conf.GitHubDisableNotifications {
+		githubIssue.Assignees = &authors
 	}
 	ctx := context.Background()
 	ni, _, err := ghclient.Issues.Create(ctx, conf.RepoOwner, conf.Repo, githubIssue)
