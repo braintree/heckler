@@ -1790,19 +1790,24 @@ func rizzoLock(host string, rc rizzopb.RizzoClient, req rizzopb.PuppetLockReques
 	return
 }
 
-func hecklerLastApply(node *Node, c chan<- rizzopb.PuppetReport, logger *log.Logger) {
+func hecklerLastApply(node *Node, c chan<- applyResult, logger *log.Logger) {
 	plar := rizzopb.PuppetLastApplyRequest{}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	r, err := node.rizzoClient.PuppetLastApply(ctx, &plar)
 	if err != nil {
-		logger.Printf("Puppet lastApply error on %s substituting an empty report, %v", node.host, err)
-		c <- rizzopb.PuppetReport{
-			Host: node.host,
+		c <- applyResult{
+			host:   node.host,
+			report: rizzopb.PuppetReport{},
+			err:    fmt.Errorf("Rizzo lastApply error from %s, returning any empty report: %w", node.host, err),
 		}
 		return
 	}
-	c <- *r
+	c <- applyResult{
+		host:   node.host,
+		report: *r,
+		err:    nil,
+	}
 	return
 }
 
@@ -1811,7 +1816,7 @@ func lastApplyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) err
 	errNodes := make(map[string]*Node)
 	lastApplyNodes := make(map[string]*Node)
 
-	puppetReportChan := make(chan rizzopb.PuppetReport)
+	puppetReportChan := make(chan applyResult)
 	for _, node := range ns.nodes.active {
 		go hecklerLastApply(node, puppetReportChan, logger)
 	}
@@ -1819,22 +1824,27 @@ func lastApplyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) err
 	var obj *git.Object
 	for range ns.nodes.active {
 		r := <-puppetReportChan
-		if _, ok := ns.nodes.active[r.Host]; !ok {
-			return fmt.Errorf("No Node struct found for report from: %s", r.Host)
+		if _, ok := ns.nodes.active[r.host]; !ok {
+			return fmt.Errorf("No Node struct found for report from: %s", r.host)
 		}
-		if r.ConfigurationVersion == "" {
-			errNodes[r.Host] = ns.nodes.active[r.Host]
-			errNodes[r.Host].err = ErrLastApplyUnknown
+		if r.err != nil {
+			errNodes[r.host] = ns.nodes.active[r.host]
+			errNodes[r.host].err = fmt.Errorf("Unable to obtain lastApply: %w", r.err)
 			continue
 		}
-		obj, err = repo.RevparseSingle(r.ConfigurationVersion)
+		if r.report.ConfigurationVersion == "" {
+			errNodes[r.host] = ns.nodes.active[r.host]
+			errNodes[r.host].err = ErrLastApplyUnknown
+			continue
+		}
+		obj, err = repo.RevparseSingle(r.report.ConfigurationVersion)
 		if err != nil {
-			errNodes[r.Host] = ns.nodes.active[r.Host]
-			errNodes[r.Host].err = fmt.Errorf("Unable to revparse ConfigurationVersion, %s@%s: %v %w", r.ConfigurationVersion, r.Host, err, ErrLastApplyUnknown)
+			errNodes[r.host] = ns.nodes.active[r.host]
+			errNodes[r.host].err = fmt.Errorf("Unable to revparse ConfigurationVersion, %s@%s: %v %w", r.report.ConfigurationVersion, r.host, err, ErrLastApplyUnknown)
 			continue
 		}
-		lastApplyNodes[r.Host] = ns.nodes.active[r.Host]
-		lastApplyNodes[r.Host].lastApply = *obj.Id()
+		lastApplyNodes[r.host] = ns.nodes.active[r.host]
+		lastApplyNodes[r.host].lastApply = *obj.Id()
 	}
 	ns.nodes.active = lastApplyNodes
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errNodes)
