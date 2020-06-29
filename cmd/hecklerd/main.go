@@ -1027,11 +1027,6 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 		return nil, err
 	}
 	defer closeNodeSet(ns)
-	err = lockNodeSet(req.User, hs.conf.LockMessage, false, ns, logger)
-	if err != nil {
-		return nil, err
-	}
-	defer unlockNodeSet(req.User, false, ns, logger)
 	har := new(hecklerpb.HecklerApplyReport)
 	if req.Noop {
 		err := lastApplyNodeSet(ns, hs.repo, logger)
@@ -1048,7 +1043,7 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 		}
 		har.Output = commitToMarkdown(hs.conf, commit, groupedCommit, hs.templates)
 	} else {
-		appliedNodes, beyondRevNodes, err := applyNodeSet(ns, req.Force, req.Noop, req.Rev, hs.repo, logger)
+		appliedNodes, beyondRevNodes, err := applyNodeSet(ns, req.Force, req.Noop, req.Rev, hs.repo, hs.conf.LockMessage, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -1068,16 +1063,13 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 	return har, nil
 }
 
-func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git.Repository, logger *log.Logger) (map[string]*Node, map[string]*Node, error) {
-	var nodesToApply map[string]*Node
+func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git.Repository, lockMsg string, logger *log.Logger) (map[string]*Node, map[string]*Node, error) {
 	var err error
 	beyondRevNodes := make(map[string]*Node)
-	errUnknownRevNodes := make(map[string]*Node)
 	appliedNodes := make(map[string]*Node)
-	// No need to check node revision if force applying
-	if forceApply {
-		nodesToApply = ns.nodes.active
-	} else {
+
+	// Check node revision if not force applying
+	if !forceApply {
 		err = lastApplyNodeSet(ns, repo, logger)
 		if err != nil {
 			return nil, nil, err
@@ -1087,41 +1079,45 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 			return nil, nil, err
 		}
 		revId := *obj.Id()
-		nodesToApply = make(map[string]*Node)
 		for host, node := range ns.nodes.active {
 			if commitAlreadyApplied(node.lastApply, revId, repo) {
 				beyondRevNodes[host] = node
-			} else {
-				nodesToApply[host] = node
+				delete(ns.nodes.active, host)
 			}
 		}
 	}
+	err = lockNodeSet("root", lockMsg, false, ns, logger)
+	if err != nil {
+		closeNodeSet(ns)
+		return nil, nil, err
+	}
 	par := rizzopb.PuppetApplyRequest{Rev: rev, Noop: noop}
 	puppetReportChan := make(chan applyResult)
-	for _, node := range nodesToApply {
+	for _, node := range ns.nodes.active {
 		go hecklerApply(node, puppetReportChan, par)
 	}
 
 	errApplyNodes := make(map[string]*Node)
-	for range nodesToApply {
+	for range ns.nodes.active {
 		r := <-puppetReportChan
 		if r.err != nil {
-			nodesToApply[r.host].err = fmt.Errorf("Apply failed: %w", r.err)
-			errApplyNodes[r.host] = nodesToApply[r.host]
+			ns.nodes.active[r.host].err = fmt.Errorf("Apply failed: %w", r.err)
+			errApplyNodes[r.host] = ns.nodes.active[r.host]
 		} else if r.report.Status == "failed" {
-			nodesToApply[r.host].err = fmt.Errorf("Apply status=failed, %s@%s", r.report.Host, r.report.ConfigurationVersion)
-			errApplyNodes[r.host] = nodesToApply[r.host]
+			ns.nodes.active[r.host].err = fmt.Errorf("Apply status=failed, %s@%s", r.report.Host, r.report.ConfigurationVersion)
+			errApplyNodes[r.host] = ns.nodes.active[r.host]
 		} else {
 			if noop {
 				logger.Printf("Nooped: %s@%s", r.report.Host, r.report.ConfigurationVersion)
 			} else {
 				logger.Printf("Applied: %s@%s", r.report.Host, r.report.ConfigurationVersion)
 			}
-			appliedNodes[r.report.Host] = nodesToApply[r.report.Host]
+			appliedNodes[r.report.Host] = ns.nodes.active[r.report.Host]
 		}
 	}
+	unlockNodeSet("root", false, ns, logger)
 	ns.nodes.active = mergeNodeMaps(appliedNodes, beyondRevNodes)
-	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errUnknownRevNodes, errApplyNodes)
+	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errApplyNodes)
 	return appliedNodes, beyondRevNodes, nil
 }
 
@@ -1969,20 +1965,12 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			}
 		}
 		logger.Printf("Tag '%s' is ready to apply, applying...", nextTag)
-		err = lockNodeSet("root", conf.LockMessage, false, allNodes, logger)
-		if err != nil {
-			logger.Printf("Error: unable to lock nodes, sleeping: %v", err)
-			closeNodeSet(allNodes)
-			continue
-		}
-		appliedNodes, beyondRevNodes, err := applyNodeSet(allNodes, false, false, nextTag, repo, logger)
+		appliedNodes, beyondRevNodes, err := applyNodeSet(allNodes, false, false, nextTag, repo, conf.LockMessage, logger)
 		if err != nil {
 			logger.Printf("Error: unable to apply nodes, sleeping: %v", err)
-			unlockNodeSet("root", false, allNodes, logger)
 			closeNodeSet(allNodes)
 			continue
 		}
-		unlockNodeSet("root", false, allNodes, logger)
 		closeNodeSet(allNodes)
 		compressedErrNodes := compressErrorNodes(allNodes.nodes.errored)
 		for host, err := range compressedErrNodes {
