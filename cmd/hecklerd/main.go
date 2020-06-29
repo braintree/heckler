@@ -1422,6 +1422,15 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 		}
 		body += noopOwnersMarkdown
 	}
+	// GitHub has a max issue body size of 65536
+	if len(body) >= 65536 {
+		notice := fmt.Sprintf("# NOOP OUTPUT TRIMMED!\n\nOutput has been trimmed because it is too long for the GitHub issue\n\n")
+		body = notice + body
+		runeBody := []rune(body)
+		// trim to less then the max, just to be sure it will fit
+		trimmedRunes := runeBody[0:65000]
+		body = string(trimmedRunes)
+	}
 	githubIssue := &github.IssueRequest{
 		Title: github.String(noopTitle(commit, prefix)),
 		Body:  github.String(body),
