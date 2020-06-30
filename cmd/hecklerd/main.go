@@ -943,7 +943,7 @@ func dialReqNodes(conf *HecklerdConf, hosts []string, nodeSetName string, logger
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	ns.nodes.dialed, ns.nodes.errored = dialNodes(ctx, hostsToDial)
-	ns.nodes.active = ns.nodes.dialed
+	ns.nodes.active = copyNodeMap(ns.nodes.dialed)
 	return ns, nil
 }
 
@@ -1013,6 +1013,15 @@ func mergeNodeMaps(nodeMaps ...map[string]*Node) map[string]*Node {
 		}
 	}
 	return merged
+}
+
+// Given a node map, return a copy
+func copyNodeMap(nodeMap map[string]*Node) map[string]*Node {
+	nodeMapCopy := make(map[string]*Node)
+	for k, v := range nodeMap {
+		nodeMapCopy[k] = v
+	}
+	return nodeMapCopy
 }
 
 func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.HecklerApplyRequest) (*hecklerpb.HecklerApplyReport, error) {
@@ -1639,7 +1648,7 @@ func (hs *hecklerServer) HecklerUnlock(ctx context.Context, req *hecklerpb.Heckl
 		return nil, err
 	}
 	defer closeNodeSet(ns)
-	ns.nodes.locked = ns.nodes.dialed
+	ns.nodes.locked = copyNodeMap(ns.nodes.dialed)
 	unlockNodeSet(req.User, req.Force, ns, logger)
 	res := new(hecklerpb.HecklerUnlockReport)
 	res.UnlockedNodes = make([]string, 0)
@@ -1703,7 +1712,7 @@ func lockNodeSet(user string, comment string, force bool, ns *NodeSet, logger *l
 		Force:   force,
 	}
 	lockedNodes, _, lockedByAnotherNodes, errLockNodes := rizzoLockNodes(lockReq, ns.nodes.active)
-	ns.nodes.active = lockedNodes
+	ns.nodes.active = copyNodeMap(lockedNodes)
 	ns.nodes.locked = lockedNodes
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errLockNodes)
 	ns.nodes.lockedByAnother = lockedByAnotherNodes
@@ -1913,89 +1922,89 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 //   If no, do nothing
 func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 	var err error
-	var allNodes *NodeSet
+	var ns *NodeSet
 	logger := log.New(os.Stdout, "[applyLoop] ", log.Lshortfile)
 	loopSleep := (time.Duration(conf.LoopApplySleepSeconds) * time.Second)
 	logger.Printf("Started, looping every %v", loopSleep)
 	for {
 		time.Sleep(loopSleep)
-		allNodes = &NodeSet{
+		ns = &NodeSet{
 			name:           "all",
 			nodeThresholds: conf.MaxNodeThresholds,
 		}
-		err = dialNodeSet(conf, allNodes, logger)
+		err = dialNodeSet(conf, ns, logger)
 		if err != nil {
 			logger.Printf("Error: unable to dial node set: %v", err)
 			continue
 		}
-		err = commonTagNodeSet(conf, allNodes, repo, logger)
+		err = commonTagNodeSet(conf, ns, repo, logger)
 		if err != nil {
 			logger.Printf("Error: unable to query for commonTag: %v", err)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
-		logger.Printf("Found common tag: %s", allNodes.commonTag)
-		priorTag := allNodes.commonTag
+		logger.Printf("Found common tag: %s", ns.commonTag)
+		priorTag := ns.commonTag
 		nextTag, err := nextTag(priorTag, conf.EnvPrefix, repo)
 		if err != nil {
 			logger.Printf("Error: unable to query for nextTag after '%s', sleeping: %v", priorTag, err)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
 		if nextTag == "" {
 			logger.Printf("No nextTag found after tag '%s', sleeping", priorTag)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
 		ghclient, _, err := githubConn(conf)
 		if err != nil {
 			logger.Printf("Error: unable to connect to GitHub, sleeping: %v", err)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
 		nextTagMilestone, err := milestoneFromTag(nextTag, ghclient, conf)
 		if err != nil {
 			logger.Printf("Error: unable to query GitHub for milestone, sleeping: %v", err)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
 		if nextTagMilestone == nil {
 			logger.Printf("Milestone for next tag '%s', not created, sleeping", nextTag)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
 		approved, err := tagApproved(repo, ghclient, conf, priorTag, nextTag, logger)
 		if err != nil {
 			logger.Printf("Error: unable to determine if tag has been approved, sleeping: %v", err)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
 		if !approved {
 			logger.Printf("Tag '%s' is not approved, sleeping", nextTag)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
 		if nextTagMilestone.GetState() != "closed" {
 			err = closeMilestone(nextTag, ghclient, conf)
 			if err != nil {
 				logger.Printf("Error: unable to close milestone, sleeping: %v", err)
-				closeNodeSet(allNodes)
+				closeNodeSet(ns)
 				continue
 			}
 		}
 		logger.Printf("Tag '%s' is ready to apply, applying...", nextTag)
-		appliedNodes, beyondRevNodes, err := applyNodeSet(allNodes, false, false, nextTag, repo, conf.LockMessage, logger)
+		appliedNodes, beyondRevNodes, err := applyNodeSet(ns, false, false, nextTag, repo, conf.LockMessage, logger)
 		if err != nil {
 			logger.Printf("Error: unable to apply nodes, sleeping: %v", err)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
-		closeNodeSet(allNodes)
-		compressedErrNodes := compressErrorNodes(allNodes.nodes.errored)
+		closeNodeSet(ns)
+		compressedErrNodes := compressErrorNodes(ns.nodes.errored)
 		for host, err := range compressedErrNodes {
 			logger.Printf("errNodes: %s, %v", host, err)
 		}
-		logger.Printf("Applied nodes: (%d); Beyond rev nodes: (%d); Error nodes: (%d)", len(appliedNodes), len(beyondRevNodes), len(allNodes.nodes.errored))
+		logger.Printf("Applied nodes: (%d); Beyond rev nodes: (%d); Error nodes: (%d)", len(appliedNodes), len(beyondRevNodes), len(ns.nodes.errored))
 		logger.Println("Apply complete, sleeping")
 	}
 }
@@ -2009,30 +2018,30 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 //        If Yes, note approval and close the issue
 func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 	var err error
-	var allNodes *NodeSet
+	var ns *NodeSet
 	logger := log.New(os.Stdout, "[approvalLoop] ", log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopApprovalSleepSeconds) * time.Second
 	logger.Printf("Started, looping every %v", loopSleep)
 	for {
 		time.Sleep(loopSleep)
-		allNodes = &NodeSet{
+		ns = &NodeSet{
 			name:           "all",
 			nodeThresholds: conf.MaxNodeThresholds,
 		}
-		err = dialNodeSet(conf, allNodes, logger)
+		err = dialNodeSet(conf, ns, logger)
 		if err != nil {
 			logger.Printf("Error: unable to dial node set: %v", err)
 			continue
 		}
-		err = commonTagNodeSet(conf, allNodes, repo, logger)
+		err = commonTagNodeSet(conf, ns, repo, logger)
 		if err != nil {
 			logger.Printf("Error: unable to query for commonTag: %v", err)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
-		logger.Printf("Found common tag: %s", allNodes.commonTag)
-		closeNodeSet(allNodes)
-		_, commits, err := commitLogIdList(repo, allNodes.commonTag, conf.RepoBranch)
+		logger.Printf("Found common tag: %s", ns.commonTag)
+		closeNodeSet(ns)
+		_, commits, err := commitLogIdList(repo, ns.commonTag, conf.RepoBranch)
 		if err != nil {
 			logger.Printf("Error: unable to obtain commit log ids: %v", err)
 			continue
@@ -2398,7 +2407,7 @@ func intersectionOwnersApprovers(owners []string, approvers []string, groups map
 
 func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 	var err error
-	allNodes := &NodeSet{
+	ns := &NodeSet{
 		name: "all",
 		// Disable thresholds when unlocking all
 		nodeThresholds: NodeThresholds{
@@ -2406,18 +2415,18 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 			LockedByAnother: -1,
 		},
 	}
-	err = dialNodeSet(conf, allNodes, logger)
+	err = dialNodeSet(conf, ns, logger)
 	if err != nil {
 		return err
 	}
-	allNodes.nodes.locked = allNodes.nodes.dialed
-	unlockNodeSet("root", false, allNodes, logger)
+	ns.nodes.locked = copyNodeMap(ns.nodes.dialed)
+	unlockNodeSet("root", false, ns, logger)
 	unlockedHosts := make([]string, 0)
-	for host, _ := range allNodes.nodes.active {
+	for host, _ := range ns.nodes.active {
 		unlockedHosts = append(unlockedHosts, host)
 	}
 	logger.Printf("Unlocked: %s", compressHosts(unlockedHosts))
-	compressedErrNodes := compressErrorNodes(allNodes.nodes.errored)
+	compressedErrNodes := compressErrorNodes(ns.nodes.errored)
 	for host, err := range compressedErrNodes {
 		logger.Printf("Unlock errNodes: %s, %v", host, err)
 	}
@@ -2624,41 +2633,41 @@ func eligibleNodeSet(user string, ns *NodeSet) {
 //   If no, do nothing
 func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 	var err error
-	var allNodes *NodeSet
+	var ns *NodeSet
 	logger := log.New(os.Stdout, "[milestoneLoop] ", log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopMilestoneSleepSeconds) * time.Second
 	logger.Printf("Started, looping every %v", loopSleep)
 	for {
 		time.Sleep(loopSleep)
-		allNodes = &NodeSet{
+		ns = &NodeSet{
 			name:           "all",
 			nodeThresholds: conf.MaxNodeThresholds,
 		}
-		err = dialNodeSet(conf, allNodes, logger)
+		err = dialNodeSet(conf, ns, logger)
 		if err != nil {
 			logger.Printf("Unable to dial node set: %v", err)
 			continue
 		}
-		err = commonTagNodeSet(conf, allNodes, repo, logger)
+		err = commonTagNodeSet(conf, ns, repo, logger)
 		if err != nil {
 			logger.Printf("Unable to query for commonTag: %v", err)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
-		logger.Printf("Found common tag: %s", allNodes.commonTag)
-		priorTag := allNodes.commonTag
+		logger.Printf("Found common tag: %s", ns.commonTag)
+		priorTag := ns.commonTag
 		nextTag, err := nextTag(priorTag, conf.EnvPrefix, repo)
 		if err != nil {
 			logger.Printf("Error: unable to query for nextTag after '%s', sleeping: %v", priorTag, err)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
 		if nextTag == "" {
 			logger.Printf("No nextTag found after tag '%s', sleeping", priorTag)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
-		closeNodeSet(allNodes)
+		closeNodeSet(ns)
 		ghclient, _, err := githubConn(conf)
 		if err != nil {
 			logger.Printf("Error: unable to connect to GitHub, sleeping: %v", err)
@@ -2733,7 +2742,7 @@ func dialNodeSet(conf *HecklerdConf, ns *NodeSet, logger *log.Logger) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	ns.nodes.dialed, ns.nodes.errored = dialNodes(ctx, nodesToDial)
-	ns.nodes.active = ns.nodes.dialed
+	ns.nodes.active = copyNodeMap(ns.nodes.dialed)
 	if msg, ok := thresholdExceededNodeSet(ns); ok {
 		logger.Printf("%s", msg)
 		return ErrThresholdExceeded
@@ -2771,38 +2780,38 @@ func commonTagNodeSet(conf *HecklerdConf, ns *NodeSet, repo *git.Repository, log
 //      - create github issue, if it does not exist
 func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	var err error
-	var allNodes *NodeSet
+	var ns *NodeSet
 	logger := log.New(os.Stdout, "[noopLoop] ", log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopNoopSleepSeconds) * time.Second
 	logger.Printf("Started, looping every %v", loopSleep)
 	for {
 		time.Sleep(loopSleep)
-		allNodes = &NodeSet{
+		ns = &NodeSet{
 			name:           "all",
 			nodeThresholds: conf.MaxNodeThresholds,
 		}
-		err = dialNodeSet(conf, allNodes, logger)
+		err = dialNodeSet(conf, ns, logger)
 		if err != nil {
 			logger.Printf("Unable to dial node set: %v", err)
 			continue
 		}
-		err = commonTagNodeSet(conf, allNodes, repo, logger)
+		err = commonTagNodeSet(conf, ns, repo, logger)
 		if err != nil {
 			logger.Printf("Unable to query for commonTag: %v", err)
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
-		logger.Printf("Found common tag: %s", allNodes.commonTag)
-		_, commits, err := commitLogIdList(repo, allNodes.commonTag, conf.RepoBranch)
+		logger.Printf("Found common tag: %s", ns.commonTag)
+		_, commits, err := commitLogIdList(repo, ns.commonTag, conf.RepoBranch)
 		if err != nil {
 			logger.Fatalf("Unable to obtain commit log ids: %v", err)
 		}
 		if len(commits) == 0 {
 			logger.Println("No new commits, sleeping")
-			closeNodeSet(allNodes)
+			closeNodeSet(ns)
 			continue
 		}
-		closeNodeSet(allNodes)
+		closeNodeSet(ns)
 		var groupedCommit []*groupedResource
 		var perNoop *NodeSet
 		for gi, commit := range commits {
