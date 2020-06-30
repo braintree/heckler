@@ -1916,7 +1916,7 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 	var allNodes *NodeSet
 	logger := log.New(os.Stdout, "[applyLoop] ", log.Lshortfile)
 	loopSleep := (time.Duration(conf.LoopApplySleepSeconds) * time.Second)
-	logger.Printf("Looping every %v", loopSleep)
+	logger.Printf("Started, looping every %v", loopSleep)
 	for {
 		time.Sleep(loopSleep)
 		allNodes = &NodeSet{
@@ -2007,12 +2007,12 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 //      Is the issue approved?
 //        If No, do nothing
 //        If Yes, note approval and close the issue
-func noopApprovalLoop(conf *HecklerdConf, repo *git.Repository) {
+func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 	var err error
 	var allNodes *NodeSet
-	logger := log.New(os.Stdout, "[noopApprovalLoop] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[approvalLoop] ", log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopApprovalSleepSeconds) * time.Second
-	logger.Printf("Looping every %v", loopSleep)
+	logger.Printf("Started, looping every %v", loopSleep)
 	for {
 		time.Sleep(loopSleep)
 		allNodes = &NodeSet{
@@ -2427,8 +2427,8 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 // Are their commits beyond the last tag?
 // 	If yes, create a new tag
 // If no, do nothing
-func tagNewCommits(conf *HecklerdConf, repo *git.Repository) {
-	logger := log.New(os.Stdout, "[tagNewCommits] ", log.Lshortfile)
+func autoTag(conf *HecklerdConf, repo *git.Repository) {
+	logger := log.New(os.Stdout, "[autoTag] ", log.Lshortfile)
 	headCommit, err := gitutil.RevparseToCommit(conf.RepoBranch, repo)
 	if err != nil {
 		logger.Fatalf("Unable to revparse: %v", err)
@@ -2627,7 +2627,7 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 	var allNodes *NodeSet
 	logger := log.New(os.Stdout, "[milestoneLoop] ", log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopMilestoneSleepSeconds) * time.Second
-	logger.Printf("Looping every %v", loopSleep)
+	logger.Printf("Started, looping every %v", loopSleep)
 	for {
 		time.Sleep(loopSleep)
 		allNodes = &NodeSet{
@@ -2774,7 +2774,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 	var allNodes *NodeSet
 	logger := log.New(os.Stdout, "[noopLoop] ", log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopNoopSleepSeconds) * time.Second
-	logger.Printf("Looping every %v", loopSleep)
+	logger.Printf("Started, looping every %v", loopSleep)
 	for {
 		time.Sleep(loopSleep)
 		allNodes = &NodeSet{
@@ -3237,34 +3237,34 @@ func main() {
 		logger.Println("Manual mode, not starting loops")
 	} else {
 		if conf.LoopNoopSleepSeconds == 0 {
-			logger.Println("Noop loop disabled")
+			logger.Println("noopLoop disabled")
 		} else {
 			go noopLoop(conf, repo, templates)
 		}
 		if conf.LoopMilestoneSleepSeconds == 0 {
-			logger.Println("Milestone loop disabled")
+			logger.Println("milestoneLoop disabled")
 		} else {
 			go milestoneLoop(conf, repo)
 		}
 		if conf.LoopApplySleepSeconds == 0 {
-			logger.Println("Apply loop disabled")
+			logger.Println("applyLoop disabled")
 		} else {
 			go applyLoop(conf, repo)
 		}
 		if conf.LoopApprovalSleepSeconds == 0 {
-			logger.Println("Approval loop disabled")
+			logger.Println("approvalLoop disabled")
 		} else {
-			go noopApprovalLoop(conf, repo)
+			go approvalLoop(conf, repo)
 		}
 		if conf.AutoTagCronSchedule == "" {
-			logger.Println("Auto tag schedule disabled")
+			logger.Println("autoTag cron schedule disabled")
 		} else {
-			logger.Printf("Starting tag cron schedule of '%s'", conf.AutoTagCronSchedule)
+			logger.Printf("autoTag enabled with cron schedule of '%s'", conf.AutoTagCronSchedule)
 			c := cron.New()
 			c.AddFunc(
 				conf.AutoTagCronSchedule,
 				func() {
-					tagNewCommits(conf, repo)
+					autoTag(conf, repo)
 				},
 			)
 			c.Start()
