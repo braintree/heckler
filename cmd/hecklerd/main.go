@@ -1267,7 +1267,7 @@ func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, conf *HecklerdC
 	query += fmt.Sprintf(" author:app/%s", conf.GitHubAppSlug)
 	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("Unable to search GitHub Issues: %w", err)
 	}
 	if searchResults.GetTotal() == 0 {
 		return nil, nil
