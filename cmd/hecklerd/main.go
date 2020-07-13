@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -78,6 +79,7 @@ type HecklerdConf struct {
 	GitHubAppId                int64                 `yaml:"github_app_id"`
 	GitHubAppInstallId         int64                 `yaml:"github_app_install_id"`
 	GitHubDisableNotifications bool                  `yaml:"github_disable_notifications"`
+	GitHubHttpProxy            string                `yaml:"github_http_proxy"`
 	NodeSets                   map[string]NodeSetCfg `yaml:"node_sets"`
 	AutoTagCronSchedule        string                `yaml:"auto_tag_cron_schedule"`
 	AutoCloseIssues            bool                  `yaml:"auto_close_issues"`
@@ -1185,6 +1187,14 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 	// Shared transport to reuse TCP connections.
 	tr := http.DefaultTransport
 
+	if conf.GitHubHttpProxy != "" {
+		proxyUrl, err := url.Parse(conf.GitHubHttpProxy)
+		if err != nil {
+			return nil, nil, err
+		}
+		tr.(*http.Transport).Proxy = http.ProxyURL(proxyUrl)
+	}
+
 	if conf.GitHubPrivateKeyPath != "" {
 		file, err = os.Open(conf.GitHubPrivateKeyPath)
 		if err != nil {
@@ -1891,6 +1901,12 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 			DownloadTags:    git.DownloadTagsAll,
 		},
 		Bare: true,
+	}
+	if conf.GitHubHttpProxy != "" {
+		cloneOptions.ProxyOptions = &git.ProxyOptions{
+			Type: git.ProxyTypeSpecified,
+			Url:  conf.GitHubHttpProxy,
+		}
 	}
 	remoteUrl := fmt.Sprintf("https://x-access-token:%s@%s/%s/%s", tok, conf.GitHubDomain, conf.RepoOwner, conf.Repo)
 	bareRepo, err := gitutil.CloneOrOpen(remoteUrl, cloneDir, cloneOptions)
