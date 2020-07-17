@@ -477,7 +477,7 @@ func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repo
 			delete(noopHosts, newRprt.Host)
 			commitId, err := git.NewOid(newRprt.ConfigurationVersion)
 			if err != nil {
-				logger.Fatalf("Unable to marshal report: %v", err)
+				logger.Fatalf("Unable to convert ConfigurationVersion to a git oid: %v", err)
 			}
 			ns.nodes.active[newRprt.Host].commitReports[*commitId] = &newRprt
 			err = marshalReport(newRprt, noopDir, *commitId)
