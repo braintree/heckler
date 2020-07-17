@@ -831,6 +831,9 @@ func normalizeLogs(puppetLogs []*rizzopb.Log, logger *log.Logger) []*rizzopb.Log
 	regexCurValMsg := regexp.MustCompile(`^current_value`)
 	regexApplyMsg := regexp.MustCompile(`^Applied catalog`)
 	regexRefreshMsg := regexp.MustCompile(`^Would have triggered 'refresh'`)
+	// This message content is duplicated by the current and desired states of a
+	// File resource
+	regexContentChanged := regexp.MustCompile(`^content changed `)
 
 	// Log sources to drop
 	regexClass := regexp.MustCompile(`^Class\[`)
@@ -853,6 +856,11 @@ func normalizeLogs(puppetLogs []*rizzopb.Log, logger *log.Logger) []*rizzopb.Log
 			}
 			continue
 		} else if (!regexResource.MatchString(puppetLog.Source)) && regexRefreshMsg.MatchString(puppetLog.Message) {
+			if Debug {
+				logger.Printf("Dropping Log: %v: %v", puppetLog.Source, puppetLog.Message)
+			}
+			continue
+		} else if regexResource.MatchString(puppetLog.Source) && regexContentChanged.MatchString(puppetLog.Message) {
 			if Debug {
 				logger.Printf("Dropping Log: %v: %v", puppetLog.Source, puppetLog.Message)
 			}
