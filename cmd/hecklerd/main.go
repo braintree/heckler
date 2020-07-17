@@ -348,7 +348,7 @@ func loadNoop(commit git.Oid, node *Node, noopDir string, repo *git.Repository, 
 	}
 }
 
-func normalizeReport(rprt rizzopb.PuppetReport) rizzopb.PuppetReport {
+func normalizeReport(rprt rizzopb.PuppetReport, logger *log.Logger) rizzopb.PuppetReport {
 	for _, resourceStatus := range rprt.ResourceStatuses {
 		// Strip off the puppet confdir prefix, so we are left with the relative
 		// path of the source file in the code repo
@@ -356,7 +356,7 @@ func normalizeReport(rprt rizzopb.PuppetReport) rizzopb.PuppetReport {
 			resourceStatus.File = strings.TrimPrefix(resourceStatus.File, rprt.Confdir+"/")
 		}
 	}
-	rprt.Logs = normalizeLogs(rprt.Logs)
+	rprt.Logs = normalizeLogs(rprt.Logs, logger)
 	return rprt
 }
 
@@ -472,7 +472,7 @@ func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repo
 				delete(noopHosts, r.host)
 				continue
 			}
-			newRprt := normalizeReport(r.report)
+			newRprt := normalizeReport(r.report, logger)
 			logger.Printf("Received noop: %s@%s", newRprt.Host, newRprt.ConfigurationVersion)
 			delete(noopHosts, newRprt.Host)
 			commitId, err := git.NewOid(newRprt.ConfigurationVersion)
@@ -811,10 +811,10 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 	return gr
 }
 
-func normalizeLogs(Logs []*rizzopb.Log) []*rizzopb.Log {
+func normalizeLogs(puppetLogs []*rizzopb.Log, logger *log.Logger) []*rizzopb.Log {
 	var newSource string
 	var origSource string
-	var newLogs []*rizzopb.Log
+	var newPuppetLogs []*rizzopb.Log
 
 	// extract resource from log source
 	regexResourcePropertyTail := regexp.MustCompile(`/[a-z][a-z0-9_]*$`)
@@ -836,56 +836,56 @@ func normalizeLogs(Logs []*rizzopb.Log) []*rizzopb.Log {
 	regexClass := regexp.MustCompile(`^Class\[`)
 	regexStage := regexp.MustCompile(`^Stage\[`)
 
-	for _, l := range Logs {
+	for _, puppetLog := range puppetLogs {
 		origSource = ""
 		newSource = ""
-		if regexCurValMsg.MatchString(l.Message) ||
-			regexApplyMsg.MatchString(l.Message) {
+		if regexCurValMsg.MatchString(puppetLog.Message) ||
+			regexApplyMsg.MatchString(puppetLog.Message) {
 			if Debug {
-				log.Printf("Dropping Log: %v: %v", l.Source, l.Message)
+				logger.Printf("Dropping Log: %v: %v", puppetLog.Source, puppetLog.Message)
 			}
 			continue
-		} else if regexClass.MatchString(l.Source) ||
-			regexStage.MatchString(l.Source) ||
-			RegexDefineType.MatchString(l.Source) {
+		} else if regexClass.MatchString(puppetLog.Source) ||
+			regexStage.MatchString(puppetLog.Source) ||
+			RegexDefineType.MatchString(puppetLog.Source) {
 			if Debug {
-				log.Printf("Dropping Log: %v: %v", l.Source, l.Message)
+				logger.Printf("Dropping Log: %v: %v", puppetLog.Source, puppetLog.Message)
 			}
 			continue
-		} else if (!regexResource.MatchString(l.Source)) && regexRefreshMsg.MatchString(l.Message) {
+		} else if (!regexResource.MatchString(puppetLog.Source)) && regexRefreshMsg.MatchString(puppetLog.Message) {
 			if Debug {
-				log.Printf("Dropping Log: %v: %v", l.Source, l.Message)
+				logger.Printf("Dropping Log: %v: %v", puppetLog.Source, puppetLog.Message)
 			}
 			continue
-		} else if regexResource.MatchString(l.Source) {
-			origSource = l.Source
-			newSource = regexResourcePropertyTail.ReplaceAllString(l.Source, "")
+		} else if regexResource.MatchString(puppetLog.Source) {
+			origSource = puppetLog.Source
+			newSource = regexResourcePropertyTail.ReplaceAllString(puppetLog.Source, "")
 			newSource = regexResourceTail.FindString(newSource)
 			if newSource == "" {
-				log.Printf("newSource is empty!")
-				log.Printf("Log: '%v' -> '%v': %v", origSource, newSource, l.Message)
+				logger.Printf("newSource is empty!")
+				logger.Printf("Log: '%v' -> '%v': %v", origSource, newSource, puppetLog.Message)
 				os.Exit(1)
 			}
 
-			if regexFileContent.MatchString(l.Source) && regexDiff.MatchString(l.Message) {
-				l.Message = normalizeDiff(l.Message)
+			if regexFileContent.MatchString(puppetLog.Source) && regexDiff.MatchString(puppetLog.Message) {
+				puppetLog.Message = normalizeDiff(puppetLog.Message)
 			}
-			l.Source = newSource
+			puppetLog.Source = newSource
 			if Debug {
-				log.Printf("Adding Log: '%v' -> '%v': %v", origSource, newSource, l.Message)
+				logger.Printf("Adding Log: '%v' -> '%v': %v", origSource, newSource, puppetLog.Message)
 			}
 			// TODO: If we wrote a custom equality function, rather than using cmp,
 			// we could ignore source code line numbers in logs, but since we are using
 			// cmp at present, just set it equal to 0 for all logs.
-			l.Line = 0
-			newLogs = append(newLogs, l)
+			puppetLog.Line = 0
+			newPuppetLogs = append(newPuppetLogs, puppetLog)
 		} else {
-			log.Printf("Unaccounted for Log: %v: %v", l.Source, l.Message)
-			newLogs = append(newLogs, l)
+			logger.Printf("Unaccounted for Log: %v: %v", puppetLog.Source, puppetLog.Message)
+			newPuppetLogs = append(newPuppetLogs, puppetLog)
 		}
 	}
 
-	return newLogs
+	return newPuppetLogs
 }
 
 func hecklerApply(node *Node, c chan<- applyResult, par rizzopb.PuppetApplyRequest) {
