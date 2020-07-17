@@ -201,7 +201,7 @@ type groupLog struct {
 
 type ResourceTitle string
 
-func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map[git.Oid]*rizzopb.PuppetReport, repo *git.Repository, logger *log.Logger) []*rizzopb.PuppetReport {
+func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map[git.Oid]*rizzopb.PuppetReport, host string, repo *git.Repository, logger *log.Logger) []*rizzopb.PuppetReport {
 	var parentReport *rizzopb.PuppetReport
 	parentReports := make([]*rizzopb.PuppetReport, 0)
 	parentCount := commit.ParentCount()
@@ -210,13 +210,13 @@ func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map
 		// applied commit noop so that we can subtract away any perma-diffs from
 		// the noop
 		if commitAlreadyApplied(lastApply, *commit.ParentId(i), repo) {
-			logger.Printf("Parent:%s already applied substituting lastApply:%s", commit.ParentId(i).String(), lastApply.String())
+			logger.Printf("Parent:%s already applied substituting lastApply:%s for commit %s@%s", commit.ParentId(i).String(), lastApply.String(), host, commit.Id().String())
 			parentReport = commitReports[lastApply]
 		} else {
 			parentReport = commitReports[*commit.ParentId(i)]
 		}
 		if parentReport == nil {
-			logger.Fatalf("Parent report not found %s", commit.ParentId(i).String())
+			logger.Fatalf("Parent report not found %s for commit %s@%s", commit.ParentId(i).String(), host, commit.Id().String())
 		} else {
 			parentReports = append(parentReports, parentReport)
 		}
@@ -494,11 +494,12 @@ func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repo
 		// but we purposefully substitute the noop of the last applied commit in
 		// loadNoop() to subtract away perma-diffs, so those would show up without
 		// this special case.
-		logger.Printf("Creating delta resource for commit %s@%s", node.host, commit.Id().String())
 		if commitAlreadyApplied(node.lastApply, *commit.Id(), repo) {
 			node.commitDeltaResources[*commit.Id()] = make(map[ResourceTitle]*deltaResource)
+			logger.Printf("Already applied substituting empty delta resource for commit %s@%s", node.host, commit.Id().String())
 		} else {
-			node.commitDeltaResources[*commit.Id()] = subtractNoops(node.commitReports[*commit.Id()], commitParentReports(*commit, node.lastApply, node.commitReports, repo, logger))
+			logger.Printf("Creating delta resource for commit %s@%s", node.host, commit.Id().String())
+			node.commitDeltaResources[*commit.Id()] = subtractNoops(node.commitReports[*commit.Id()], commitParentReports(*commit, node.lastApply, node.commitReports, node.host, repo, logger))
 		}
 	}
 
