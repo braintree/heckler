@@ -821,8 +821,8 @@ func normalizeLogs(Logs []*rizzopb.Log) []*rizzopb.Log {
 	regexResourceTail := regexp.MustCompile(`[^\/]+\[[^\[\]]+\]$`)
 
 	// normalize diff
-	reFileContent := regexp.MustCompile(`File\[.*content$`)
-	reDiff := regexp.MustCompile(`(?s)^.---`)
+	regexFileContent := regexp.MustCompile(`File\[.*content$`)
+	regexDiff := regexp.MustCompile(`(?s)^.---`)
 
 	// Log referring to a puppet resource
 	regexResource := regexp.MustCompile(`^/Stage`)
@@ -867,7 +867,7 @@ func normalizeLogs(Logs []*rizzopb.Log) []*rizzopb.Log {
 				os.Exit(1)
 			}
 
-			if reFileContent.MatchString(l.Source) && reDiff.MatchString(l.Message) {
+			if regexFileContent.MatchString(l.Source) && regexDiff.MatchString(l.Message) {
 				l.Message = normalizeDiff(l.Message)
 			}
 			l.Source = newSource
