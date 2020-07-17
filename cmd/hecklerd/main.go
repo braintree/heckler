@@ -52,7 +52,7 @@ var ErrThresholdExceeded = errors.New("Threshold for err nodes or lock nodes exc
 const (
 	ApplicationName = "git-cgi-server"
 
-	defaultAddr     = ":8080"
+	defaultAddr     = "0.0.0.0:8080"
 	shutdownTimeout = time.Second * 5
 	// TODO move to HecklerdConf
 	port           = ":50052"
