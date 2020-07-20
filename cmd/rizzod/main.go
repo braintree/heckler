@@ -1,17 +1,21 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"runtime"
 	"runtime/pprof"
 	"strconv"
@@ -289,6 +293,28 @@ func lockComment() (string, error) {
 	return strings.TrimRight(string(buf), "\n"), nil
 }
 
+func parseStderr(oid string, stderr string) (*rizzopb.PuppetReport, error) {
+	var regexEvalErr = regexp.MustCompile(`^Error: Evaluation Error:`)
+	scanner := bufio.NewScanner(strings.NewReader(stderr))
+	for scanner.Scan() {
+		if regexEvalErr.MatchString(scanner.Text()) {
+			stderrLogs := []*rizzopb.Log{
+				&rizzopb.Log{
+					Source:  "EvalError",
+					Message: stderr,
+				},
+			}
+			evalErrRprt := &rizzopb.PuppetReport{
+				ConfigurationVersion: oid,
+				Status:               "failed",
+				Logs:                 stderrLogs,
+			}
+			return evalErrRprt, nil
+		}
+	}
+	return nil, fmt.Errorf("Unknown error in stderr output: '%s'", stderr)
+}
+
 func puppetApply(oid string, noop bool, conf *RizzoConf) (*rizzopb.PuppetReport, error) {
 	var oldPath string
 
@@ -312,6 +338,10 @@ func puppetApply(oid string, noop bool, conf *RizzoConf) (*rizzopb.PuppetReport,
 		os.Setenv("PATH", path)
 	}
 	cmd := exec.Command("nice", puppetArgs...)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	// Capture stderr & stdout as well as output them
+	cmd.Stdout = io.MultiWriter(os.Stdout, &stdoutBuf)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
 	// Change to code dir, so hiera relative paths resolve
 	cmd.Dir = repoDir
 	env := os.Environ()
@@ -319,9 +349,16 @@ func puppetApply(oid string, noop bool, conf *RizzoConf) (*rizzopb.PuppetReport,
 		env = append(env, k+"="+v)
 	}
 	cmd.Env = env
-	stdoutStderr, err := cmd.CombinedOutput()
-	log.Printf("%s", stdoutStderr)
-	if err != nil {
+	err := cmd.Run()
+	if exitError, ok := err.(*exec.ExitError); ok {
+		stderrRprt, err := parseStderr(oid, string(stderrBuf.Bytes()))
+		if err != nil {
+			log.Printf("Apply exited: %d and stderr was not pareseable, %v", exitError.ExitCode(), err)
+			return &rizzopb.PuppetReport{}, fmt.Errorf("Apply exited: %d and stderr was not pareseable, %w", exitError.ExitCode(), err)
+		}
+		log.Printf("Error apply exited: %d, stderr parsed successfully", exitError.ExitCode())
+		return stderrRprt, err
+	} else if err != nil {
 		return &rizzopb.PuppetReport{}, err
 	}
 	if oldPath != "" {
