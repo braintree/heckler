@@ -130,7 +130,9 @@ func main() {
 		nodes = make([]string, len(nodeFlags))
 		copy(nodes, nodeFlags)
 	} else {
-		nodeSet = "all"
+		if nodeSet == "" {
+			nodeSet = "all"
+		}
 	}
 
 	curUserInf, err := luser.Current()
