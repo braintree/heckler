@@ -94,6 +94,8 @@ type HecklerdConf struct {
 	LoopMilestoneSleepSeconds  int                   `yaml:"loop_milestone_sleep_seconds"`
 	LoopApplySleepSeconds      int                   `yaml:"loop_apply_sleep_seconds"`
 	LoopApprovalSleepSeconds   int                   `yaml:"loop_approval_sleep_seconds"`
+	ApplySetOrder              []string              `yaml:"apply_set_order"`
+	ApplySetSleepSeconds       int                   `yaml:"apply_set_sleep_seconds"`
 }
 
 type NodeSetCfg struct {
@@ -2044,6 +2046,16 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 	return bareRepo, nil
 }
 
+func sleepAndLog(sleepDur, logDur time.Duration, msg string, logger *log.Logger) {
+	sleepDurRem := sleepDur
+	for i := 0; i < int(sleepDur/logDur); i++ {
+		sleepDurRem = sleepDurRem - logDur
+		logger.Printf("%s, sleeping for %v, %v remaining\n", msg, sleepDur, sleepDurRem)
+		time.Sleep(logDur)
+	}
+	time.Sleep(sleepDurRem)
+}
+
 // Is there a newer release tag than our common lastApply tag across "all"
 // nodes?
 //   If yes
@@ -2063,7 +2075,9 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 	var err error
 	var ns *NodeSet
+	var perApply *NodeSet
 	logger := log.New(os.Stdout, "[applyLoop] ", log.Lshortfile)
+	applySetSleep := (time.Duration(conf.ApplySetSleepSeconds) * time.Second)
 	loopSleep := (time.Duration(conf.LoopApplySleepSeconds) * time.Second)
 	logger.Printf("Started, looping every %v", loopSleep)
 	for {
@@ -2132,19 +2146,38 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 				continue
 			}
 		}
-		logger.Printf("Tag '%s' is ready to apply, applying...", nextTag)
-		appliedNodes, beyondRevNodes, err := applyNodeSet(ns, false, false, nextTag, repo, conf.LockMessage, logger)
-		if err != nil {
-			logger.Printf("Error: unable to apply nodes, sleeping: %v", err)
-			closeNodeSet(ns, logger)
-			continue
-		}
 		closeNodeSet(ns, logger)
-		compressedErrNodes := compressErrorNodes(ns.nodes.errored)
-		for host, err := range compressedErrNodes {
-			logger.Printf("errNodes: %s, %v", host, err)
+		logger.Printf("Tag '%s' is ready to apply, applying with set order: %v", nextTag, conf.ApplySetOrder)
+		for nodeSetIndex, nodeSetName := range conf.ApplySetOrder {
+			logger.Printf("Applying Set '%s' (%d of %d sets)", nodeSetName, nodeSetIndex+1, len(conf.ApplySetOrder))
+			perApply = &NodeSet{
+				name:           nodeSetName,
+				nodeThresholds: conf.MaxNodeThresholds,
+			}
+			err = dialNodeSet(conf, perApply, logger)
+			if err != nil {
+				logger.Printf("Error: unable to dial node set: %v", err)
+				break
+			}
+			appliedNodes, beyondRevNodes, err := applyNodeSet(perApply, false, false, nextTag, repo, conf.LockMessage, logger)
+			if err != nil {
+				logger.Printf("Error: unable to apply nodes, sleeping: %v", err)
+				closeNodeSet(perApply, logger)
+				break
+			}
+			closeNodeSet(perApply, logger)
+			compressedErrNodes := compressErrorNodes(perApply.nodes.errored)
+			for host, err := range compressedErrNodes {
+				logger.Printf("errNodes: %s, %v", host, err)
+			}
+			logger.Printf("Applied Set '%s': (%d); Beyond rev nodes: (%d); Error nodes: (%d)", nodeSetName, len(appliedNodes), len(beyondRevNodes), len(perApply.nodes.errored))
+			if (nodeSetIndex + 1) < len(conf.ApplySetOrder) {
+				if applySetSleep > 0 {
+					logger.Printf("Sleeping for %v, before applying next set '%s'...", applySetSleep, conf.ApplySetOrder[nodeSetIndex+1])
+					sleepAndLog(applySetSleep, time.Duration(10)*time.Second, "Waiting to apply next node set", logger)
+				}
+			}
 		}
-		logger.Printf("Applied nodes: (%d); Beyond rev nodes: (%d); Error nodes: (%d)", len(appliedNodes), len(beyondRevNodes), len(ns.nodes.errored))
 		logger.Println("Apply complete, sleeping")
 	}
 }
@@ -3269,6 +3302,7 @@ func main() {
 	conf.LoopMilestoneSleepSeconds = 10
 	conf.LoopApplySleepSeconds = 10
 	conf.LoopApprovalSleepSeconds = 10
+	conf.ApplySetOrder = []string{"all"}
 	err = yaml.Unmarshal([]byte(data), conf)
 	if err != nil {
 		logger.Fatalf("Cannot unmarshal config: %v", err)
