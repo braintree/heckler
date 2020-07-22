@@ -1458,7 +1458,7 @@ func issuePrefix(prefix string) string {
 	if prefix == "" {
 		return ""
 	} else {
-		return fmt.Sprintf("[%s-env] ", prefix)
+		return fmt.Sprintf("[%s_env] ", prefix)
 	}
 }
 
