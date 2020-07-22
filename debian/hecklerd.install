@@ -1,3 +1,5 @@
 /usr/bin/hecklerd
-groupedResource.tmpl /usr/share/hecklerd/templates/
 commit.tmpl /usr/share/hecklerd/templates/
+groupedFailure.tmpl /usr/share/hecklerd/templates/
+groupedResource.tmpl /usr/share/hecklerd/templates/
+noopOwners.tmpl /usr/share/hecklerd/templates/

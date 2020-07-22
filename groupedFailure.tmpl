@@ -1,0 +1,9 @@
+### Puppet Failures (noop)
+{{ range $failure := .GroupedFailures }}
+-  **{{ $failure.Source }}**
+    - *Log:*
+      ```
+{{ indent 6 $failure.Log.Message }}
+      ```
+    - *Hosts:* `{{ $failure.CompressedNodes }}`
+{{ end }}
