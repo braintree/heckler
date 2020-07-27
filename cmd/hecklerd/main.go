@@ -2923,6 +2923,7 @@ func dialNodeSet(conf *HecklerdConf, ns *NodeSet, logger *log.Logger) error {
 	ns.nodes.dialed, ns.nodes.errored = dialNodes(ctx, nodesToDial)
 	ns.nodes.active = copyNodeMap(ns.nodes.dialed)
 	if ok := thresholdExceededNodeSet(ns, logger); ok {
+		closeNodes(ns.nodes.dialed)
 		return ErrThresholdExceeded
 	}
 	return nil
