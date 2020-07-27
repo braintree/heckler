@@ -552,8 +552,7 @@ func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repo
 		}
 	}
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errNoopNodes)
-	if msg, ok := thresholdExceededNodeSet(ns); ok {
-		logger.Printf("%s", msg)
+	if ok := thresholdExceededNodeSet(ns, logger); ok {
 		return groupedReport{}, ErrThresholdExceeded
 	}
 	gr := groupedReport{
@@ -1852,8 +1851,7 @@ func lockNodeSet(user string, comment string, force bool, ns *NodeSet, logger *l
 	ns.nodes.locked = lockedNodes
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errLockNodes)
 	ns.nodes.lockedByAnother = lockedByAnotherNodes
-	if msg, ok := thresholdExceededNodeSet(ns); ok {
-		logger.Printf("%s", msg)
+	if ok := thresholdExceededNodeSet(ns, logger); ok {
 		unlockNodeSet(user, false, ns, logger)
 		return ErrThresholdExceeded
 	}
@@ -2002,8 +2000,7 @@ func lastApplyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) err
 	}
 	ns.nodes.active = lastApplyNodes
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errNodes)
-	if msg, ok := thresholdExceededNodeSet(ns); ok {
-		logger.Printf("%s", msg)
+	if ok := thresholdExceededNodeSet(ns, logger); ok {
 		return ErrThresholdExceeded
 	}
 	return nil
@@ -2899,13 +2896,21 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 // Given two node Threshold structs return a bool and a message indicating
 // whether the first threshold exceeded the second. If a threshold is less than
 // zero than it is disabled or infinite.
-func thresholdExceededNodeSet(ns *NodeSet) (string, bool) {
+func thresholdExceededNodeSet(ns *NodeSet, logger *log.Logger) bool {
 	if ns.nodeThresholds.Errored > -1 && len(ns.nodes.errored) > ns.nodeThresholds.Errored {
-		return fmt.Sprintf("Error nodes(%d) exceeds the threshold(%d)", len(ns.nodes.errored), ns.nodeThresholds.Errored), true
+		logger.Printf("Error nodes(%d) exceeds the threshold(%d)", len(ns.nodes.errored), ns.nodeThresholds.Errored)
+		for host, err := range compressErrorNodes(ns.nodes.errored) {
+			logger.Printf("errNodes: %s, %v", host, err)
+		}
+		return true
 	} else if ns.nodeThresholds.LockedByAnother > -1 && len(ns.nodes.lockedByAnother) > ns.nodeThresholds.LockedByAnother {
-		return fmt.Sprintf("Locked by another nodes(%d) exceeds the threshold(%d)", len(ns.nodes.lockedByAnother), ns.nodeThresholds.LockedByAnother), true
+		logger.Printf("Locked by another nodes(%d) exceeds the threshold(%d)", len(ns.nodes.lockedByAnother), ns.nodeThresholds.LockedByAnother)
+		for host, str := range compressLockNodes(ns.nodes.lockedByAnother) {
+			logger.Printf("Locked by another: %s, %s", host, str)
+		}
+		return true
 	}
-	return "Thresholds not exceeded", false
+	return false
 }
 
 func dialNodeSet(conf *HecklerdConf, ns *NodeSet, logger *log.Logger) error {
@@ -2917,8 +2922,7 @@ func dialNodeSet(conf *HecklerdConf, ns *NodeSet, logger *log.Logger) error {
 	defer cancel()
 	ns.nodes.dialed, ns.nodes.errored = dialNodes(ctx, nodesToDial)
 	ns.nodes.active = copyNodeMap(ns.nodes.dialed)
-	if msg, ok := thresholdExceededNodeSet(ns); ok {
-		logger.Printf("%s", msg)
+	if ok := thresholdExceededNodeSet(ns, logger); ok {
 		return ErrThresholdExceeded
 	}
 	return nil
@@ -2927,8 +2931,7 @@ func dialNodeSet(conf *HecklerdConf, ns *NodeSet, logger *log.Logger) error {
 // Return the most recent tag across all nodes in an environment
 func commonTagNodeSet(conf *HecklerdConf, ns *NodeSet, repo *git.Repository, logger *log.Logger) error {
 	eligibleNodeSet("root", ns)
-	if msg, ok := thresholdExceededNodeSet(ns); ok {
-		logger.Printf("%s", msg)
+	if ok := thresholdExceededNodeSet(ns, logger); ok {
 		return ErrThresholdExceeded
 	}
 	err := lastApplyNodeSet(ns, repo, logger)
