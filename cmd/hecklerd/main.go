@@ -82,6 +82,7 @@ type HecklerdConf struct {
 	GitHubAppInstallId         int64                 `yaml:"github_app_install_id"`
 	GitHubDisableNotifications bool                  `yaml:"github_disable_notifications"`
 	GitHubHttpProxy            string                `yaml:"github_http_proxy"`
+	IgnoredResources           []string              `yaml:"ignored_resources"`
 	NodeSets                   map[string]NodeSetCfg `yaml:"node_sets"`
 	AutoTagCronSchedule        string                `yaml:"auto_tag_cron_schedule"`
 	AutoCloseIssues            bool                  `yaml:"auto_close_issues"`
@@ -422,7 +423,7 @@ func unmarshalGroupedReport(oid *git.Oid, groupedNoopDir string) (groupedReport,
 	return gr, nil
 }
 
-func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, logger *log.Logger) (groupedReport, error) {
+func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, ignoredResources []string, logger *log.Logger) (groupedReport, error) {
 	var err error
 
 	for host, _ := range ns.nodes.active {
@@ -529,7 +530,7 @@ func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repo
 			if parentFailures {
 				parentNoopFailures = true
 			}
-			node.commitDeltaResources[*commit.Id()] = subtractNoops(node.commitReports[*commit.Id()], parentReports)
+			node.commitDeltaResources[*commit.Id()] = subtractNoops(node.commitReports[*commit.Id()], parentReports, ignoredResources)
 		}
 	}
 
@@ -611,19 +612,26 @@ func initDeltaResource(resourceTitle ResourceTitle, r *rizzopb.ResourceStatus, d
 	return deltaRes
 }
 
-func subtractNoops(commitNoop *rizzopb.PuppetReport, priorCommitNoops []*rizzopb.PuppetReport) map[ResourceTitle]*deltaResource {
+func subtractNoops(commitNoop *rizzopb.PuppetReport, priorCommitNoops []*rizzopb.PuppetReport, ignoredResources []string) map[ResourceTitle]*deltaResource {
 	var deltaEvents []*rizzopb.Event
 	var deltaLogs []*rizzopb.Log
 	var deltaResources map[ResourceTitle]*deltaResource
 	var resourceTitle ResourceTitle
 
 	deltaResources = make(map[ResourceTitle]*deltaResource)
+	ignoredResourcesMap := make(map[string]bool)
+	for _, resource := range ignoredResources {
+		ignoredResourcesMap[resource] = true
+	}
 
 	if commitNoop.ResourceStatuses == nil {
 		return deltaResources
 	}
 
 	for resourceTitleStr, r := range commitNoop.ResourceStatuses {
+		if _, ok := ignoredResourcesMap[resourceTitleStr]; ok {
+			continue
+		}
 		deltaEvents = nil
 		deltaLogs = nil
 
@@ -1137,7 +1145,7 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 		}
-		groupedReport, err := noopNodeSet(ns, commit, req.DeltaNoop, hs.repo, logger)
+		groupedReport, err := noopNodeSet(ns, commit, req.DeltaNoop, hs.repo, hs.conf.IgnoredResources, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -1252,7 +1260,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	rprt := new(hecklerpb.HecklerNoopRangeReport)
 	var md string
 	for _, gi := range commitLogIds {
-		groupedReport, err := noopNodeSet(ns, commits[gi], true, hs.repo, logger)
+		groupedReport, err := noopNodeSet(ns, commits[gi], true, hs.repo, hs.conf.IgnoredResources, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -3020,7 +3028,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 					node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 					node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 				}
-				gr, err = noopNodeSet(perNoop, commit, true, repo, logger)
+				gr, err = noopNodeSet(perNoop, commit, true, repo, conf.IgnoredResources, logger)
 				if err != nil {
 					logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
 					unlockNodeSet("root", false, perNoop, logger)
