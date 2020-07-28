@@ -294,3 +294,35 @@ func TestIntersectionOwnersApprovers(t *testing.T) {
 		}
 	}
 }
+
+func TestNextSemVerTag(t *testing.T) {
+	t.Parallel()
+	type input struct {
+		priorTag string
+		prefix   string
+		tags     []string
+	}
+	tests := []struct {
+		input    input
+		expected string
+	}{
+		{
+			input{
+				priorTag: "v1",
+				prefix:   "",
+				tags:     []string{"v1", "v1.1", "v2"},
+			},
+			"v1.1",
+		},
+	}
+	for _, test := range tests {
+		actual, err := nextSemVerTag(test.input.priorTag, test.input.prefix, test.input.tags)
+		if err != nil {
+			t.Fatalf("nextSemVerTag returned an unexpected error: %v", err)
+			return
+		}
+		if diff := cmp.Diff(test.expected, actual); diff != "" {
+			t.Errorf("nextSemVerTag() mismatch (-expected +actual):\n%s", diff)
+		}
+	}
+}

@@ -3200,23 +3200,30 @@ func sortedSemVers(tags []string, prefix string) ([]*semver.Version, error) {
 	return tagSet, nil
 }
 
-func nextTag(priorTag string, prefix string, repo *git.Repository) (string, error) {
+func repoTags(prefix string, repo *git.Repository) ([]string, error) {
 	tagMatch := fmt.Sprintf("%sv*", tagPrefix(prefix))
 	tags, err := repo.Tags.ListWithMatch(tagMatch)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	annotatedTags := make([]string, 0)
 	for _, tag := range tags {
 		obj, err := repo.RevparseSingle(tag)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		if obj.Type() == git.ObjectTag {
 			annotatedTags = append(annotatedTags, tag)
 		}
 	}
+	return tags, nil
+}
+
+func nextSemVerTag(priorTag string, prefix string, tags []string) (string, error) {
 	tagSet, err := sortedSemVers(tags, prefix)
+	if err != nil {
+		return "", err
+	}
 
 	priorTagFound := false
 	var priorTagIndex int
@@ -3236,6 +3243,18 @@ func nextTag(priorTag string, prefix string, repo *git.Repository) (string, erro
 	} else {
 		return "", nil
 	}
+}
+
+func nextTag(priorTag string, prefix string, repo *git.Repository) (string, error) {
+	tags, err := repoTags(prefix, repo)
+	if err != nil {
+		return "", err
+	}
+	nextTag, err := nextSemVerTag(priorTag, prefix, tags)
+	if err != nil {
+		return "", err
+	}
+	return nextTag, nil
 }
 
 func clearGithub(conf *HecklerdConf) error {
