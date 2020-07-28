@@ -2612,7 +2612,7 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 	return nil
 }
 
-// Are their commits beyond the last tag?
+// Are there commits beyond the last tag?
 // 	If yes, create a new tag
 // If no, do nothing
 func autoTag(conf *HecklerdConf, repo *git.Repository) {
