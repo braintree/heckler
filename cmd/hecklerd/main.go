@@ -2612,50 +2612,62 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 	return nil
 }
 
-// Are there commits beyond the last tag?
-// 	If yes, create a new tag
-// If no, do nothing
+// Does our common tag across "all" nodes equal our latest tag?
+//   no, do nothing, the latest tag has not been applied, yet
+//   yes,
+//     Are there new commits beyond are common tag?
+//       yes, create a new version
+//       no, do nothing
 func autoTag(conf *HecklerdConf, repo *git.Repository) {
 	logger := log.New(os.Stdout, "[autoTag] ", log.Lshortfile)
-	headCommit, err := gitutil.RevparseToCommit(conf.RepoBranch, repo)
-	if err != nil {
-		logger.Fatalf("Unable to revparse: %v", err)
+	var err error
+	var ns *NodeSet
+	ns = &NodeSet{
+		name:           "all",
+		nodeThresholds: conf.MaxNodeThresholds,
 	}
-	logger.Printf("Commit on branch '%s', '%s'", conf.RepoBranch, headCommit.AsObject().Id().String())
-	describeOpts, err := git.DefaultDescribeOptions()
+	err = dialNodeSet(conf, ns, logger)
 	if err != nil {
-		logger.Fatalf("Unable to set describe opts: %v", err)
+		logger.Printf("Unable to dial node set: %v", err)
+		return
 	}
-	prefix := conf.EnvPrefix
-	describeOpts.Pattern = fmt.Sprintf("%sv*", tagPrefix(prefix))
-	result, err := headCommit.Describe(&describeOpts)
+	err = commonTagNodeSet(conf, ns, repo, logger)
 	if err != nil {
-		logger.Fatalf("Unable to describe: %v", err)
+		logger.Printf("Unable to query for commonTag: %v", err)
+		closeNodeSet(ns, logger)
+		return
 	}
-	formatOpts, err := git.DefaultDescribeFormatOptions()
-	formatOpts.AbbreviatedSize = 0
+	logger.Printf("Found common tag: %s", ns.commonTag)
+	commonTag, err := tagToSemver(ns.commonTag, conf.EnvPrefix)
 	if err != nil {
-		logger.Fatalf("Unable to set format opts: %v", err)
+		logger.Printf("Unable to convert to semver tag: %v", err)
+		return
 	}
-	mostRecentTag, err := result.Format(&formatOpts)
+	tags, err := repoTags(conf.EnvPrefix, repo)
 	if err != nil {
-		logger.Fatalf("Unable to format describe output: %v", err)
+		logger.Printf("Unable to query for repoTags: %v", err)
+		return
 	}
-	logger.Printf("Most recent tag from commit, %s tag: '%s'", headCommit.AsObject().Id().String(), mostRecentTag)
-	commitLogIds, _, err := commitLogIdList(repo, mostRecentTag, conf.RepoBranch)
+	tagSet, err := sortedSemVers(tags, conf.EnvPrefix)
+	if err != nil {
+		logger.Printf("Unable to sort tags: %v", err)
+		return
+	}
+	latestTag := tagSet[len(tagSet)-1]
+	if !commonTag.Equal(latestTag) {
+		logger.Printf("Latest tag '%s' not applied, common tag is '%s'", latestTag.Original(), commonTag.Original())
+		return
+	}
+	commitLogIds, _, err := commitLogIdList(repo, latestTag.Original(), conf.RepoBranch)
 	if err != nil {
 		logger.Fatalf("Unable to obtain commit log ids: %v", err)
 	}
 	if len(commitLogIds) == 0 {
-		logger.Printf("No new commits since last tag: '%s'", mostRecentTag)
+		logger.Printf("No new commits since latest tag: '%s'", latestTag.Original())
 		return
 	}
-	mostRecentVersion, err := tagToSemver(mostRecentTag, prefix)
-	if err != nil {
-		logger.Fatalf("Unable to parse version: %v", err)
-	}
-	newVersion := mostRecentVersion.IncMajor()
-	newTag := fmt.Sprintf("%sv%d", tagPrefix(prefix), newVersion.Major())
+	newVersion := latestTag.IncMajor()
+	newTag := fmt.Sprintf("%sv%d", tagPrefix(conf.EnvPrefix), newVersion.Major())
 	ghclient, _, err := githubConn(conf)
 	if err != nil {
 		logger.Printf("Error: unable to connect to GitHub, returning: %v", err)
