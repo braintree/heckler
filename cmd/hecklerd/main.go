@@ -3140,7 +3140,7 @@ func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Reposito
 	for _, node := range nodes {
 		tagStr, err := describeCommit(node.lastApply, prefix, repo)
 		if err != nil {
-			return "", errors.New(fmt.Sprintf("Unable to describe %s@%s, %v", node.host, node.lastApply.String(), err))
+			return "", fmt.Errorf("Unable to describe %s@%s with tag prefix '%s', %w", node.host, node.lastApply.String(), prefix, err)
 		}
 		if _, ok := tagNodes[tagStr]; ok {
 			tagNodes[tagStr] = append(tagNodes[tagStr], node.host)
