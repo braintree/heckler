@@ -160,9 +160,12 @@ type deltaResource struct {
 }
 
 type groupedReport struct {
-	ParentNoopFailures bool
-	Failures           []*groupedFailure
-	Resources          []*groupedResource
+	ParentNoopFailures        bool
+	Failures                  []*groupedFailure
+	Resources                 []*groupedResource
+	CompressedErrored         map[string]string
+	CompressedBeyondRev       map[string]string
+	CompressedLockedByAnother map[string]string
 }
 
 type groupedFailure struct {
@@ -556,10 +559,24 @@ func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repo
 	if ok := thresholdExceededNodeSet(ns, logger); ok {
 		return groupedReport{}, ErrThresholdExceeded
 	}
+	compressedErrStrNodes := make(map[string]string)
+	compressedErrNodes := compressErrorNodes(ns.nodes.errored)
+	for host, err := range compressedErrNodes {
+		compressedErrStrNodes[host] = err.Error()
+	}
+	beyondRevNodes := make(map[string]string)
+	for host, node := range ns.nodes.active {
+		if commitAlreadyApplied(node.lastApply, *commit.Id(), repo) {
+			beyondRevNodes[host] = node.lastApply.String()
+		}
+	}
 	gr := groupedReport{
-		ParentNoopFailures: parentNoopFailures,
-		Resources:          groupedResources,
-		Failures:           groupedFailures,
+		ParentNoopFailures:        parentNoopFailures,
+		Resources:                 groupedResources,
+		Failures:                  groupedFailures,
+		CompressedErrored:         compressedErrStrNodes,
+		CompressedBeyondRev:       compressHostsStr(beyondRevNodes),
+		CompressedLockedByAnother: compressLockNodes(ns.nodes.lockedByAnother),
 	}
 	return gr, nil
 }
@@ -1543,6 +1560,9 @@ func noopToMarkdown(conf *HecklerdConf, commit *git.Commit, gr groupedReport, te
 	}
 	body += commitMsgToMarkdown(commit, conf, templates)
 	body += groupedFailuresToMarkdown(gr.Failures, templates)
+	body += erroredNodesToMarkdown(gr.CompressedErrored, templates)
+	body += lockedNodesToMarkdown(gr.CompressedLockedByAnother, templates)
+	body += beyondRevNodesToMarkdown(gr.CompressedBeyondRev, templates)
 	body += groupedResourcesToMarkdown(gr.Resources, commit, conf, templates)
 	if len(gr.Resources) > 0 {
 		noopOwnersMarkdown, err := noopOwnersToMarkdown(conf, commit, gr.Resources, templates)
@@ -1754,6 +1774,66 @@ func groupedFailuresToMarkdown(gf []*groupedFailure, templates *template.Templat
 		gf,
 	}
 	err = templates.ExecuteTemplate(&body, "groupedFailure.tmpl", data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return body.String()
+}
+
+func erroredNodesToMarkdown(errored map[string]string, templates *template.Template) string {
+	var body strings.Builder
+	var err error
+
+	if len(errored) == 0 {
+		return ""
+	}
+
+	data := struct {
+		Errored map[string]string
+	}{
+		errored,
+	}
+	err = templates.ExecuteTemplate(&body, "erroredNodes.tmpl", data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return body.String()
+}
+
+func lockedNodesToMarkdown(locked map[string]string, templates *template.Template) string {
+	var body strings.Builder
+	var err error
+
+	if len(locked) == 0 {
+		return ""
+	}
+
+	data := struct {
+		Locked map[string]string
+	}{
+		locked,
+	}
+	err = templates.ExecuteTemplate(&body, "lockedNodes.tmpl", data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return body.String()
+}
+
+func beyondRevNodesToMarkdown(beyondRev map[string]string, templates *template.Template) string {
+	var body strings.Builder
+	var err error
+
+	if len(beyondRev) == 0 {
+		return ""
+	}
+
+	data := struct {
+		BeyondRev map[string]string
+	}{
+		beyondRev,
+	}
+	err = templates.ExecuteTemplate(&body, "beyondRevNodes.tmpl", data)
 	if err != nil {
 		log.Fatal(err)
 	}
