@@ -1141,6 +1141,12 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 		if err != nil {
 			return nil, err
 		}
+		err = lockNodeSet("root", hs.conf.LockMessage, false, ns, logger)
+		if err != nil {
+			logger.Printf("Unable to lock nodes, sleeping, %v", err)
+			closeNodeSet(ns, logger)
+			return nil, err
+		}
 		for _, node := range ns.nodes.active {
 			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
