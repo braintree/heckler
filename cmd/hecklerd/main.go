@@ -745,7 +745,7 @@ func compressErrorNodes(nodes map[string]*Node) map[string]error {
 	}
 	compressedHostErr := make(map[string]error)
 	for errType, hosts := range errHosts {
-		compressedHostErr[compressHosts(hosts)] = fmt.Errorf("Error: %s", errType)
+		compressedHostErr[compressHosts(hosts)] = fmt.Errorf("%s", errType)
 	}
 	return compressedHostErr
 }
@@ -1883,7 +1883,7 @@ func unlockNodeSet(user string, force bool, ns *NodeSet, logger *log.Logger) {
 	}
 	compressedErrNodes := compressErrorNodes(errLockNodes)
 	for host, err := range compressedErrNodes {
-		logger.Printf("Unlock failed, errNodes: %s, %v", host, err)
+		logger.Printf("Unlock failed, errNodes: %s, Error: %v", host, err)
 	}
 	ns.nodes.active = unlockedNodes
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errLockNodes)
@@ -2173,7 +2173,7 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			closeNodeSet(perApply, logger)
 			compressedErrNodes := compressErrorNodes(perApply.nodes.errored)
 			for host, err := range compressedErrNodes {
-				logger.Printf("errNodes: %s, %v", host, err)
+				logger.Printf("errNodes: %s, Error: %v", host, err)
 			}
 			logger.Printf("Applied Set '%s': (%d); Beyond rev nodes: (%d); Error nodes: (%d)", nodeSetName, len(appliedNodes), len(beyondRevNodes), len(perApply.nodes.errored))
 			if (nodeSetIndex + 1) < len(conf.ApplySetOrder) {
@@ -2607,7 +2607,7 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 	logger.Printf("Unlocked: %s", compressHosts(unlockedHosts))
 	compressedErrNodes := compressErrorNodes(ns.nodes.errored)
 	for host, err := range compressedErrNodes {
-		logger.Printf("Unlock errNodes: %s, %v", host, err)
+		logger.Printf("Unlock errNodes: %s, Error: %v", host, err)
 	}
 	return nil
 }
@@ -2920,7 +2920,7 @@ func thresholdExceededNodeSet(ns *NodeSet, logger *log.Logger) bool {
 	if ns.nodeThresholds.Errored > -1 && len(ns.nodes.errored) > ns.nodeThresholds.Errored {
 		logger.Printf("Error nodes(%d) exceeds the threshold(%d)", len(ns.nodes.errored), ns.nodeThresholds.Errored)
 		for host, err := range compressErrorNodes(ns.nodes.errored) {
-			logger.Printf("errNodes: %s, %v", host, err)
+			logger.Printf("errNodes: %s, Error: %v", host, err)
 		}
 		return true
 	} else if ns.nodeThresholds.LockedByAnother > -1 && len(ns.nodes.lockedByAnother) > ns.nodeThresholds.LockedByAnother {
