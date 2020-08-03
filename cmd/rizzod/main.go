@@ -325,8 +325,11 @@ func puppetApply(oid string, noop bool, conf *RizzoConf) (*rizzopb.PuppetReport,
 	}
 	puppetArgs := make([]string, len(conf.PuppetCmd.Args))
 	copy(puppetArgs, conf.PuppetCmd.Args)
+	// Ensure we use `diff` and no color
 	puppetArgs = append(puppetArgs, "--diff=diff")
 	puppetArgs = append(puppetArgs, "--diff_args='--unified --color=never")
+	// Ensure no color output in log messages, which breaks regex matching
+	puppetArgs = append(puppetArgs, "--color=false")
 	if noop {
 		puppetArgs = append(puppetArgs, "--noop")
 	}
