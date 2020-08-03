@@ -778,7 +778,7 @@ func compressLockNodes(nodes map[string]*Node) map[string]string {
 	}
 	compressedHostStr := make(map[string]string)
 	for ls, hosts := range lockedHosts {
-		compressedHostStr[compressHosts(hosts)] = fmt.Sprintf("%s: %s", ls.User, ls.Comment)
+		compressedHostStr[compressHosts(hosts)] = fmt.Sprintf("User: '%s' Comment: '%s'", ls.User, ls.Comment)
 	}
 	return compressedHostStr
 }
