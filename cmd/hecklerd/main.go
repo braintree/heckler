@@ -490,7 +490,7 @@ func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repo
 			logger.Printf("Waiting for (%d) outstanding noop requests: %s", noopRequests-j, compressHostsMap(noopHosts))
 			r := <-puppetReportChan
 			if r.err != nil {
-				ns.nodes.active[r.host].err = fmt.Errorf("Noop failed for %s: %w", r.host, r.err)
+				ns.nodes.active[r.host].err = fmt.Errorf("Noop failed: %w", r.err)
 				errNoopNodes[r.host] = ns.nodes.active[r.host]
 				logger.Println(errNoopNodes[r.host].err)
 				delete(ns.nodes.active, r.host)
@@ -1238,7 +1238,7 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 			ns.nodes.active[r.host].err = fmt.Errorf("Apply failed: %w", r.err)
 			errApplyNodes[r.host] = ns.nodes.active[r.host]
 		} else if r.report.Status == "failed" {
-			ns.nodes.active[r.host].err = fmt.Errorf("Apply status=failed, %s@%s", r.report.Host, r.report.ConfigurationVersion)
+			ns.nodes.active[r.host].err = fmt.Errorf("Apply status: '%s', %s", r.report.Status, r.report.ConfigurationVersion)
 			errApplyNodes[r.host] = ns.nodes.active[r.host]
 		} else {
 			if noop {
@@ -2086,7 +2086,7 @@ func lastApplyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) err
 		obj, err = repo.RevparseSingle(r.report.ConfigurationVersion)
 		if err != nil {
 			errNodes[r.host] = ns.nodes.active[r.host]
-			errNodes[r.host].err = fmt.Errorf("Unable to revparse ConfigurationVersion, %s@%s: %v %w", r.report.ConfigurationVersion, r.host, err, ErrLastApplyUnknown)
+			errNodes[r.host].err = fmt.Errorf("Unable to revparse ConfigurationVersion, %s: %v %w", r.report.ConfigurationVersion, err, ErrLastApplyUnknown)
 			continue
 		}
 		lastApplyNodes[r.host] = ns.nodes.active[r.host]
