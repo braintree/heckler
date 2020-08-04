@@ -1,5 +1,8 @@
 /usr/bin/hecklerd
+beyondRevNodes.tmpl /usr/share/hecklerd/templates/
 commit.tmpl /usr/share/hecklerd/templates/
+erroredNodes.tmpl /usr/share/hecklerd/templates/
 groupedFailure.tmpl /usr/share/hecklerd/templates/
 groupedResource.tmpl /usr/share/hecklerd/templates/
+lockedNodes.tmpl /usr/share/hecklerd/templates/
 noopOwners.tmpl /usr/share/hecklerd/templates/
