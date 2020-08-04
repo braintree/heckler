@@ -1,11 +1,15 @@
 package gitutil
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"time"
 
 	git "github.com/libgit2/git2go/v30"
 )
@@ -264,4 +268,26 @@ func Checkout(rev string, repo *git.Repository) (string, error) {
 		}
 	}
 	return commitId.String(), nil
+}
+
+// Run git gc to pack the repository, this is necessary because libgit2 has no
+// ability at present to perform house keeping tasks
+func Gc(repoDir string, logger *log.Logger) error {
+	// Spread out run over an hour to avoid VMs on the same host using I/O
+	// simultaneously
+	sleepSpread, err := rand.Int(rand.Reader, big.NewInt(60))
+	if err != nil {
+		logger.Printf("Cannot read random number: %v", err)
+		return err
+	}
+	time.Sleep(time.Duration(sleepSpread.Int64()) * time.Minute)
+	cmd := exec.Command("git", "-C", repoDir, "gc", "--auto")
+	logger.Printf("Running git gc: %v", cmd.Args)
+	out, err := cmd.Output()
+	if err != nil {
+		logger.Printf("Error: git gc failed, %v, '%s'", err, out)
+		return err
+	}
+	logger.Printf("Completed git gc of: '%s'", repoDir)
+	return nil
 }

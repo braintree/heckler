@@ -27,6 +27,7 @@ import (
 	"github.braintreeps.com/lollipopman/heckler/internal/heckler"
 	"github.braintreeps.com/lollipopman/heckler/internal/rizzopb"
 	"github.com/lollipopman/luser"
+	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 
 	"google.golang.org/grpc"
@@ -36,8 +37,6 @@ var Version string
 
 const (
 	port     = ":50051"
-	stateDir = "/var/lib/rizzod"
-	repoDir  = stateDir + "/repo/puppetcode"
 	lockPath = "/var/tmp/puppet.lock"
 )
 
@@ -55,7 +54,7 @@ func (s *rizzoServer) PuppetApply(ctx context.Context, req *rizzopb.PuppetApplyR
 	log.Printf("Received: %v", req.Rev)
 
 	repoUrl := "http://" + s.conf.HecklerHost + ":8080/puppetcode"
-	repo, err := gitutil.PullBranch(repoUrl, s.conf.RepoBranch, repoDir)
+	repo, err := gitutil.PullBranch(repoUrl, s.conf.RepoBranch, s.conf.RepoDir)
 	if err != nil {
 		return &rizzopb.PuppetReport{}, err
 	}
@@ -346,7 +345,7 @@ func puppetApply(oid string, noop bool, conf *RizzoConf) (*rizzopb.PuppetReport,
 	cmd.Stdout = io.MultiWriter(os.Stdout, &stdoutBuf)
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
 	// Change to code dir, so hiera relative paths resolve
-	cmd.Dir = repoDir
+	cmd.Dir = conf.RepoDir
 	env := os.Environ()
 	for k, v := range conf.Env {
 		env = append(env, k+"="+v)
@@ -394,6 +393,8 @@ type RizzoConf struct {
 	PuppetReportDir string `yaml:"puppet_reportdir"`
 	HecklerHost     string `yaml:"heckler_host"`
 	RepoBranch      string `yaml:"repo_branch"`
+	StateDir        string `yaml:"state_dir"`
+	RepoDir         string `yaml:"repo_dir"`
 }
 
 func main() {
@@ -409,6 +410,8 @@ func main() {
 	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
 	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 
+	logger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
+
 	flag.BoolVar(&clearState, "clear", false, "Clear local state, e.g. puppet code repo")
 	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.Parse()
@@ -416,11 +419,11 @@ func main() {
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
 		if err != nil {
-			log.Fatal("could not create CPU profile: ", err)
+			logger.Fatal("could not create CPU profile: ", err)
 		}
 		defer f.Close() // error handling omitted for example
 		if err := pprof.StartCPUProfile(f); err != nil {
-			log.Fatal("could not start CPU profile: ", err)
+			logger.Fatal("could not start CPU profile: ", err)
 		}
 		defer pprof.StopCPUProfile()
 	}
@@ -435,54 +438,57 @@ func main() {
 	} else if _, err := os.Stat("rizzod_conf.yaml"); err == nil {
 		rizzoConfPath = "rizzod_conf.yaml"
 	} else {
-		log.Fatal("Unable to load rizzod_conf.yaml from /etc/rizzo or .")
+		logger.Fatal("Unable to load rizzod_conf.yaml from /etc/rizzo or .")
 	}
 	file, err = os.Open(rizzoConfPath)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
 	}
 	data, err = ioutil.ReadAll(file)
 	if err != nil {
-		log.Fatalf("Cannot read config: %v", err)
+		logger.Fatalf("Cannot read config: %v", err)
 	}
 	conf = new(RizzoConf)
+	// Set some defaults
+	conf.StateDir = "/var/lib/rizzod"
+	conf.RepoDir = conf.StateDir + "/repo/puppetcode"
 	err = yaml.Unmarshal([]byte(data), conf)
 	if err != nil {
-		log.Fatalf("Cannot unmarshal config: %v", err)
+		logger.Fatalf("Cannot unmarshal config: %v", err)
 	}
 	file.Close()
 
 	if conf.RepoBranch == "" {
-		log.Println("No branch specified in config, please add RepoBranch")
+		logger.Println("No branch specified in config, please add RepoBranch")
 		os.Exit(1)
 	}
 
 	if clearState {
-		log.Printf("Removing state directory: %v", stateDir)
-		os.RemoveAll(stateDir)
+		logger.Printf("Removing state directory: %v", conf.StateDir)
+		os.RemoveAll(conf.StateDir)
 		os.Exit(0)
 	}
 
-	log.Printf("rizzod: v%s\n", Version)
+	logger.Printf("rizzod: v%s\n", Version)
 	// Clone a copy of the repo on startup so that future fetches are quicker.
 	repoUrl := "http://" + conf.HecklerHost + ":8080/puppetcode"
 	repoPulled := false
 	for repoPulled == false {
-		log.Printf("Pulling: %s", repoUrl)
-		_, err := gitutil.PullBranch(repoUrl, conf.RepoBranch, repoDir)
+		logger.Printf("Pulling: %s", repoUrl)
+		_, err := gitutil.PullBranch(repoUrl, conf.RepoBranch, conf.RepoDir)
 		if err != nil {
 			sleepDur := 10 * time.Second
-			log.Printf("Pull error, trying again after sleeping for %s: %v", sleepDur, err)
+			logger.Printf("Pull error, trying again after sleeping for %s: %v", sleepDur, err)
 			time.Sleep(sleepDur)
 			continue
 		}
 		repoPulled = true
-		log.Println("Pull Complete")
+		logger.Println("Pull Complete")
 	}
 
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		logger.Fatalf("failed to listen: %v", err)
 	}
 	grpcServer := grpc.NewServer()
 	rizzoServer := new(rizzoServer)
@@ -490,17 +496,27 @@ func main() {
 		rizzoServer.conf = conf
 		rizzopb.RegisterRizzoServer(grpcServer, rizzoServer)
 		if err := grpcServer.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
+			logger.Fatalf("failed to serve: %v", err)
 		}
 	}()
+
+	rizzodCron := cron.New()
+	rizzodCron.AddFunc(
+		"0 12 * * *",
+		func() {
+			gitutil.Gc(conf.RepoDir, logger)
+		},
+	)
+	rizzodCron.Start()
+	defer rizzodCron.Stop()
 
 	done := make(chan bool, 1)
 	go func() {
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-		log.Printf("Received %s", <-sigs)
+		logger.Printf("Received %s", <-sigs)
 		grpcServer.GracefulStop()
-		log.Println("Rizzo Shutdown")
+		logger.Println("Rizzo Shutdown")
 		done <- true
 	}()
 
@@ -509,12 +525,12 @@ func main() {
 	if *memprofile != "" {
 		f, err := os.Create(*memprofile)
 		if err != nil {
-			log.Fatal("could not create memory profile: ", err)
+			logger.Fatal("could not create memory profile: ", err)
 		}
 		defer f.Close() // error handling omitted for example
 		runtime.GC()    // get up-to-date statistics
 		if err := pprof.WriteHeapProfile(f); err != nil {
-			log.Fatal("could not write memory profile: ", err)
+			logger.Fatal("could not write memory profile: ", err)
 		}
 	}
 }

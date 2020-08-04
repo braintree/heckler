@@ -51,17 +51,11 @@ var ErrThresholdExceeded = errors.New("Threshold for err nodes or lock nodes exc
 
 const (
 	ApplicationName = "git-cgi-server"
-
+	shutdownTimeout = time.Second * 5
 	// HACK: Bind to ipv4
 	// TODO: move to HecklerdConf
-	defaultAddr     = "0.0.0.0:8080"
-	shutdownTimeout = time.Second * 5
-	// TODO move to HecklerdConf
-	port           = ":50052"
-	stateDir       = "/var/lib/hecklerd"
-	workRepo       = "/var/lib/hecklerd" + "/work_repo/puppetcode"
-	noopDir        = stateDir + "/noops"
-	groupedNoopDir = noopDir + "/grouped"
+	defaultAddr = "0.0.0.0:8080"
+	port        = ":50052"
 )
 
 var Debug = false
@@ -97,6 +91,11 @@ type HecklerdConf struct {
 	LoopApprovalSleepSeconds   int                   `yaml:"loop_approval_sleep_seconds"`
 	ApplySetOrder              []string              `yaml:"apply_set_order"`
 	ApplySetSleepSeconds       int                   `yaml:"apply_set_sleep_seconds"`
+	StateDir                   string                `yaml:"state_dir"`
+	WorkRepo                   string                `yaml:"work_repo"`
+	ServedRepo                 string                `yaml:"served_repo"`
+	NoopDir                    string                `yaml:"noop_dir"`
+	GroupedNoopDir             string                `yaml:"grouped_noop_dir"`
 }
 
 type NodeSetCfg struct {
@@ -426,7 +425,7 @@ func unmarshalGroupedReport(oid *git.Oid, groupedNoopDir string) (groupedReport,
 	return gr, nil
 }
 
-func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, ignoredResources []string, logger *log.Logger) (groupedReport, error) {
+func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, ignoredResources []string, noopDir string, logger *log.Logger) (groupedReport, error) {
 	var err error
 
 	for host, _ := range ns.nodes.active {
@@ -1074,7 +1073,7 @@ func setNameToNodes(conf *HecklerdConf, nodeSetName string, logger *log.Logger) 
 	}
 	// Change to code dir, so hiera relative paths resolve
 	cmd := exec.Command(setCfg.Cmd[0], setCfg.Cmd[1:]...)
-	cmd.Dir = stateDir + "/work_repo/puppetcode"
+	cmd.Dir = conf.WorkRepo
 	stdout, err := cmd.Output()
 	if err != nil {
 		return nil, err
@@ -1169,7 +1168,7 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 		}
-		groupedReport, err := noopNodeSet(ns, commit, req.DeltaNoop, hs.repo, hs.conf.IgnoredResources, logger)
+		groupedReport, err := noopNodeSet(ns, commit, req.DeltaNoop, hs.repo, hs.conf.IgnoredResources, hs.conf.NoopDir, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -1284,7 +1283,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	rprt := new(hecklerpb.HecklerNoopRangeReport)
 	var md string
 	for _, gi := range commitLogIds {
-		groupedReport, err := noopNodeSet(ns, commits[gi], true, hs.repo, hs.conf.IgnoredResources, logger)
+		groupedReport, err := noopNodeSet(ns, commits[gi], true, hs.repo, hs.conf.IgnoredResources, hs.conf.NoopDir, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -1655,11 +1654,11 @@ func commitAuthorsLogins(ghclient *github.Client, commit *git.Commit) ([]string,
 // owners of noop
 func noopOwnersToMarkdown(conf *HecklerdConf, commit *git.Commit, groupedResources []*groupedResource, templates *template.Template) (string, error) {
 	var err error
-	groupedResources, err = groupedResourcesNodeFiles(groupedResources, workRepo)
+	groupedResources, err = groupedResourcesNodeFiles(groupedResources, conf.WorkRepo)
 	if err != nil {
 		return "", err
 	}
-	groupedResources, err = groupedResourcesOwners(groupedResources, workRepo)
+	groupedResources, err = groupedResourcesOwners(groupedResources, conf.WorkRepo)
 	if err != nil {
 		return "", err
 	}
@@ -2112,7 +2111,6 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 		return nil, err
 	}
 
-	cloneDir := stateDir + "/served_repo/puppetcode"
 	cloneOptions := &git.CloneOptions{
 		FetchOptions: &git.FetchOptions{
 			UpdateFetchhead: true,
@@ -2127,7 +2125,7 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 		}
 	}
 	remoteUrl := fmt.Sprintf("https://x-access-token:%s@%s/%s/%s", tok, conf.GitHubDomain, conf.RepoOwner, conf.Repo)
-	bareRepo, err := gitutil.CloneOrOpen(remoteUrl, cloneDir, cloneOptions)
+	bareRepo, err := gitutil.CloneOrOpen(remoteUrl, conf.ServedRepo, cloneOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -2329,7 +2327,7 @@ func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 			if issue == nil {
 				continue
 			}
-			gr, err := unmarshalGroupedReport(commit.Id(), groupedNoopDir)
+			gr, err := unmarshalGroupedReport(commit.Id(), conf.GroupedNoopDir)
 			if os.IsNotExist(err) {
 				continue
 			} else if err != nil {
@@ -2376,11 +2374,11 @@ func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 // authors of the commit in the approvers set.
 func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources []*groupedResource, commit *git.Commit, issue *github.Issue) (bool, error) {
 	var err error
-	groupedResources, err = groupedResourcesNodeFiles(groupedResources, workRepo)
+	groupedResources, err = groupedResourcesNodeFiles(groupedResources, conf.WorkRepo)
 	if err != nil {
 		return false, err
 	}
-	groupedResources, err = groupedResourcesOwners(groupedResources, workRepo)
+	groupedResources, err = groupedResourcesOwners(groupedResources, conf.WorkRepo)
 	if err != nil {
 		return false, err
 	}
@@ -2848,7 +2846,7 @@ func tagApproved(repo *git.Repository, ghclient *github.Client, conf *HecklerdCo
 			unapproved[gi] = fmt.Sprintf("Unapproved, GitHub issue not assigned to milestone '%s', yet", nextTag)
 			continue
 		}
-		gr, err := unmarshalGroupedReport(commit.Id(), groupedNoopDir)
+		gr, err := unmarshalGroupedReport(commit.Id(), conf.GroupedNoopDir)
 		if os.IsNotExist(err) {
 			unapproved[gi] = "Unapproved, Noop not found on disk, yet"
 			continue
@@ -3100,7 +3098,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 		var gr groupedReport
 		var perNoop *NodeSet
 		for gi, commit := range commits {
-			gr, err = unmarshalGroupedReport(commit.Id(), groupedNoopDir)
+			gr, err = unmarshalGroupedReport(commit.Id(), conf.GroupedNoopDir)
 			if os.IsNotExist(err) {
 				perNoop = &NodeSet{
 					name:           "all",
@@ -3127,7 +3125,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 					node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 					node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 				}
-				gr, err = noopNodeSet(perNoop, commit, true, repo, conf.IgnoredResources, logger)
+				gr, err = noopNodeSet(perNoop, commit, true, repo, conf.IgnoredResources, conf.NoopDir, logger)
 				if err != nil {
 					logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
 					unlockNodeSet("root", false, perNoop, logger)
@@ -3136,7 +3134,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 				}
 				unlockNodeSet("root", false, perNoop, logger)
 				closeNodeSet(perNoop, logger)
-				err = marshalGroupedReport(commit.Id(), gr, groupedNoopDir)
+				err = marshalGroupedReport(commit.Id(), gr, conf.GroupedNoopDir)
 				if err != nil {
 					logger.Fatalf("Error: unable to marshal groupedCommit: %v", err)
 				}
@@ -3428,6 +3426,11 @@ func main() {
 	}
 	conf = new(HecklerdConf)
 	// Set some defaults
+	conf.StateDir = "/var/lib/hecklerd"
+	conf.WorkRepo = conf.StateDir + "/work_repo/puppetcode"
+	conf.ServedRepo = conf.StateDir + "/served_repo/puppetcode"
+	conf.NoopDir = conf.StateDir + "/noops"
+	conf.GroupedNoopDir = conf.NoopDir + "/grouped"
 	conf.LoopNoopSleepSeconds = 10
 	conf.LoopMilestoneSleepSeconds = 10
 	conf.LoopApplySleepSeconds = 10
@@ -3450,8 +3453,8 @@ func main() {
 	}
 
 	if clearState {
-		logger.Printf("Removing state directory: %v", stateDir)
-		os.RemoveAll(stateDir)
+		logger.Printf("Removing state directory: %v", conf.StateDir)
+		os.RemoveAll(conf.StateDir)
 		os.Exit(0)
 	}
 
@@ -3464,8 +3467,8 @@ func main() {
 	}
 
 	logger.Printf("hecklerd: v%s\n", Version)
-	os.MkdirAll(noopDir, 0755)
-	os.MkdirAll(groupedNoopDir, 0755)
+	os.MkdirAll(conf.NoopDir, 0755)
+	os.MkdirAll(conf.GroupedNoopDir, 0755)
 	repo, err := fetchRepo(conf)
 	if err != nil {
 		logger.Fatalf("Unable to fetch repo to serve: %v", err)
@@ -3473,7 +3476,7 @@ func main() {
 
 	gitServer := &gitcgiserver.GitCGIServer{}
 	gitServer.ExportAll = true
-	gitServer.ProjectRoot = stateDir + "/served_repo"
+	gitServer.ProjectRoot = conf.StateDir + "/served_repo"
 	gitServer.Addr = defaultAddr
 	gitServer.ShutdownTimeout = shutdownTimeout
 	gitServer.MaxClients = conf.GitServerMaxClients
@@ -3530,14 +3533,14 @@ func main() {
 	// listener to the git server, so we know it is available, as we did with the
 	// grpc server.
 	time.Sleep(1 * time.Second)
-	_, err = gitutil.Pull("http://localhost:8080/puppetcode", stateDir+"/work_repo/puppetcode")
+	_, err = gitutil.Pull("http://localhost:8080/puppetcode", conf.WorkRepo)
 	if err != nil {
 		logger.Fatalf("Unable to fetch repo: %v", err)
 	}
 	go func() {
 		logger := log.New(os.Stdout, "[GitFetchWork] ", log.Lshortfile)
 		for {
-			_, err := gitutil.Pull("http://localhost:8080/puppetcode", stateDir+"/work_repo/puppetcode")
+			_, err := gitutil.Pull("http://localhost:8080/puppetcode", conf.WorkRepo)
 			if err != nil {
 				logger.Fatalf("Unable to fetch repo: %v", err)
 			}
@@ -3570,20 +3573,32 @@ func main() {
 		} else {
 			go approvalLoop(conf, repo)
 		}
+		hecklerdCron := cron.New()
 		if conf.AutoTagCronSchedule == "" {
 			logger.Println("autoTag cron schedule disabled")
 		} else {
 			logger.Printf("autoTag enabled with cron schedule of '%s'", conf.AutoTagCronSchedule)
-			c := cron.New()
-			c.AddFunc(
+			hecklerdCron.AddFunc(
 				conf.AutoTagCronSchedule,
 				func() {
 					autoTag(conf, repo)
 				},
 			)
-			c.Start()
-			defer c.Stop()
 		}
+		hecklerdCron.AddFunc(
+			"0 12 * * *",
+			func() {
+				gitutil.Gc(conf.WorkRepo, logger)
+			},
+		)
+		hecklerdCron.AddFunc(
+			"0 14 * * *",
+			func() {
+				gitutil.Gc(conf.ServedRepo, logger)
+			},
+		)
+		hecklerdCron.Start()
+		defer hecklerdCron.Stop()
 	}
 
 	// TODO any reason to make this a separate goroutine?

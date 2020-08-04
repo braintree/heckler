@@ -11,6 +11,7 @@ Package: hecklerd
 Architecture: any
 Depends: ${misc:Depends},
          ${shlibs:Depends},
+         git,
 Built-Using: ${misc:Built-Using},
 Description: Heckler daemon for applying and aggregating noops
 
@@ -25,5 +26,6 @@ Package: rizzod
 Architecture: any
 Depends: ${misc:Depends},
          ${shlibs:Depends},
+         git,
 Built-Using: ${misc:Built-Using},
 Description: Heckler node daemon for responding to requests from hecklerd
