@@ -2689,7 +2689,9 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 	for host, _ := range ns.nodes.active {
 		unlockedHosts = append(unlockedHosts, host)
 	}
-	logger.Printf("Unlocked: %s", compressHosts(unlockedHosts))
+	if len(unlockedHosts) > 0 {
+		logger.Printf("Unlocked: %s", compressHosts(unlockedHosts))
+	}
 	compressedErrNodes := compressErrorNodes(ns.nodes.errored)
 	for host, err := range compressedErrNodes {
 		logger.Printf("Unlock errNodes: %s, Error: %v", host, err)
