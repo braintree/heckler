@@ -2724,6 +2724,7 @@ func autoTag(conf *HecklerdConf, repo *git.Repository) {
 		closeNodeSet(ns, logger)
 		return
 	}
+	closeNodeSet(ns, logger)
 	logger.Printf("Found common tag: %s", ns.commonTag)
 	semverCommonTag, err := tagToSemver(ns.commonTag, conf.EnvPrefix)
 	if err != nil {
