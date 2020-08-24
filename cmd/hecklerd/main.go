@@ -2321,7 +2321,7 @@ func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 		for gi, commit := range commits {
 			issue, err := githubIssueFromCommit(ghclient, gi, conf)
 			if err != nil {
-				logger.Printf("Error: unable to determine if issue exists: %s", gi.String())
+				logger.Printf("Error: unable to determine if issue for commit %s exists: %v", gi.String(), err)
 				continue
 			}
 			if issue == nil {
@@ -2981,7 +2981,7 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 		for _, gi := range commitLogIds {
 			issue, err := githubIssueFromCommit(ghclient, gi, conf)
 			if err != nil {
-				logger.Printf("Error: unable to determine if issue exists, %s", gi.String())
+				logger.Printf("Error: unable to determine if issue for commit %s exists: %v", gi.String(), err)
 				continue
 			}
 			if issue == nil {
