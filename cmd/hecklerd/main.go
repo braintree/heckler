@@ -2725,7 +2725,7 @@ func autoTag(conf *HecklerdConf, repo *git.Repository) {
 		return
 	}
 	logger.Printf("Found common tag: %s", ns.commonTag)
-	commonTag, err := tagToSemver(ns.commonTag, conf.EnvPrefix)
+	semverCommonTag, err := tagToSemver(ns.commonTag, conf.EnvPrefix)
 	if err != nil {
 		logger.Printf("Unable to convert to semver tag: %v", err)
 		return
@@ -2741,16 +2741,16 @@ func autoTag(conf *HecklerdConf, repo *git.Repository) {
 		return
 	}
 	latestTag := tagSet[len(tagSet)-1]
-	if !commonTag.Equal(latestTag) {
-		logger.Printf("Latest tag '%s' not applied, common tag is '%s'", latestTag.Original(), commonTag.Original())
+	if !semverCommonTag.Equal(latestTag) {
+		logger.Printf("Latest tag '%s' not applied, common tag is '%s'", semverToOrig(latestTag, conf.EnvPrefix), semverToOrig(semverCommonTag, conf.EnvPrefix))
 		return
 	}
-	commitLogIds, _, err := commitLogIdList(repo, latestTag.Original(), conf.RepoBranch)
+	commitLogIds, _, err := commitLogIdList(repo, semverToOrig(latestTag, conf.EnvPrefix), conf.RepoBranch)
 	if err != nil {
 		logger.Fatalf("Unable to obtain commit log ids: %v", err)
 	}
 	if len(commitLogIds) == 0 {
-		logger.Printf("No new commits since latest tag: '%s'", latestTag.Original())
+		logger.Printf("No new commits since latest tag: '%s'", semverToOrig(latestTag, conf.EnvPrefix))
 		return
 	}
 	newVersion := latestTag.IncMajor()
