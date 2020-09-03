@@ -1124,7 +1124,10 @@ func setNameToNodes(conf *HecklerdConf, nodeSetName string, logger *log.Logger) 
 	if len(filteredNodes) == 0 {
 		return nil, errors.New(fmt.Sprintf("Node set '%s': '%v' produced zero nodes", nodeSetName, setCfg))
 	}
-	logger.Printf("Node set '%s' loaded, nodes (%d), blacklisted nodes (%d): %s", nodeSetName, len(filteredNodes), len(blacklistedNodes), compressHosts(blacklistedNodes))
+	logger.Printf("Node set '%s' loaded, nodes (%d), blacklisted nodes (%d)", nodeSetName, len(filteredNodes), len(blacklistedNodes))
+	if len(blacklistedNodes) > 0 {
+		logger.Printf("Blacklisted nodes: %s", compressHosts(blacklistedNodes))
+	}
 	return filteredNodes, nil
 }
 
