@@ -3216,15 +3216,17 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 		}
 		return
 	}
-	if !commitInNodeLineage(*headCommit.Id(), node, repo, logger) {
-		c <- cleanNodeResult{
-			host:  node.host,
-			clean: false,
-			err:   fmt.Errorf("Commit %s is not in the lineage of branch: %s", node.lastApply.String(), conf.RepoBranch),
-		}
-		return
+	var beginRev string
+	var commitList []git.Oid
+	if commitInNodeLineage(*headCommit.Id(), node, repo, logger) {
+		beginRev = node.lastApply.String()
+		commitList = []git.Oid{node.lastApply}
+	} else {
+		logger.Printf("Commit %s@%s is not in the lineage of branch: %s", node.lastApply.String(), node.host, conf.RepoBranch)
+		beginRev = fmt.Sprintf("%s~%d", conf.RepoBranch, childThreshold)
+		commitList = make([]git.Oid, 0)
 	}
-	commitList, _, err := commitLogIdList(repo, node.lastApply.String(), conf.RepoBranch)
+	newCommitList, _, err := commitLogIdList(repo, beginRev, conf.RepoBranch)
 	if err != nil {
 		c <- cleanNodeResult{
 			host:  node.host,
@@ -3233,7 +3235,7 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 		}
 		return
 	}
-	commitList = append([]git.Oid{node.lastApply}, commitList...)
+	commitList = append(commitList, newCommitList...)
 	var commitsToConsider []git.Oid
 	if len(commitList) >= childThreshold {
 		commitsToConsider = commitList[:childThreshold]
