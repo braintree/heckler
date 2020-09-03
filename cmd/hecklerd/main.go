@@ -741,6 +741,16 @@ func compressHostsMap(hostsMap map[string]bool) string {
 	return compressHosts(hosts)
 }
 
+func compressNodesMap(nodesMap map[string]*Node) string {
+	hosts := make([]string, len(nodesMap))
+	i := 0
+	for k, _ := range nodesMap {
+		hosts[i] = k
+		i++
+	}
+	return compressHosts(hosts)
+}
+
 func compressErrorNodes(nodes map[string]*Node) map[string]error {
 	var errType string
 	errHosts := make(map[string][]string)
