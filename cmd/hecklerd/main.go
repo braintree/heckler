@@ -3187,7 +3187,7 @@ func dirtyLoop(conf *HecklerdConf, repo *git.Repository) {
 		for range ns.nodes.active {
 			cr := <-cleanChan
 			if cr.err != nil {
-				logger.Printf("Clean failed for %s: %v", cr.host, err)
+				logger.Printf("Clean failed for %s: %v", cr.host, cr.err)
 			} else {
 				nodeDirtyNoops[cr.host] = cr.dn
 				if cr.clean {
