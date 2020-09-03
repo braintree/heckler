@@ -3207,6 +3207,23 @@ func dirtyLoop(conf *HecklerdConf, repo *git.Repository) {
 func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Repository, conf *HecklerdConf, logger *log.Logger) {
 	// Threshold for the number of child commits from the dirty commit to consider
 	childThreshold := 10
+	headCommit, err := gitutil.RevparseToCommit(conf.RepoBranch, repo)
+	if err != nil {
+		c <- cleanNodeResult{
+			host:  node.host,
+			clean: false,
+			err:   err,
+		}
+		return
+	}
+	if !commitInNodeLineage(*headCommit.Id(), node, repo, logger) {
+		c <- cleanNodeResult{
+			host:  node.host,
+			clean: false,
+			err:   fmt.Errorf("Commit %s is not in the lineage of branch: %s", node.lastApply.String(), conf.RepoBranch),
+		}
+		return
+	}
 	commitList, _, err := commitLogIdList(repo, node.lastApply.String(), conf.RepoBranch)
 	if err != nil {
 		c <- cleanNodeResult{
@@ -3449,32 +3466,36 @@ func describeCommit(gi git.Oid, prefix string, repo *git.Repository) (string, er
 // applied commit has children which we do not have in our graph and those
 // children may have source code changes which we do not have.
 func commitInAllNodeLineages(commit git.Oid, nodes map[string]*Node, repo *git.Repository, logger *log.Logger) bool {
-	commitInLineages := true
 	for _, node := range nodes {
-		if node.lastApply.IsZero() {
-			logger.Fatalf("lastApply for node, '%s', is zero", node.host)
+		if !commitInNodeLineage(commit, node, repo, logger) {
+			return false
 		}
-		if node.lastApply.Equal(&commit) {
-			continue
-		}
-		descendant, err := repo.DescendantOf(&node.lastApply, &commit)
-		if err != nil {
-			logger.Fatalf("Cannot determine descendant status: %v", err)
-		}
-		if descendant {
-			continue
-		}
-		descendant, err = repo.DescendantOf(&commit, &node.lastApply)
-		if err != nil {
-			logger.Fatalf("Cannot determine descendant status: %v", err)
-		}
-		if descendant {
-			continue
-		}
-		commitInLineages = false
-		break
 	}
-	return commitInLineages
+	return true
+}
+
+func commitInNodeLineage(commit git.Oid, node *Node, repo *git.Repository, logger *log.Logger) bool {
+	if node.lastApply.IsZero() {
+		logger.Fatalf("lastApply for node, '%s', is zero", node.host)
+	}
+	if node.lastApply.Equal(&commit) {
+		return true
+	}
+	descendant, err := repo.DescendantOf(&node.lastApply, &commit)
+	if err != nil {
+		logger.Fatalf("Cannot determine descendant status: %v", err)
+	}
+	if descendant {
+		return true
+	}
+	descendant, err = repo.DescendantOf(&commit, &node.lastApply)
+	if err != nil {
+		logger.Fatalf("Cannot determine descendant status: %v", err)
+	}
+	if descendant {
+		return true
+	}
+	return false
 }
 
 // Given a set of Node structs with their lastApply value populated, an
