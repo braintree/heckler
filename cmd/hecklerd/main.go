@@ -89,6 +89,7 @@ type HecklerdConf struct {
 	LoopMilestoneSleepSeconds  int                   `yaml:"loop_milestone_sleep_seconds"`
 	LoopApplySleepSeconds      int                   `yaml:"loop_apply_sleep_seconds"`
 	LoopApprovalSleepSeconds   int                   `yaml:"loop_approval_sleep_seconds"`
+	LoopDirtySleepSeconds      int                   `yaml:"loop_dirty_sleep_seconds"`
 	ApplySetOrder              []string              `yaml:"apply_set_order"`
 	ApplySetSleepSeconds       int                   `yaml:"apply_set_sleep_seconds"`
 	StateDir                   string                `yaml:"state_dir"`
@@ -146,6 +147,18 @@ type applyResult struct {
 	host   string
 	report rizzopb.PuppetReport
 	err    error
+}
+
+type dirtyNoops struct {
+	rev       git.Oid
+	commitIds map[git.Oid]bool
+}
+
+type cleanNodeResult struct {
+	host  string
+	clean bool
+	dn    dirtyNoops
+	err   error
 }
 
 type deltaResource struct {
@@ -2113,6 +2126,54 @@ func lastApplyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) err
 	return nil
 }
 
+func dirtyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) error {
+	var err error
+	errNodes := make(map[string]*Node)
+	dirtyNodes := make(map[string]*Node)
+	dirtyRev := regexp.MustCompile(`^([^-]*)-dirty$`)
+
+	puppetReportChan := make(chan applyResult)
+	for _, node := range ns.nodes.active {
+		go hecklerLastApply(node, puppetReportChan, logger)
+	}
+
+	var obj *git.Object
+	for range ns.nodes.active {
+		r := <-puppetReportChan
+		if _, ok := ns.nodes.active[r.host]; !ok {
+			return fmt.Errorf("No Node struct found for report from: %s", r.host)
+		}
+		if r.err != nil {
+			errNodes[r.host] = ns.nodes.active[r.host]
+			errNodes[r.host].err = fmt.Errorf("Unable to obtain lastApply: %w", r.err)
+			continue
+		}
+		if r.report.ConfigurationVersion == "" {
+			errNodes[r.host] = ns.nodes.active[r.host]
+			errNodes[r.host].err = ErrLastApplyUnknown
+			continue
+		}
+		rev := dirtyRev.FindStringSubmatch(r.report.ConfigurationVersion)
+		if len(rev) != 2 || rev[1] == "" {
+			continue
+		}
+		obj, err = repo.RevparseSingle(rev[1])
+		if err != nil {
+			errNodes[r.host] = ns.nodes.active[r.host]
+			errNodes[r.host].err = fmt.Errorf("Unable to revparse ConfigurationVersion, %s: %v %w", r.report.ConfigurationVersion, err, ErrLastApplyUnknown)
+			continue
+		}
+		dirtyNodes[r.host] = ns.nodes.active[r.host]
+		dirtyNodes[r.host].lastApply = *obj.Id()
+	}
+	ns.nodes.active = dirtyNodes
+	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errNodes)
+	if ok := thresholdExceededNodeSet(ns, logger); ok {
+		return ErrThresholdExceeded
+	}
+	return nil
+}
+
 func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 	_, itr, err := githubConn(conf)
 	if err != nil {
@@ -3071,6 +3132,178 @@ func commonTagNodeSet(conf *HecklerdConf, ns *NodeSet, repo *git.Repository, log
 	return nil
 }
 
+// Users often apply a dirty branch and commit there changes after applying.
+// This unfortunately leaves nodes in a dirty state which are actually clean.
+// Attempt to clean up dirty nodes by nooping them with their own dirty commit
+// as well as children of their dirty commit whic hopefully will include the
+// applied changes.
+//
+//  Are there any nodes dirty?
+//    If No, do nothing
+//    If Yes,
+//      For each dirty node:
+//        - Grab threshold commits after dirty commit
+//        - Noop each un-nooped commit, from earliest to latest
+//          Does the commit noop clean?
+//            If No, mark failure
+//            If Yes, apply commit and stop nooping node
+func dirtyLoop(conf *HecklerdConf, repo *git.Repository) {
+	var err error
+	var ns *NodeSet
+	logger := log.New(os.Stdout, "[dirtyLoop] ", log.Lshortfile)
+	loopSleep := time.Duration(conf.LoopDirtySleepSeconds) * time.Second
+	logger.Printf("Started, looping every %v", loopSleep)
+	cleanChan := make(chan cleanNodeResult)
+	nodeDirtyNoops := make(map[string]dirtyNoops)
+	for {
+		time.Sleep(loopSleep)
+		ns = &NodeSet{
+			name:           "all",
+			nodeThresholds: conf.MaxNodeThresholds,
+		}
+		err = dialNodeSet(conf, ns, logger)
+		if err != nil {
+			logger.Printf("Unable to dial node set: %v", err)
+			continue
+		}
+		err := dirtyNodeSet(ns, repo, logger)
+		if err != nil {
+			logger.Printf("Unable to obtain dirty node set: %v", err)
+			closeNodeSet(ns, logger)
+			continue
+		}
+		if len(ns.nodes.active) > 0 {
+			logger.Printf("Dirty Nodes: %s\n", compressNodesMap(ns.nodes.active))
+		}
+		for host, node := range ns.nodes.active {
+			if dn, ok := nodeDirtyNoops[host]; !ok || dn.rev != node.lastApply {
+				nodeDirtyNoops[host] = dirtyNoops{
+					rev:       node.lastApply,
+					commitIds: make(map[git.Oid]bool),
+				}
+			}
+			go cleanNode(node, nodeDirtyNoops[host], cleanChan, repo, conf, logger)
+		}
+		for range ns.nodes.active {
+			cr := <-cleanChan
+			if cr.err != nil {
+				logger.Printf("Clean failed for %s: %v", cr.host, err)
+			} else {
+				nodeDirtyNoops[cr.host] = cr.dn
+				if cr.clean {
+					logger.Printf("Cleaned %s", cr.host)
+				} else {
+					logger.Printf("Unable to clean %s, no diffless noops found", cr.host)
+				}
+			}
+		}
+		closeNodeSet(ns, logger)
+	}
+}
+
+// Noop a dirty node with its dirty commit and also childThreshold number of
+// child commits. If a diffless noop is found, apply the commit, which marks
+// the node as clean.
+func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Repository, conf *HecklerdConf, logger *log.Logger) {
+	// Threshold for the number of child commits from the dirty commit to consider
+	childThreshold := 10
+	commitList, _, err := commitLogIdList(repo, node.lastApply.String(), conf.RepoBranch)
+	if err != nil {
+		c <- cleanNodeResult{
+			host:  node.host,
+			clean: false,
+			err:   err,
+		}
+		return
+	}
+	commitList = append([]git.Oid{node.lastApply}, commitList...)
+	var commitsToConsider []git.Oid
+	if len(commitList) >= childThreshold {
+		commitsToConsider = commitList[:childThreshold]
+	} else {
+		commitsToConsider = commitList
+	}
+	commitsToNoop := make([]git.Oid, 0)
+	for _, id := range commitsToConsider {
+		if _, ok := dn.commitIds[id]; !ok {
+			commitsToNoop = append(commitsToNoop, id)
+		}
+	}
+	if len(commitsToNoop) == 0 {
+		c <- cleanNodeResult{
+			host:  node.host,
+			clean: false,
+			dn:    dn,
+		}
+		return
+	}
+	lockReq := rizzopb.PuppetLockRequest{
+		Type:    rizzopb.LockReqType_lock,
+		User:    "root",
+		Comment: "Heckler - trying to mark node as clean",
+		Force:   false,
+	}
+	lockedNodes, _, _, _ := rizzoLockNodes(lockReq, map[string]*Node{node.host: node})
+	if len(lockedNodes) != 1 {
+		c <- cleanNodeResult{
+			host:  node.host,
+			clean: false,
+			err:   errors.New("Unable to lock node"),
+		}
+		return
+	}
+	applyResults := make(chan applyResult)
+	clean := false
+	for _, id := range commitsToNoop {
+		logger.Printf("Nooping commit %s", id.String())
+		par := rizzopb.PuppetApplyRequest{Rev: id.String(), Noop: true}
+		go hecklerApply(node, applyResults, par)
+		r := <-applyResults
+		if r.err != nil {
+			logger.Printf("Noop of %s failed: %v", id.String(), r.err)
+			continue
+		}
+		newRprt := normalizeReport(r.report, logger)
+		if newRprt.Status == "failed" {
+			newRprt.Host = r.host
+		}
+		dn.commitIds[id] = true
+		logger.Printf("Received noop: %s@%s", newRprt.Host, newRprt.ConfigurationVersion)
+		// if newRprt.ResourceStatuses is length zero than the noop reported no
+		// changes were needed, i.e. the node is clean
+		if len(newRprt.ResourceStatuses) == 0 {
+			logger.Printf("Applying %s@%s", node.host, id.String())
+			par := rizzopb.PuppetApplyRequest{Rev: id.String(), Noop: false}
+			go hecklerApply(node, applyResults, par)
+			r := <-applyResults
+			if r.err != nil {
+				logger.Printf("Apply failed: %w", r.err)
+			} else if r.report.Status == "failed" {
+				logger.Printf("Apply status: '%s', %s", r.report.Status, r.report.ConfigurationVersion)
+			} else {
+				logger.Printf("Applied: %s@%s", r.report.Host, r.report.ConfigurationVersion)
+				clean = true
+				break
+			}
+		}
+	}
+	lockReq = rizzopb.PuppetLockRequest{
+		Type:  rizzopb.LockReqType_unlock,
+		User:  "root",
+		Force: false,
+	}
+	_, unlockedNodes, _, _ := rizzoLockNodes(lockReq, map[string]*Node{node.host: node})
+	if len(unlockedNodes) != 1 {
+		logger.Printf("Unlock of %s failed", node.host)
+	}
+	c <- cleanNodeResult{
+		host:  node.host,
+		clean: clean,
+		dn:    dn,
+	}
+	return
+}
+
 //  Are there newer commits than our common last applied tag across the "all"
 //  node set?
 //    If No, do nothing
@@ -3451,6 +3684,7 @@ func main() {
 	conf.LoopMilestoneSleepSeconds = 10
 	conf.LoopApplySleepSeconds = 10
 	conf.LoopApprovalSleepSeconds = 10
+	conf.LoopDirtySleepSeconds = 10
 	conf.ApplySetOrder = []string{"all"}
 	err = yaml.Unmarshal([]byte(data), conf)
 	if err != nil {
@@ -3588,6 +3822,11 @@ func main() {
 			logger.Println("approvalLoop disabled")
 		} else {
 			go approvalLoop(conf, repo)
+		}
+		if conf.LoopDirtySleepSeconds == 0 {
+			logger.Println("dirtyLoop disabled")
+		} else {
+			go dirtyLoop(conf, repo)
 		}
 		hecklerdCron := cron.New()
 		if conf.AutoTagCronSchedule == "" {
