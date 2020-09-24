@@ -479,6 +479,10 @@ func main() {
 		if err != nil {
 			sleepDur := 10 * time.Second
 			logger.Printf("Pull error, trying again after sleeping for %s: %v", sleepDur, err)
+			// Prior to adding the GC memory usage increased when hecklerd was down
+			// and we were polling, I am not totally sure why this is necessary,
+			// git2go should not require explicitly freeing memory, or calling a GC
+			// runtime.GC()
 			time.Sleep(sleepDur)
 			continue
 		}
