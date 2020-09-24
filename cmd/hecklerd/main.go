@@ -3259,7 +3259,7 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 	lockReq := rizzopb.PuppetLockRequest{
 		Type:    rizzopb.LockReqType_lock,
 		User:    "root",
-		Comment: "Heckler - trying to mark node as clean",
+		Comment: conf.LockMessage,
 		Force:   false,
 	}
 	lockedNodes, _, _, _ := rizzoLockNodes(lockReq, map[string]*Node{node.host: node})
