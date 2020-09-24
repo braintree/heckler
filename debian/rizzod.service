@@ -6,6 +6,11 @@ Wants=network-online.target
 
 [Service]
 ExecStart=/usr/bin/rizzod
+MemoryAccounting=true
+MemoryHigh=800M
+MemoryLimit=1024M
+MemoryMax=1024M
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
