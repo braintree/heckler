@@ -2088,6 +2088,11 @@ func lastApplyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) err
 	errNodes := make(map[string]*Node)
 	lastApplyNodes := make(map[string]*Node)
 
+	eligibleNodeSet("root", ns)
+	if ok := thresholdExceededNodeSet(ns, logger); ok {
+		return ErrThresholdExceeded
+	}
+
 	puppetReportChan := make(chan applyResult)
 	for _, node := range ns.nodes.active {
 		go hecklerLastApply(node, puppetReportChan, logger)
@@ -2131,6 +2136,11 @@ func dirtyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) error {
 	errNodes := make(map[string]*Node)
 	dirtyNodes := make(map[string]*Node)
 	dirtyRev := regexp.MustCompile(`^([^-]*)-dirty$`)
+
+	eligibleNodeSet("root", ns)
+	if ok := thresholdExceededNodeSet(ns, logger); ok {
+		return ErrThresholdExceeded
+	}
 
 	puppetReportChan := make(chan applyResult)
 	for _, node := range ns.nodes.active {
@@ -3113,10 +3123,6 @@ func dialNodeSet(conf *HecklerdConf, ns *NodeSet, logger *log.Logger) error {
 
 // Return the most recent tag across all nodes in an environment
 func commonTagNodeSet(conf *HecklerdConf, ns *NodeSet, repo *git.Repository, logger *log.Logger) error {
-	eligibleNodeSet("root", ns)
-	if ok := thresholdExceededNodeSet(ns, logger); ok {
-		return ErrThresholdExceeded
-	}
 	err := lastApplyNodeSet(ns, repo, logger)
 	if err != nil {
 		return err
