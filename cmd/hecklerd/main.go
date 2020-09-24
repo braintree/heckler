@@ -3280,12 +3280,12 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 	applyResults := make(chan applyResult)
 	clean := false
 	for _, id := range commitsToNoop {
-		logger.Printf("Nooping commit %s", id.String())
+		logger.Printf("Nooping commit: %s@%s", node.host, id.String())
 		par := rizzopb.PuppetApplyRequest{Rev: id.String(), Noop: true}
 		go hecklerApply(node, applyResults, par)
 		r := <-applyResults
 		if r.err != nil {
-			logger.Printf("Noop of %s failed: %v", id.String(), r.err)
+			logger.Printf("Noop of %s@%s failed: %v", node.host, id.String(), r.err)
 			continue
 		}
 		newRprt := normalizeReport(r.report, logger)
@@ -3302,9 +3302,9 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 			go hecklerApply(node, applyResults, par)
 			r := <-applyResults
 			if r.err != nil {
-				logger.Printf("Apply failed: %w", r.err)
+				logger.Printf("Apply failed: %s@%s, %w", node.host, id.String(), r.err)
 			} else if r.report.Status == "failed" {
-				logger.Printf("Apply status: '%s', %s", r.report.Status, r.report.ConfigurationVersion)
+				logger.Printf("Apply status: '%s', %s@%s", r.report.Status, node.host, r.report.ConfigurationVersion)
 			} else {
 				logger.Printf("Applied: %s@%s", r.report.Host, r.report.ConfigurationVersion)
 				clean = true
