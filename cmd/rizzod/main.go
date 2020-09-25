@@ -488,6 +488,7 @@ func main() {
 	go func() {
 		rizzoServer.conf = conf
 		rizzopb.RegisterRizzoServer(grpcServer, rizzoServer)
+		logger.Printf("Starting GRPC HTTP server on %v", port)
 		if err := grpcServer.Serve(lis); err != nil {
 			logger.Fatalf("failed to serve: %v", err)
 		}
