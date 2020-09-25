@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
 	"github.braintreeps.com/lollipopman/heckler/internal/heckler"
@@ -470,24 +469,14 @@ func main() {
 	}
 
 	logger.Printf("rizzod: v%s\n", Version)
+
 	// Clone a copy of the repo on startup so that future fetches are quicker.
 	repoUrl := "http://" + conf.HecklerHost + ":8080/puppetcode"
-	repoPulled := false
-	for repoPulled == false {
-		logger.Printf("Pulling: %s", repoUrl)
-		_, err := gitutil.PullBranch(repoUrl, conf.RepoBranch, conf.RepoDir)
-		if err != nil {
-			sleepDur := 10 * time.Second
-			logger.Printf("Pull error, trying again after sleeping for %s: %v", sleepDur, err)
-			// Prior to adding the GC memory usage increased when hecklerd was down
-			// and we were polling, I am not totally sure why this is necessary,
-			// git2go should not require explicitly freeing memory, or calling a GC
-			// runtime.GC()
-			time.Sleep(sleepDur)
-			continue
-		}
-		repoPulled = true
-		logger.Println("Pull Complete")
+	logger.Printf("Pulling: %s", repoUrl)
+	_, err = gitutil.PullBranch(repoUrl, conf.RepoBranch, conf.RepoDir)
+	if err != nil {
+		logger.Printf("Error: unable to pull repo, exiting: %v", err)
+		os.Exit(1)
 	}
 
 	lis, err := net.Listen("tcp", port)

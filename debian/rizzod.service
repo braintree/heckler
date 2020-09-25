@@ -11,6 +11,7 @@ MemoryHigh=800M
 MemoryLimit=1024M
 MemoryMax=1024M
 Restart=on-failure
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
