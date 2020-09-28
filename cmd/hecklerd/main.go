@@ -2203,7 +2203,7 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 		Bare: true,
 	}
 	if conf.GitHubHttpProxy != "" {
-		cloneOptions.ProxyOptions = &git.ProxyOptions{
+		cloneOptions.ProxyOptions = git.ProxyOptions{
 			Type: git.ProxyTypeSpecified,
 			Url:  conf.GitHubHttpProxy,
 		}
