@@ -458,8 +458,7 @@ func main() {
 	file.Close()
 
 	if conf.RepoBranch == "" {
-		logger.Println("No branch specified in config, please add RepoBranch")
-		os.Exit(1)
+		logger.Fatalf("No branch specified in config, please add RepoBranch")
 	}
 
 	if clearState {
@@ -475,8 +474,7 @@ func main() {
 	logger.Printf("Pulling: %s", repoUrl)
 	_, err = gitutil.PullBranch(repoUrl, conf.RepoBranch, conf.RepoDir)
 	if err != nil {
-		logger.Printf("Error: unable to pull repo, exiting: %v", err)
-		os.Exit(1)
+		logger.Fatalf("Error: unable to pull repo, exiting: %v", err)
 	}
 
 	lis, err := net.Listen("tcp", port)
