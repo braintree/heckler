@@ -49,6 +49,14 @@ var Version string
 var ErrLastApplyUnknown = errors.New("Unable to determine lastApply commit, use force flag to update")
 var ErrThresholdExceeded = errors.New("Threshold for err nodes or lock nodes exceeded")
 
+type lastApplyStatus int
+
+const (
+	lastApplyClean lastApplyStatus = iota
+	lastApplyDirty
+	lastApplyErrored
+)
+
 const (
 	ApplicationName = "git-cgi-server"
 	shutdownTimeout = time.Second * 5
@@ -2085,6 +2093,8 @@ func hecklerLastApply(node *Node, c chan<- applyResult, logger *log.Logger) {
 
 func lastApplyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) error {
 	var err error
+	var applyStatus lastApplyStatus
+	var oidPtr *git.Oid
 	errNodes := make(map[string]*Node)
 	lastApplyNodes := make(map[string]*Node)
 
@@ -2098,7 +2108,6 @@ func lastApplyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) err
 		go hecklerLastApply(node, puppetReportChan, logger)
 	}
 
-	var obj *git.Object
 	for range ns.nodes.active {
 		r := <-puppetReportChan
 		if _, ok := ns.nodes.active[r.host]; !ok {
@@ -2109,19 +2118,20 @@ func lastApplyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) err
 			errNodes[r.host].err = fmt.Errorf("Unable to obtain lastApply: %w", r.err)
 			continue
 		}
-		if r.report.ConfigurationVersion == "" {
+		applyStatus, oidPtr, err = parseLastApply(r.report.ConfigurationVersion, repo)
+		switch applyStatus {
+		case lastApplyClean:
+			lastApplyNodes[r.host] = ns.nodes.active[r.host]
+			lastApplyNodes[r.host].lastApply = *oidPtr
+		case lastApplyDirty:
 			errNodes[r.host] = ns.nodes.active[r.host]
-			errNodes[r.host].err = ErrLastApplyUnknown
-			continue
-		}
-		obj, err = repo.RevparseSingle(r.report.ConfigurationVersion)
-		if err != nil {
+			errNodes[r.host].err = fmt.Errorf("Node is dirty '%s-dirty'", oidPtr.String())
+		case lastApplyErrored:
 			errNodes[r.host] = ns.nodes.active[r.host]
-			errNodes[r.host].err = fmt.Errorf("Unable to revparse ConfigurationVersion, %s: %v %w", r.report.ConfigurationVersion, err, ErrLastApplyUnknown)
-			continue
+			errNodes[r.host].err = fmt.Errorf("Unable to revparse ConfigurationVersion, %s: %w", r.report.ConfigurationVersion, err)
+		default:
+			log.Fatal("Unknown lastApplyStatus!")
 		}
-		lastApplyNodes[r.host] = ns.nodes.active[r.host]
-		lastApplyNodes[r.host].lastApply = *obj.Id()
 	}
 	ns.nodes.active = lastApplyNodes
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errNodes)
@@ -2131,11 +2141,47 @@ func lastApplyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) err
 	return nil
 }
 
+func parseLastApply(confVer string, repo *git.Repository) (lastApplyStatus, *git.Oid, error) {
+	var oidPtr *git.Oid
+	var err error
+
+	if confVer == "" {
+		return lastApplyErrored, nil, ErrLastApplyUnknown
+	}
+
+	regexDirtyRev := regexp.MustCompile(`^([^-]*)-dirty$`)
+	if regexDirtyRev.MatchString(confVer) {
+		rev := regexDirtyRev.FindStringSubmatch(confVer)
+		if len(rev) != 2 || rev[1] == "" {
+			return lastApplyErrored, nil, ErrLastApplyUnknown
+		}
+		oidPtr, err = git.NewOid(rev[1])
+		if err != nil {
+			return lastApplyErrored, nil, ErrLastApplyUnknown
+		}
+		return lastApplyDirty, oidPtr, nil
+	} else {
+		oidPtr, err = git.NewOid(confVer)
+		if err != nil {
+			return lastApplyErrored, nil, ErrLastApplyUnknown
+		}
+		_, err = repo.LookupCommit(oidPtr)
+		if err != nil {
+			// We have an oid, but it is not in the repo, so either someone rebased
+			// and changed the oid, or hasn't pushed yet, so we treat it as dirty.
+			return lastApplyDirty, oidPtr, nil
+		}
+		return lastApplyClean, oidPtr, nil
+	}
+}
+
 func dirtyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) error {
 	var err error
+	var applyStatus lastApplyStatus
+	var oidPtr *git.Oid
+
 	errNodes := make(map[string]*Node)
 	dirtyNodes := make(map[string]*Node)
-	dirtyRev := regexp.MustCompile(`^([^-]*)-dirty$`)
 
 	eligibleNodeSet("root", ns)
 	if ok := thresholdExceededNodeSet(ns, logger); ok {
@@ -2147,7 +2193,6 @@ func dirtyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) error {
 		go hecklerLastApply(node, puppetReportChan, logger)
 	}
 
-	var obj *git.Object
 	for range ns.nodes.active {
 		r := <-puppetReportChan
 		if _, ok := ns.nodes.active[r.host]; !ok {
@@ -2158,23 +2203,19 @@ func dirtyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) error {
 			errNodes[r.host].err = fmt.Errorf("Unable to obtain lastApply: %w", r.err)
 			continue
 		}
-		if r.report.ConfigurationVersion == "" {
+		applyStatus, oidPtr, err = parseLastApply(r.report.ConfigurationVersion, repo)
+		switch applyStatus {
+		case lastApplyClean:
+			continue
+		case lastApplyDirty:
+			dirtyNodes[r.host] = ns.nodes.active[r.host]
+			dirtyNodes[r.host].lastApply = *oidPtr
+		case lastApplyErrored:
 			errNodes[r.host] = ns.nodes.active[r.host]
-			errNodes[r.host].err = ErrLastApplyUnknown
-			continue
+			errNodes[r.host].err = fmt.Errorf("Unable to revparse ConfigurationVersion, %s: %w", r.report.ConfigurationVersion, err)
+		default:
+			log.Fatal("Unknown lastApplyStatus!")
 		}
-		rev := dirtyRev.FindStringSubmatch(r.report.ConfigurationVersion)
-		if len(rev) != 2 || rev[1] == "" {
-			continue
-		}
-		obj, err = repo.RevparseSingle(rev[1])
-		if err != nil {
-			errNodes[r.host] = ns.nodes.active[r.host]
-			errNodes[r.host].err = fmt.Errorf("Unable to revparse ConfigurationVersion, %s: %v %w", r.report.ConfigurationVersion, err, ErrLastApplyUnknown)
-			continue
-		}
-		dirtyNodes[r.host] = ns.nodes.active[r.host]
-		dirtyNodes[r.host].lastApply = *obj.Id()
 	}
 	ns.nodes.active = dirtyNodes
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errNodes)
@@ -3483,8 +3524,15 @@ func commitInAllNodeLineages(commit git.Oid, nodes map[string]*Node, repo *git.R
 }
 
 func commitInNodeLineage(commit git.Oid, node *Node, repo *git.Repository, logger *log.Logger) bool {
+	var err error
+
 	if node.lastApply.IsZero() {
 		logger.Fatalf("lastApply for node, '%s', is zero", node.host)
+	}
+	// Check if oid is in the repo at all
+	_, err = repo.LookupCommit(&node.lastApply)
+	if err != nil {
+		return false
 	}
 	if node.lastApply.Equal(&commit) {
 		return true
