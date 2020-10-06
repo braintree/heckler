@@ -180,12 +180,13 @@ type deltaResource struct {
 }
 
 type groupedReport struct {
-	ParentNoopFailures        bool
-	Failures                  []*groupedFailure
-	Resources                 []*groupedResource
-	CompressedErrored         map[string]string
-	CompressedBeyondRev       map[string]string
-	CompressedLockedByAnother map[string]string
+	CommitNotInAllNodeLineages bool
+	ParentNoopFailures         bool
+	Failures                   []*groupedFailure
+	Resources                  []*groupedResource
+	CompressedErrored          map[string]string
+	CompressedBeyondRev        map[string]string
+	CompressedLockedByAnother  map[string]string
 }
 
 type groupedFailure struct {
@@ -453,12 +454,22 @@ func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repo
 		os.Mkdir(noopDir+"/"+host, 0755)
 	}
 
-	// TODO: if we are only requesting a single noop via heckler, we probably
-	// always want to noop, rather than returning an empty noop if the commit is
-	// not part of a nodes lineage.
-	if !commitInAllNodeLineages(*commit.Id(), ns.nodes.active, repo, logger) {
-		logger.Printf("Commit %s is not part of all lineages, returning an emtpy report", commit.Id())
-		return groupedReport{}, nil
+	// If the commit is not part of every nodes lineage we are unable to create a
+	// deltaNoop, since we can't subtract the parents as the parents would not
+	// necessarily include changes from the parents children
+	//
+	// If some node's lastApply is commit B we can't subtract commit A's noop from C since
+	// it would not include the changes introduced by commit B.
+	//
+	// * commit D
+	// |\
+	// | * commit C
+	// * | commit B
+	// |/
+	// * commit A
+	//
+	if deltaNoop && !commitInAllNodeLineages(*commit.Id(), ns.nodes.active, repo, logger) {
+		return groupedReport{CommitNotInAllNodeLineages: true}, nil
 	}
 
 	commitsToNoop := make([]git.Oid, 0)
@@ -466,7 +477,7 @@ func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repo
 
 	parentCount := commit.ParentCount()
 	for i := uint(0); i < parentCount; i++ {
-		if deltaNoop && commitInAllNodeLineages(*commit.ParentId(i), ns.nodes.active, repo, logger) {
+		if deltaNoop {
 			commitsToNoop = append(commitsToNoop, *commit.ParentId(i))
 		} else {
 			for _, node := range ns.nodes.active {
@@ -1591,6 +1602,13 @@ func noopToMarkdown(conf *HecklerdConf, commit *git.Commit, gr groupedReport, te
 	if gr.ParentNoopFailures {
 		body += fmt.Sprintf("## WARNING: Unable to noop some parents of this commit!\n\n")
 		body += fmt.Sprintf("Some noops failed, so their changes could not be subtracted from the changes specific to this commit.\n\n")
+	}
+	if gr.CommitNotInAllNodeLineages {
+		body += fmt.Sprintf("## Notice: No noop produced for this commit!\n\n")
+		body += fmt.Sprintf("This commit was not in the lineage of all nodes in the environment. ")
+		body += fmt.Sprintf("Which means the commit is on a branch of the repository and some nodes ")
+		body += fmt.Sprintf("are ahead on a separate branch, so we are only able to noop the merge ")
+		body += fmt.Sprintf("commit of this branch.\n\n")
 	}
 	body += commitMsgToMarkdown(commit, conf, templates)
 	body += groupedFailuresToMarkdown(gr.Failures, templates)
