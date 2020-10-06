@@ -1030,7 +1030,7 @@ func normalizeLogs(puppetLogs []*rizzopb.Log, logger *log.Logger) []*rizzopb.Log
 }
 
 func hecklerApply(node *Node, c chan<- applyResult, par rizzopb.PuppetApplyRequest) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*10)
 	defer cancel()
 	r, err := node.rizzoClient.PuppetApply(ctx, &par)
 	if err != nil {

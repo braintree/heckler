@@ -146,7 +146,7 @@ func main() {
 		log.Fatalf("Unable to connect to: %v, %v", "localhost:50051", err)
 	}
 	hc := hecklerpb.NewHecklerClient(hecklerdConn)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*10)
 	defer cancel()
 
 	if lock {
