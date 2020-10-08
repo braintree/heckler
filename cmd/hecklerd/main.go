@@ -50,11 +50,18 @@ var ErrLastApplyUnknown = errors.New("Unable to determine lastApply commit, use 
 var ErrThresholdExceeded = errors.New("Threshold for err nodes or lock nodes exceeded")
 
 type lastApplyStatus int
+type noopApproverType int
 
 const (
 	lastApplyClean lastApplyStatus = iota
 	lastApplyDirty
 	lastApplyErrored
+)
+
+const (
+	notApproved noopApproverType = iota
+	codeownersApproved
+	adminApproved
 )
 
 const (
@@ -105,6 +112,7 @@ type HecklerdConf struct {
 	ServedRepo                 string                `yaml:"served_repo"`
 	NoopDir                    string                `yaml:"noop_dir"`
 	GroupedNoopDir             string                `yaml:"grouped_noop_dir"`
+	AdminOwners                []string              `yaml:"admin_owners"`
 }
 
 type NodeSetCfg struct {
@@ -210,6 +218,7 @@ type groupedResource struct {
 	Logs            []*groupLog
 	Owners          groupedResourceOwners
 	Approvals       groupedResourceApprovals
+	AdminApprovals  []string
 }
 
 type groupedResourceOwners struct {
@@ -2500,8 +2509,11 @@ func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 				logger.Printf("Error: unable to determine if issue(%d) is approved: %v", issue.Number, err)
 				continue
 			}
-			if noopApproved {
-				err := closeIssue(ghclient, conf, issue, "Issue has been approved, marking issue as 'closed'")
+			switch noopApproved {
+			case notApproved:
+				continue
+			case codeownersApproved, adminApproved:
+				err := closeIssue(ghclient, conf, issue, approvedComment(noopApproved, gr.Resources, logger))
 				if err != nil {
 					logger.Printf("Error: unable to close approved issue(%d): %v", issue.GetNumber(), err)
 					continue
@@ -2515,27 +2527,27 @@ func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 // Given a commit, the associated github issue, and the groupedResources check
 // if each grouped resource has been approved by a valid approver, exclude
 // authors of the commit in the approvers set.
-func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources []*groupedResource, commit *git.Commit, issue *github.Issue) (bool, error) {
+func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources []*groupedResource, commit *git.Commit, issue *github.Issue) (noopApproverType, error) {
 	var err error
 	groupedResources, err = groupedResourcesNodeFiles(groupedResources, conf.WorkRepo)
 	if err != nil {
-		return false, err
+		return notApproved, err
 	}
 	groupedResources, err = groupedResourcesOwners(groupedResources, conf.WorkRepo)
 	if err != nil {
-		return false, err
+		return notApproved, err
 	}
 	groups, err := githubGroupsForGroupedResources(ghclient, groupedResources)
 	if err != nil {
-		return false, err
+		return notApproved, err
 	}
 	noopApprovers, err := githubNoopApprovals(ghclient, conf, issue)
 	if err != nil {
-		return false, err
+		return notApproved, err
 	}
 	commitAuthors, err := commitAuthorsLogins(ghclient, commit)
 	if err != nil {
-		return false, err
+		return notApproved, err
 	}
 	// Remove commit authors if they approved the noop, since we do not want
 	// authors approving their own noops.
@@ -2544,8 +2556,54 @@ func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources 
 	// TODO Use the populated groupedResources to provide helpful debug messages
 	// on what a noop still needs for approval, need to determine the best way to
 	// present the information.
-	approved, groupedResources := resourcesApproved(groupedResources, groups, approvers)
-	return approved, nil
+	codeownersHaveApproved := resourcesApproved(groupedResources, groups, approvers)
+	adminHasApproved := adminOwnerApproved(groupedResources, conf.AdminOwners, noopApprovers)
+	if codeownersHaveApproved {
+		return codeownersApproved, nil
+	} else if adminHasApproved {
+		return adminApproved, nil
+	} else {
+		return notApproved, nil
+	}
+}
+
+func adminOwnerApproved(groupedResources []*groupedResource, adminOwnersList []string, approversList []string) bool {
+	validApprovers := setIntersectionStrSlice(adminOwnersList, approversList)
+	if len(validApprovers) > 0 {
+		for _, gr := range groupedResources {
+			gr.AdminApprovals = validApprovers
+		}
+		return true
+	} else {
+		return false
+	}
+}
+
+func approvedComment(noopApproved noopApproverType, groupedResources []*groupedResource, logger *log.Logger) string {
+	msg := "Issue has been approved, marking issue as 'closed'\n\n"
+	switch noopApproved {
+	case codeownersApproved:
+		msg += "CODEOWNERS:\n"
+		for _, gr := range groupedResources {
+			if len(gr.Approvals.File) > 0 {
+				msg += "- [" + string(gr.Title) + "]: " + strings.Join(gr.Approvals.File, ",") + "\n"
+			} else {
+				msg += "- [" + string(gr.Title) + "]:\n"
+				for nf, nfa := range gr.Approvals.NodeFiles {
+					msg += "  - " + nf + ": " + strings.Join(nfa, ",") + "\n"
+				}
+			}
+		}
+	case adminApproved:
+		if len(groupedResources) > 0 && len(groupedResources[0].AdminApprovals) > 0 {
+			msg += "Admins: " + strings.Join(groupedResources[0].AdminApprovals, ",") + "\n"
+		} else {
+			log.Fatal("Unexpected groupedResources!")
+		}
+	default:
+		log.Fatal("Unexpected noopApproverType!")
+	}
+	return msg
 }
 
 // Given two string slice sets return the elements that are only in a and not
@@ -2558,6 +2616,21 @@ func setDifferenceStrSlice(a []string, b []string) []string {
 	}
 	for _, i := range a {
 		if _, ok := mapB[i]; !ok {
+			c = append(c, i)
+		}
+	}
+	return c
+}
+
+// Given two string slice sets return the intersection of a and b
+func setIntersectionStrSlice(a []string, b []string) []string {
+	c := make([]string, 0)
+	mapB := make(map[string]bool)
+	for _, i := range b {
+		mapB[i] = true
+	}
+	for _, i := range a {
+		if _, ok := mapB[i]; ok {
 			c = append(c, i)
 		}
 	}
@@ -2754,7 +2827,7 @@ func githubGroupMembersUsernames(ghclient *github.Client, group string) ([]strin
 // approver if any. Also, keep track of whether each resource was approved.
 // Return the populated groupedResource slice as well as a bool set to true if all
 // resources were approved.
-func resourcesApproved(groupedResources []*groupedResource, groups map[string][]string, approvers []string) (bool, []*groupedResource) {
+func resourcesApproved(groupedResources []*groupedResource, groups map[string][]string, approvers []string) bool {
 	approvedResources := 0
 	var grApproved bool
 	var approvedNodeFiles int
@@ -2782,9 +2855,9 @@ func resourcesApproved(groupedResources []*groupedResource, groups map[string][]
 		}
 	}
 	if len(groupedResources) == approvedResources {
-		return true, groupedResources
+		return true
 	} else {
-		return false, groupedResources
+		return false
 	}
 }
 
@@ -2792,23 +2865,17 @@ func resourcesApproved(groupedResources []*groupedResource, groups map[string][]
 // the approvers of the resource; return the intersection of the owners and
 // approvers, i.e. the valid approvers.
 func intersectionOwnersApprovers(owners []string, approvers []string, groups map[string][]string) []string {
-	intersection := make([]string, 0)
-	mapOwners := make(map[string]bool)
+	expandedOwners := make([]string, 0)
 	for _, owner := range owners {
 		if _, ok := groups[owner]; ok {
 			for _, user := range groups[owner] {
-				mapOwners[user] = true
+				expandedOwners = append(expandedOwners, user)
 			}
 		} else {
-			mapOwners[owner] = true
+			expandedOwners = append(expandedOwners, owner)
 		}
 	}
-	for _, i := range approvers {
-		if _, ok := mapOwners[i]; ok {
-			intersection = append(intersection, i)
-		}
-	}
-	return intersection
+	return setIntersectionStrSlice(expandedOwners, approvers)
 }
 
 func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
@@ -3011,10 +3078,15 @@ func tagApproved(repo *git.Repository, ghclient *github.Client, conf *HecklerdCo
 		if err != nil {
 			return false, fmt.Errorf("Unable to determine if issue(%d) is approved: %w", issue.Number, err)
 		}
-		if noopApproved {
-			approved[gi] = "Approved, noop issue approved by CODEOWNERS"
-		} else {
+		switch noopApproved {
+		case notApproved:
 			unapproved[gi] = "Unapproved, noop issue awaiting approval from CODEOWNERS"
+		case codeownersApproved:
+			approved[gi] = "Approved, noop issue approved by CODEOWNERS"
+		case adminApproved:
+			approved[gi] = "Approved, noop issue approved by admin"
+		default:
+			log.Fatal("Unknown noopApproverType!")
 		}
 	}
 	logger.Printf("Tag range %s..%s has %d commits, approved(%d), unapproved(%d)", priorTag, nextTag, len(commits), len(approved), len(unapproved))

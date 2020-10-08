@@ -254,11 +254,11 @@ func TestResourcesApproved(t *testing.T) {
 	}
 	tests = append(tests, testNodeOwners)
 	for _, test := range tests {
-		approved, gr := resourcesApproved(test.input.gr, test.input.groups, test.input.approvers)
+		approved := resourcesApproved(test.input.gr, test.input.groups, test.input.approvers)
 		if test.expected.approved != approved {
 			t.Errorf("resourcesApproved() mismatch expected '%v' actual '%v'", test.expected.approved, approved)
 		}
-		if diff := cmp.Diff(test.expected.gr, gr, cmpopts.SortSlices(lessStr)); diff != "" {
+		if diff := cmp.Diff(test.expected.gr, test.input.gr, cmpopts.SortSlices(lessStr)); diff != "" {
 			t.Errorf("resourcesApproved() mismatch (-expected +actual):\n%s", diff)
 		}
 	}
