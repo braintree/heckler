@@ -48,12 +48,12 @@ class muppetshow {
   }
   group { "gonzo":
     ensure => present,
-    gid    => 9999,
+    gid    => 9997,
   }
   user { "gonzo":
     ensure  => present,
-    uid     => 9999,
-    gid     => 9999,
+    uid     => 9997,
+    gid     => 9997,
     groups  => ['muppets'],
     require => Group['gonzo'],
   }
