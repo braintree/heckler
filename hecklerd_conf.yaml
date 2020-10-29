@@ -21,8 +21,21 @@ lock_message: |
   IGNORE_OWN_LOCK=1 to run future cap tasks. For more information see,
   https://example.com
 git_server_max_clients: 1
+apply_set_order:
+  - canaries
+  - all
+ignored_resources:
+- 'File[/data/puppet_apply/statler/fit]'
 node_sets:
   all:
-    cmd: ['jq', '-n', '--arg', 'nodes', 'fozzie.example.com statler.example.com waldorf.example.com', '$nodes | split(" ")']
+    cmd:
+      - bash
+      - '-c'
+      - printf "fozzie.example.com statler.example.com waldorf.example.com" | jq --raw-input --slurp 'split(" ")'
     # blacklist:
     #   - '^fozzie.*$'
+  canaries:
+    cmd:
+      - bash
+      - '-c'
+      - printf "fozzie.example.com statler.example.com waldorf.example.com" | jq --raw-input --slurp 'split(" ")|[ .[] |select(test("^fozzie"))]'
