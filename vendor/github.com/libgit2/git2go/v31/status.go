@@ -6,6 +6,7 @@ package git
 import "C"
 
 import (
+	"errors"
 	"runtime"
 	"unsafe"
 )
@@ -86,6 +87,9 @@ func (statusList *StatusList) ByIndex(index int) (StatusEntry, error) {
 		return StatusEntry{}, ErrInvalid
 	}
 	ptr := C.git_status_byindex(statusList.ptr, C.size_t(index))
+	if ptr == nil {
+		return StatusEntry{}, errors.New("index out of Bounds")
+	}
 	entry := statusEntryFromC(ptr)
 	runtime.KeepAlive(statusList)
 
@@ -155,7 +159,7 @@ func (v *Repository) StatusList(opts *StatusOptions) (*StatusList, error) {
 		}
 	} else {
 		copts = &C.git_status_options{}
-		ret := C.git_status_init_options(copts, C.GIT_STATUS_OPTIONS_VERSION)
+		ret := C.git_status_options_init(copts, C.GIT_STATUS_OPTIONS_VERSION)
 		if ret < 0 {
 			return nil, MakeGitError(ret)
 		}

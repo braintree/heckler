@@ -37,7 +37,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/go-github/v29/github"
 	codeowners "github.com/hairyhenderson/go-codeowners"
-	git "github.com/libgit2/git2go/v30"
+	git "github.com/libgit2/git2go/v31"
 	gitcgiserver "github.com/lollipopman/git-cgi-server"
 	"github.com/robfig/cron/v3"
 	"github.com/square/grange"

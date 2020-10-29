@@ -12,5 +12,5 @@
 /rizzod
 /tmp
 # C files, that go won't vendor
-/vendor/github.com/libgit2/git2go/v30/script/**
-/vendor/github.com/libgit2/git2go/v30/vendor/**
+/vendor/github.com/libgit2/git2go/v31/script/**
+/vendor/github.com/libgit2/git2go/v31/vendor/**

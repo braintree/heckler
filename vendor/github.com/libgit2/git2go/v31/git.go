@@ -45,6 +45,7 @@ const (
 	ErrClassRevert     ErrorClass = C.GITERR_REVERT
 	ErrClassCallback   ErrorClass = C.GITERR_CALLBACK
 	ErrClassRebase     ErrorClass = C.GITERR_REBASE
+	ErrClassPatch      ErrorClass = C.GITERR_PATCH
 )
 
 type ErrorCode int
@@ -109,6 +110,8 @@ const (
 	ErrPassthrough ErrorCode = C.GIT_PASSTHROUGH
 	// Signals end of iteration with iterator
 	ErrIterOver ErrorCode = C.GIT_ITEROVER
+	// Patch application failed
+	ErrApplyFail ErrorCode = C.GIT_EAPPLYFAIL
 )
 
 var (
@@ -118,6 +121,10 @@ var (
 var pointerHandles *HandleList
 
 func init() {
+	initLibGit2()
+}
+
+func initLibGit2() {
 	pointerHandles = NewHandleList()
 
 	C.git_libgit2_init()
@@ -137,6 +144,25 @@ func init() {
 	// in such a way that they can be sure they're the only ones
 	// setting it up.
 	C.git_openssl_set_locking()
+}
+
+// Shutdown frees all the resources acquired by libgit2. Make sure no
+// references to any git2go objects are live before calling this.
+// After this is called, invoking any function from this library will result in
+// undefined behavior, so make sure this is called carefully.
+func Shutdown() {
+	pointerHandles.Clear()
+
+	C.git_libgit2_shutdown()
+}
+
+// ReInit reinitializes the global state, this is useful if the effective user
+// id has changed and you want to update the stored search paths for gitconfig
+// files. This function frees any references to objects, so it should be called
+// before any other functions are called.
+func ReInit() {
+	Shutdown()
+	initLibGit2()
 }
 
 // Oid represents the id for a Git object.

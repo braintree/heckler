@@ -41,8 +41,8 @@ github.com/hairyhenderson/go-codeowners
 github.com/huandu/xstrings
 # github.com/imdario/mergo v0.3.8
 github.com/imdario/mergo
-# github.com/libgit2/git2go/v30 v30.0.4-0.20200602173042-5241c72e6ebd
-github.com/libgit2/git2go/v30
+# github.com/libgit2/git2go/v31 v31.0.0
+github.com/libgit2/git2go/v31
 # github.com/lollipopman/git-cgi-server v1.0.2-0.20200407142400-d6c3040ae76f
 github.com/lollipopman/git-cgi-server
 # github.com/lollipopman/luser v0.0.0-20200226194359-0e64908ec951
@@ -65,7 +65,7 @@ github.com/spf13/afero
 github.com/spf13/afero/mem
 # github.com/square/grange v0.0.0-20200108221412-2a4cb7b5b334
 github.com/square/grange
-# golang.org/x/crypto v0.0.0-20200604202706-70a84ac30bf9
+# golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de
 golang.org/x/crypto/bcrypt
 golang.org/x/crypto/blowfish
 golang.org/x/crypto/cast5

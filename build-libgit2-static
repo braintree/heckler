@@ -5,10 +5,10 @@ set -o pipefail
 set -o nounset
 
 # found in git2go: git submodule
-LIBGIT2_REV='v1.0.0'
+LIBGIT2_REV='v1.1.0'
 BUILD_SCRIPT='build-libgit2-static.sh'
 
-git2go_rel_dir='vendor/github.com/libgit2/git2go/v30'
+git2go_rel_dir='vendor/github.com/libgit2/git2go/v31'
 
 if [[ ! -e "${git2go_rel_dir}" ]]; then
 	printf 'No git2go vendored dir: %s\n' "${git2go_rel_dir}"

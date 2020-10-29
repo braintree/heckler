@@ -126,6 +126,14 @@ const (
 	// continue resolving conflicts.  The merge operation will fail with
 	// GIT_EMERGECONFLICT and no index will be returned.
 	MergeTreeFailOnConflict MergeTreeFlag = C.GIT_MERGE_FAIL_ON_CONFLICT
+	// MergeTreeSkipREUC specifies not to write the REUC extension on the
+	// generated index.
+	MergeTreeSkipREUC MergeTreeFlag = C.GIT_MERGE_SKIP_REUC
+	// MergeTreeNoRecursive specifies not to build a recursive merge base (by
+	// merging the multiple merge bases) if the commits being merged have
+	// multiple merge bases. Instead, the first base is used.
+	// This flag provides a similar merge base to `git-merge-resolve`.
+	MergeTreeNoRecursive MergeTreeFlag = C.GIT_MERGE_NO_RECURSIVE
 )
 
 type MergeOptions struct {
@@ -134,6 +142,7 @@ type MergeOptions struct {
 
 	RenameThreshold uint
 	TargetLimit     uint
+	RecursionLimit  uint
 	FileFavor       MergeFileFavor
 
 	//TODO: Diff similarity metric
@@ -145,6 +154,7 @@ func mergeOptionsFromC(opts *C.git_merge_options) MergeOptions {
 		TreeFlags:       MergeTreeFlag(opts.flags),
 		RenameThreshold: uint(opts.rename_threshold),
 		TargetLimit:     uint(opts.target_limit),
+		RecursionLimit:  uint(opts.recursion_limit),
 		FileFavor:       MergeFileFavor(opts.file_favor),
 	}
 }
@@ -155,7 +165,7 @@ func DefaultMergeOptions() (MergeOptions, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	ecode := C.git_merge_init_options(&opts, C.GIT_MERGE_OPTIONS_VERSION)
+	ecode := C.git_merge_options_init(&opts, C.GIT_MERGE_OPTIONS_VERSION)
 	if ecode < 0 {
 		return MergeOptions{}, MakeGitError(ecode)
 	}
@@ -171,6 +181,7 @@ func (mo *MergeOptions) toC() *C.git_merge_options {
 		flags:            C.uint32_t(mo.TreeFlags),
 		rename_threshold: C.uint(mo.RenameThreshold),
 		target_limit:     C.uint(mo.TargetLimit),
+		recursion_limit:  C.uint(mo.RecursionLimit),
 		file_favor:       C.git_merge_file_favor_t(mo.FileFavor),
 	}
 }
@@ -466,7 +477,7 @@ func MergeFile(ancestor MergeFileInput, ours MergeFileInput, theirs MergeFileInp
 	var copts *C.git_merge_file_options
 	if options != nil {
 		copts = &C.git_merge_file_options{}
-		ecode := C.git_merge_file_init_options(copts, C.GIT_MERGE_FILE_OPTIONS_VERSION)
+		ecode := C.git_merge_file_options_init(copts, C.GIT_MERGE_FILE_OPTIONS_VERSION)
 		if ecode < 0 {
 			return nil, MakeGitError(ecode)
 		}

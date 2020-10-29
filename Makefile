@@ -53,15 +53,15 @@ publish: ## Upload the deb to package cloud (normally called by Jenkins)
 
 .PHONY: clean
 clean: ## Remove all state
-	rm -rf vendor/github.com/libgit2/git2go/v30/static-build
-	rm -rf vendor/github.com/libgit2/git2go/v30/script
-	rm -rf vendor/github.com/libgit2/git2go/v30/vendor
+	rm -rf vendor/github.com/libgit2/git2go/v31/static-build
+	rm -rf vendor/github.com/libgit2/git2go/v31/script
+	rm -rf vendor/github.com/libgit2/git2go/v31/vendor
 	./debian/rules clean
 	go clean -cache
 
 
 .PHONY: build
-build: vendor/github.com/libgit2/git2go/v30/static-build ## Build heckler, usually called inside the container
+build: vendor/github.com/libgit2/git2go/v31/static-build ## Build heckler, usually called inside the container
 	go build -o . -ldflags '$(GO_LDFLAGS)' ./...
 
 .PHONY: vet
@@ -72,7 +72,7 @@ vet: ## Vet heckler, usually called inside the container
 test: ## Test heckler, usually called inside the container
 	go test ./...
 
-vendor/github.com/libgit2/git2go/v30/static-build: ## Build libgit2
+vendor/github.com/libgit2/git2go/v31/static-build: ## Build libgit2
 	./build-libgit2-static
 
 .PHONY: deb

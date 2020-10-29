@@ -3,6 +3,7 @@ package git
 /*
 #include <git2.h>
 
+extern void _go_git_populate_apply_cb(git_apply_options *options);
 extern int _go_git_diff_foreach(git_diff *diff, int eachFile, int eachHunk, int eachLine, void *payload);
 extern void _go_git_setup_diff_notify_callbacks(git_diff_options* opts);
 extern int _go_git_diff_blobs(git_blob *old, const char *old_path, git_blob *new, const char *new_path, git_diff_options *opts, int eachFile, int eachHunk, int eachLine, void *payload);
@@ -131,8 +132,9 @@ func diffLineFromC(line *C.git_diff_line) DiffLine {
 }
 
 type Diff struct {
-	ptr  *C.git_diff
-	repo *Repository
+	ptr          *C.git_diff
+	repo         *Repository
+	runFinalizer bool
 }
 
 func (diff *Diff) NumDeltas() (int, error) {
@@ -165,8 +167,9 @@ func newDiffFromC(ptr *C.git_diff, repo *Repository) *Diff {
 	}
 
 	diff := &Diff{
-		ptr:  ptr,
-		repo: repo,
+		ptr:          ptr,
+		repo:         repo,
+		runFinalizer: true,
 	}
 
 	runtime.SetFinalizer(diff, (*Diff).Free)
@@ -176,6 +179,11 @@ func newDiffFromC(ptr *C.git_diff, repo *Repository) *Diff {
 func (diff *Diff) Free() error {
 	if diff.ptr == nil {
 		return ErrInvalid
+	}
+	if !diff.runFinalizer {
+		// This is the case with the Diff objects that are involved in the DiffNotifyCallback.
+		diff.ptr = nil
+		return nil
 	}
 	runtime.SetFinalizer(diff, nil)
 	C.git_diff_free(diff.ptr)
@@ -504,7 +512,7 @@ func DefaultDiffOptions() (DiffOptions, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	ecode := C.git_diff_init_options(&opts, C.GIT_DIFF_OPTIONS_VERSION)
+	ecode := C.git_diff_options_init(&opts, C.GIT_DIFF_OPTIONS_VERSION)
 	if ecode < 0 {
 		return DiffOptions{}, MakeGitError(ecode)
 	}
@@ -543,7 +551,7 @@ const (
 	DiffFindRemoveUnmodified            DiffFindOptionsFlag = C.GIT_DIFF_FIND_REMOVE_UNMODIFIED
 )
 
-//TODO implement git_diff_similarity_metric
+// TODO implement git_diff_similarity_metric
 type DiffFindOptions struct {
 	Flags                      DiffFindOptionsFlag
 	RenameThreshold            uint16
@@ -559,7 +567,7 @@ func DefaultDiffFindOptions() (DiffFindOptions, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	ecode := C.git_diff_find_init_options(&opts, C.GIT_DIFF_FIND_OPTIONS_VERSION)
+	ecode := C.git_diff_find_options_init(&opts, C.GIT_DIFF_FIND_OPTIONS_VERSION)
 	if ecode < 0 {
 		return DiffFindOptions{}, MakeGitError(ecode)
 	}
@@ -579,9 +587,9 @@ var (
 )
 
 type diffNotifyData struct {
-	Callback DiffNotifyCallback
-	Diff     *Diff
-	Error    error
+	Callback   DiffNotifyCallback
+	Repository *Repository
+	Error      error
 }
 
 //export diffNotifyCb
@@ -595,11 +603,20 @@ func diffNotifyCb(_diff_so_far unsafe.Pointer, delta_to_add *C.git_diff_delta, m
 	}
 
 	if data != nil {
-		if data.Diff == nil {
-			data.Diff = newDiffFromC(diff_so_far, nil)
+		// We are not taking ownership of this diff pointer, so no finalizer is set.
+		diff := &Diff{
+			ptr:          diff_so_far,
+			repo:         data.Repository,
+			runFinalizer: false,
 		}
 
-		err := data.Callback(data.Diff, diffDeltaFromC(delta_to_add), C.GoString(matched_pathspec))
+		err := data.Callback(diff, diffDeltaFromC(delta_to_add), C.GoString(matched_pathspec))
+
+		// Since the callback could theoretically keep a reference to the diff
+		// (which could be freed by libgit2 if an error occurs later during the
+		// diffing process), this converts a use-after-free (terrible!) into a nil
+		// dereference ("just" pretty bad).
+		diff.ptr = nil
 
 		if err == ErrDeltaSkip {
 			return 1
@@ -613,11 +630,12 @@ func diffNotifyCb(_diff_so_far unsafe.Pointer, delta_to_add *C.git_diff_delta, m
 	return 0
 }
 
-func diffOptionsToC(opts *DiffOptions) (copts *C.git_diff_options, notifyData *diffNotifyData) {
+func diffOptionsToC(opts *DiffOptions, repo *Repository) (copts *C.git_diff_options) {
 	cpathspec := C.git_strarray{}
 	if opts != nil {
-		notifyData = &diffNotifyData{
-			Callback: opts.NotifyCallback,
+		notifyData := &diffNotifyData{
+			Callback:   opts.NotifyCallback,
+			Repository: repo,
 		}
 
 		if opts.Pathspec != nil {
@@ -670,7 +688,7 @@ func (v *Repository) DiffTreeToTree(oldTree, newTree *Tree, opts *DiffOptions) (
 		newPtr = newTree.cast_ptr
 	}
 
-	copts, notifyData := diffOptionsToC(opts)
+	copts := diffOptionsToC(opts, v)
 	defer freeDiffOptions(copts)
 
 	runtime.LockOSThread()
@@ -681,10 +699,6 @@ func (v *Repository) DiffTreeToTree(oldTree, newTree *Tree, opts *DiffOptions) (
 	runtime.KeepAlive(newTree)
 	if ecode < 0 {
 		return nil, MakeGitError(ecode)
-	}
-
-	if notifyData != nil && notifyData.Diff != nil {
-		return notifyData.Diff, nil
 	}
 	return newDiffFromC(diffPtr, v), nil
 }
@@ -697,7 +711,7 @@ func (v *Repository) DiffTreeToWorkdir(oldTree *Tree, opts *DiffOptions) (*Diff,
 		oldPtr = oldTree.cast_ptr
 	}
 
-	copts, notifyData := diffOptionsToC(opts)
+	copts := diffOptionsToC(opts, v)
 	defer freeDiffOptions(copts)
 
 	runtime.LockOSThread()
@@ -707,10 +721,6 @@ func (v *Repository) DiffTreeToWorkdir(oldTree *Tree, opts *DiffOptions) (*Diff,
 	runtime.KeepAlive(oldTree)
 	if ecode < 0 {
 		return nil, MakeGitError(ecode)
-	}
-
-	if notifyData != nil && notifyData.Diff != nil {
-		return notifyData.Diff, nil
 	}
 	return newDiffFromC(diffPtr, v), nil
 }
@@ -728,7 +738,7 @@ func (v *Repository) DiffTreeToIndex(oldTree *Tree, index *Index, opts *DiffOpti
 		indexPtr = index.ptr
 	}
 
-	copts, notifyData := diffOptionsToC(opts)
+	copts := diffOptionsToC(opts, v)
 	defer freeDiffOptions(copts)
 
 	runtime.LockOSThread()
@@ -739,10 +749,6 @@ func (v *Repository) DiffTreeToIndex(oldTree *Tree, index *Index, opts *DiffOpti
 	runtime.KeepAlive(index)
 	if ecode < 0 {
 		return nil, MakeGitError(ecode)
-	}
-
-	if notifyData != nil && notifyData.Diff != nil {
-		return notifyData.Diff, nil
 	}
 	return newDiffFromC(diffPtr, v), nil
 }
@@ -755,7 +761,7 @@ func (v *Repository) DiffTreeToWorkdirWithIndex(oldTree *Tree, opts *DiffOptions
 		oldPtr = oldTree.cast_ptr
 	}
 
-	copts, notifyData := diffOptionsToC(opts)
+	copts := diffOptionsToC(opts, v)
 	defer freeDiffOptions(copts)
 
 	runtime.LockOSThread()
@@ -765,10 +771,6 @@ func (v *Repository) DiffTreeToWorkdirWithIndex(oldTree *Tree, opts *DiffOptions
 	runtime.KeepAlive(oldTree)
 	if ecode < 0 {
 		return nil, MakeGitError(ecode)
-	}
-
-	if notifyData != nil && notifyData.Diff != nil {
-		return notifyData.Diff, nil
 	}
 	return newDiffFromC(diffPtr, v), nil
 }
@@ -781,7 +783,7 @@ func (v *Repository) DiffIndexToWorkdir(index *Index, opts *DiffOptions) (*Diff,
 		indexPtr = index.ptr
 	}
 
-	copts, notifyData := diffOptionsToC(opts)
+	copts := diffOptionsToC(opts, v)
 	defer freeDiffOptions(copts)
 
 	runtime.LockOSThread()
@@ -791,10 +793,6 @@ func (v *Repository) DiffIndexToWorkdir(index *Index, opts *DiffOptions) (*Diff,
 	runtime.KeepAlive(index)
 	if ecode < 0 {
 		return nil, MakeGitError(ecode)
-	}
-
-	if notifyData != nil && notifyData.Diff != nil {
-		return notifyData.Diff, nil
 	}
 	return newDiffFromC(diffPtr, v), nil
 }
@@ -819,12 +817,15 @@ func DiffBlobs(oldBlob *Blob, oldAsPath string, newBlob *Blob, newAsPath string,
 	handle := pointerHandles.Track(data)
 	defer pointerHandles.Untrack(handle)
 
+	var repo *Repository
 	var oldBlobPtr, newBlobPtr *C.git_blob
 	if oldBlob != nil {
 		oldBlobPtr = oldBlob.cast_ptr
+		repo = oldBlob.repo
 	}
 	if newBlob != nil {
 		newBlobPtr = newBlob.cast_ptr
+		repo = newBlob.repo
 	}
 
 	oldBlobPath := C.CString(oldAsPath)
@@ -832,7 +833,7 @@ func DiffBlobs(oldBlob *Blob, oldAsPath string, newBlob *Blob, newAsPath string,
 	newBlobPath := C.CString(newAsPath)
 	defer C.free(unsafe.Pointer(newBlobPath))
 
-	copts, _ := diffOptionsToC(opts)
+	copts := diffOptionsToC(opts, repo)
 	defer freeDiffOptions(copts)
 
 	runtime.LockOSThread()
@@ -846,4 +847,193 @@ func DiffBlobs(oldBlob *Blob, oldAsPath string, newBlob *Blob, newAsPath string,
 	}
 
 	return nil
+}
+
+// ApplyHunkCallback is a callback that will be made per delta (file) when applying a patch.
+type ApplyHunkCallback func(*DiffHunk) (apply bool, err error)
+
+// ApplyDeltaCallback is a callback that will be made per hunk when applying a patch.
+type ApplyDeltaCallback func(*DiffDelta) (apply bool, err error)
+
+// ApplyOptions has 2 callbacks that are called for hunks or deltas
+// If these functions return an error, abort the apply process immediately.
+// If the first return value is true, the delta/hunk will be applied. If it is false, the  delta/hunk will not be applied. In either case, the rest of the apply process will continue.
+type ApplyOptions struct {
+	ApplyHunkCallback  ApplyHunkCallback
+	ApplyDeltaCallback ApplyDeltaCallback
+	Flags              uint
+}
+
+//export hunkApplyCallback
+func hunkApplyCallback(_hunk *C.git_diff_hunk, _payload unsafe.Pointer) C.int {
+	opts, ok := pointerHandles.Get(_payload).(*ApplyOptions)
+	if !ok {
+		panic("invalid apply options payload")
+	}
+
+	if opts.ApplyHunkCallback == nil {
+		return 0
+	}
+
+	hunk := diffHunkFromC(_hunk)
+
+	apply, err := opts.ApplyHunkCallback(&hunk)
+	if err != nil {
+		if gitError, ok := err.(*GitError); ok {
+			return C.int(gitError.Code)
+		}
+		return -1
+	} else if apply {
+		return 0
+	} else {
+		return 1
+	}
+}
+
+//export deltaApplyCallback
+func deltaApplyCallback(_delta *C.git_diff_delta, _payload unsafe.Pointer) C.int {
+	opts, ok := pointerHandles.Get(_payload).(*ApplyOptions)
+	if !ok {
+		panic("invalid apply options payload")
+	}
+
+	if opts.ApplyDeltaCallback == nil {
+		return 0
+	}
+
+	delta := diffDeltaFromC(_delta)
+
+	apply, err := opts.ApplyDeltaCallback(&delta)
+	if err != nil {
+		if gitError, ok := err.(*GitError); ok {
+			return C.int(gitError.Code)
+		}
+		return -1
+	} else if apply {
+		return 0
+	} else {
+		return 1
+	}
+}
+
+// DefaultApplyOptions returns default options for applying diffs or patches.
+func DefaultApplyOptions() (*ApplyOptions, error) {
+	opts := C.git_apply_options{}
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	ecode := C.git_apply_options_init(&opts, C.GIT_APPLY_OPTIONS_VERSION)
+	if int(ecode) != 0 {
+
+		return nil, MakeGitError(ecode)
+	}
+
+	return applyOptionsFromC(&opts), nil
+}
+
+func (a *ApplyOptions) toC() *C.git_apply_options {
+	if a == nil {
+		return nil
+	}
+
+	opts := &C.git_apply_options{
+		version: C.GIT_APPLY_OPTIONS_VERSION,
+		flags:   C.uint(a.Flags),
+	}
+
+	if a.ApplyDeltaCallback != nil || a.ApplyHunkCallback != nil {
+		C._go_git_populate_apply_cb(opts)
+		opts.payload = pointerHandles.Track(a)
+	}
+
+	return opts
+}
+
+func applyOptionsFromC(opts *C.git_apply_options) *ApplyOptions {
+	return &ApplyOptions{
+		Flags: uint(opts.flags),
+	}
+}
+
+// ApplyLocation represents the possible application locations for applying
+// diffs.
+type ApplyLocation int
+
+const (
+	// ApplyLocationWorkdir applies the patch to the workdir, leaving the
+	// index untouched. This is the equivalent of `git apply` with no location
+	// argument.
+	ApplyLocationWorkdir ApplyLocation = C.GIT_APPLY_LOCATION_WORKDIR
+	// ApplyLocationIndex applies the patch to the index, leaving the working
+	// directory untouched. This is the equivalent of `git apply --cached`.
+	ApplyLocationIndex ApplyLocation = C.GIT_APPLY_LOCATION_INDEX
+	// ApplyLocationBoth applies the patch to both the working directory and
+	// the index. This is the equivalent of `git apply --index`.
+	ApplyLocationBoth ApplyLocation = C.GIT_APPLY_LOCATION_BOTH
+)
+
+// ApplyDiff appllies a Diff to the given repository, making changes directly
+// in the working directory, the index, or both.
+func (v *Repository) ApplyDiff(diff *Diff, location ApplyLocation, opts *ApplyOptions) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	cOpts := opts.toC()
+	ecode := C.git_apply(v.ptr, diff.ptr, C.git_apply_location_t(location), cOpts)
+	runtime.KeepAlive(v)
+	runtime.KeepAlive(diff)
+	runtime.KeepAlive(cOpts)
+	if ecode < 0 {
+		return MakeGitError(ecode)
+	}
+
+	return nil
+}
+
+// ApplyToTree applies a Diff to a Tree and returns the resulting image as an Index.
+func (v *Repository) ApplyToTree(diff *Diff, tree *Tree, opts *ApplyOptions) (*Index, error) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	var indexPtr *C.git_index
+	cOpts := opts.toC()
+	ecode := C.git_apply_to_tree(&indexPtr, v.ptr, tree.cast_ptr, diff.ptr, cOpts)
+	runtime.KeepAlive(diff)
+	runtime.KeepAlive(tree)
+	runtime.KeepAlive(cOpts)
+	if ecode != 0 {
+		return nil, MakeGitError(ecode)
+	}
+
+	return newIndexFromC(indexPtr, v), nil
+}
+
+// DiffFromBuffer reads the contents of a git patch file into a Diff object.
+//
+// The diff object produced is similar to the one that would be produced if you
+// actually produced it computationally by comparing two trees, however there
+// may be subtle differences. For example, a patch file likely contains
+// abbreviated object IDs, so the object IDs in a git_diff_delta produced by
+// this function will also be abbreviated.
+//
+// This function will only read patch files created by a git implementation, it
+// will not read unified diffs produced by the diff program, nor any other
+// types of patch files.
+func DiffFromBuffer(buffer []byte, repo *Repository) (*Diff, error) {
+	var diff *C.git_diff
+
+	cBuffer := C.CBytes(buffer)
+	defer C.free(unsafe.Pointer(cBuffer))
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	ecode := C.git_diff_from_buffer(&diff, (*C.char)(cBuffer), C.size_t(len(buffer)))
+	if ecode < 0 {
+		return nil, MakeGitError(ecode)
+	}
+	runtime.KeepAlive(diff)
+
+	return newDiffFromC(diff, repo), nil
 }
