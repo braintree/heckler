@@ -3433,7 +3433,7 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 			go hecklerApply(node, applyResults, par)
 			r := <-applyResults
 			if r.err != nil {
-				logger.Printf("Apply failed: %s@%s, %w", node.host, id.String(), r.err)
+				logger.Printf("Apply failed: %s@%s, %v", node.host, id.String(), r.err)
 			} else if r.report.Status == "failed" {
 				logger.Printf("Apply status: '%s', %s@%s", r.report.Status, node.host, r.report.ConfigurationVersion)
 			} else {
