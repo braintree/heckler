@@ -1,7 +1,7 @@
 Source: heckler
 Section: misc
 Priority: optional
-Maintainer: Jesse Hathaway <hathaway@paypal.com>
+Maintainer: Jesse Hathaway <jesse@mbuki-mvuki.org>
 Build-Depends: debhelper (>= 11)
 Standards-Version: 4.1.3
 Homepage: https://github.braintreeps.com/lollipopman/heckler
