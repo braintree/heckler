@@ -22,9 +22,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.braintreeps.com/lollipopman/heckler/internal/gitutil"
-	"github.braintreeps.com/lollipopman/heckler/internal/heckler"
-	"github.braintreeps.com/lollipopman/heckler/internal/rizzopb"
+	"github.com/lollipopman/heckler/internal/gitutil"
+	"github.com/lollipopman/heckler/internal/heckler"
+	"github.com/lollipopman/heckler/internal/rizzopb"
 	"github.com/lollipopman/luser"
 	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"

@@ -1,5 +1,5 @@
 [Unit]
-Documentation=https://github.braintreeps.com/lollipopman/heckler
+Documentation=https://github.com/lollipopman/heckler
 Before=multi-user.target
 After=network-online.target
 Wants=network-online.target

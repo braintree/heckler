@@ -1,4 +1,4 @@
-module github.braintreeps.com/lollipopman/heckler
+module github.com/lollipopman/heckler
 
 go 1.13
 

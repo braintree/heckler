@@ -3,7 +3,7 @@ package heckler
 import (
 	"log"
 
-	"github.braintreeps.com/lollipopman/heckler/internal/rizzopb"
+	"github.com/lollipopman/heckler/internal/rizzopb"
 )
 
 type LockStatus int
