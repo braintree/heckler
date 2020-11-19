@@ -88,6 +88,7 @@ type HecklerdConf struct {
 	GitHubPrivateKeyPath       string                `yaml:"github_private_key_path"`
 	GitHubAppSlug              string                `yaml:"github_app_slug"`
 	GitHubAppId                int64                 `yaml:"github_app_id"`
+	GitHubAppEmail             string                `yaml:"github_app_email"`
 	GitHubAppInstallId         int64                 `yaml:"github_app_install_id"`
 	GitHubDisableNotifications bool                  `yaml:"github_disable_notifications"`
 	GitHubHttpProxy            string                `yaml:"github_http_proxy"`
