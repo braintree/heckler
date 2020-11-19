@@ -2998,7 +2998,7 @@ func createTag(newTag string, conf *HecklerdConf, ghclient *github.Client, repo 
 	tagger := &github.CommitAuthor{
 		Date:  &timeNow,
 		Name:  github.String("Heckler"),
-		Email: github.String("hathaway@paypal.com"),
+		Email: github.String(conf.GitHubAppEmail),
 	}
 	commit, err := gitutil.RevparseToCommit(conf.RepoBranch, repo)
 	if err != nil {
