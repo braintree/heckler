@@ -30,5 +30,6 @@ COPY setup_ssh_exec_systemd /setup_ssh_exec_systemd
 COPY heckler.sh /etc/profile.d/
 RUN chmod 755 /setup_ssh_exec_systemd
 ADD ssh_configs /ssh_configs
+COPY sshd_config /ssh_configs/
 
 CMD [ "/setup_ssh_exec_systemd" ]

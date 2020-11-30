@@ -1,0 +1,79 @@
+#!/bin/bash
+# Generate ssh keys and configs for docker node containers, this avoid keeping
+# them in the git repo, which security scanners tend not to appreciate!
+
+set -o errexit
+set -o nounset
+
+function node-ip() {
+	local node="${1}"
+	local config="${2}"
+
+	local svc_regex='^ +'"${node}"'.example.com:$'
+	local ip_regex='^ +ipv4_address:'
+	local in_svc='false'
+	while IFS='' read -r line; do
+		if [[ "${line}" =~ $svc_regex ]]; then
+			in_svc='true'
+		fi
+		if [[ "${in_svc}" == 'true' ]] && [[ "${line}" =~ $ip_regex ]]; then
+			read -r _ ip <<<"${line}"
+			printf '%s\n' "${ip}"
+			break
+		fi
+	done <"${config}"
+}
+
+function gen-node-keys() {
+	local node="${1}"
+	mkdir -p "${node}"/{root,host}
+	pushd "${node}" >/dev/null
+	if ! [[ -f 'host/ssh_host_ecdsa_key' ]]; then
+		if ! ssh-keygen -q -t ecdsa -N '' -f host/ssh_host_ecdsa_key -C "${node}" </dev/null; then
+			return 1
+		fi
+	fi
+	cat host/ssh_host_ecdsa_key.pub >>../ssh_known_hosts
+	if ! [[ -f 'root/id_ecdsa' ]]; then
+		if ! ssh-keygen -q -t ecdsa -N '' -f root/id_ecdsa -C 'root@'"${node}" </dev/null; then
+			return 1
+		fi
+	fi
+	cat root/id_ecdsa.pub >>../authorized_keys
+	root_key="$(readlink -f root/id_ecdsa)"
+	if ! node_ip=$(node-ip "${node}" ../../../docker-compose.yml); then
+		return 1
+	fi
+	cat <<-EOF >>../ssh_config
+		Host ${node}
+		  User root
+		  Hostname ${node_ip}
+		  IdentitiesOnly true
+		  IdentityFile ${root_key}
+	EOF
+	popd >/dev/null
+}
+
+function main() {
+	local -a nodes=("${@}")
+	local base_dir
+	base_dir="$(dirname "${0}")"'/ssh_configs'
+
+	mkdir -p "${base_dir}"
+	pushd "${base_dir}" >/dev/null
+	rm -f ssh_known_hosts
+	rm -f authorized_keys
+	rm -f ssh_config
+	for node in "${nodes[@]}"; do
+		if ! gen-node-keys "${node}"; then
+			printf 'Error generating keys for %s\n' "${node}"
+			exit 1
+		fi
+	done
+	printf '\nAdd the following to your ~/.ssh/config:\n\n'
+	printf 'Match all\n'
+	printf 'Include %s\n\n' "$(readlink -f ssh_config)"
+	popd >/dev/null
+}
+
+main "${@}"

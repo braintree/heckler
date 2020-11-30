@@ -1,0 +1,6 @@
+HostKey /etc/ssh/ssh_host_ecdsa_key
+PermitRootLogin yes
+ChallengeResponseAuthentication no
+UsePAM yes
+PrintMotd no
+AcceptEnv LANG LC_*

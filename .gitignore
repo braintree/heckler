@@ -11,6 +11,8 @@
 /rizzo-rev
 /rizzod
 /tmp
+# Generated ssh keys
+/docker-compose/node/ssh_configs/**
 # C files, that go won't vendor
 /vendor/github.com/libgit2/git2go/v31/script/**
 /vendor/github.com/libgit2/git2go/v31/vendor/**
