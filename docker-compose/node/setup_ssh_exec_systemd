@@ -14,6 +14,6 @@ chmod 700 /root/.ssh/id_ecdsa
 cp authorized_keys /root/.ssh/
 popd >/dev/null
 
-# avoids breakage when security releases update pkg revs
-apt-get update
+# Avoids breakage when security releases update pkg revs
+apt-get update -q
 exec /lib/systemd/systemd

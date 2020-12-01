@@ -1,6 +1,6 @@
 FROM debian:buster
 
-RUN apt-get update && \
+RUN apt-get update -q && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
@@ -21,7 +21,7 @@ RUN curl -sO https://apt.puppet.com/puppet6-release-buster.deb
 RUN dpkg -i puppet6-release-buster.deb
 RUN ln -s /dev/null /etc/systemd/system/pxp-agent.service
 RUN ln -s /dev/null /etc/systemd/system/puppet.service
-RUN apt-get update && \
+RUN apt-get update -q && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       puppet-agent \
       2>&1
