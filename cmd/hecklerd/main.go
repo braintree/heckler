@@ -3273,7 +3273,7 @@ func commonTagNodeSet(conf *HecklerdConf, ns *NodeSet, repo *git.Repository, log
 // Users often apply a dirty branch and commit there changes after applying.
 // This unfortunately leaves nodes in a dirty state which are actually clean.
 // Attempt to clean up dirty nodes by nooping them with their own dirty commit
-// as well as children of their dirty commit whic hopefully will include the
+// as well as children of their dirty commit which hopefully will include the
 // applied changes.
 //
 //  Are there any nodes dirty?
@@ -3465,7 +3465,7 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 //  node set?
 //    If No, do nothing
 //    If Yes,
-//      - noop each commit or load serialzed copy
+//      - noop each commit or load serialized copy
 //      - create github issue, if it does not exist
 func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	var err error
