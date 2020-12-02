@@ -257,15 +257,7 @@ func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map
 	parentCount := commit.ParentCount()
 	parentFailures := false
 	for i := uint(0); i < parentCount; i++ {
-		// PERMA-DIFF: If our parent is already applied we substitute the last
-		// applied commit noop so that we can subtract away any perma-diffs from
-		// the noop
-		if commitAlreadyApplied(lastApply, *commit.ParentId(i), repo) {
-			logger.Printf("Parent:%s already applied substituting lastApply:%s for commit %s@%s", commit.ParentId(i).String(), lastApply.String(), host, commit.Id().String())
-			parentReport = commitReports[lastApply]
-		} else {
-			parentReport = commitReports[*commit.ParentId(i)]
-		}
+		parentReport = commitReports[*commit.ParentId(i)]
 		if parentReport == nil {
 			logger.Fatalf("Parent report not found %s for commit %s@%s", commit.ParentId(i).String(), host, commit.Id().String())
 		} else {
@@ -363,15 +355,11 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 
 func loadNoop(commit git.Oid, node *Node, noopDir string, repo *git.Repository, logger *log.Logger) (*rizzopb.PuppetReport, error) {
 	emptyReport := new(rizzopb.PuppetReport)
-	// PERMA-DIFF: Substitute an empty puppet noop report if the commit is
-	// already applied, however for the node's last applied commit we do want to
-	// use the noop report so we can use the noop diff to subtract away
-	// perma-diffs from children.
 	descendant, err := repo.DescendantOf(&node.lastApply, &commit)
 	if err != nil {
 		logger.Fatalf("Cannot determine descendant status: %v", err)
 	}
-	if descendant {
+	if descendant || node.lastApply.Equal(&commit) {
 		logger.Printf("Commit already applied, substituting an empty noop: %s@%s", node.host, commit.String())
 		return emptyReport, nil
 	}
@@ -497,7 +485,6 @@ func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repo
 		}
 	}
 
-	var nodeCommitToNoop git.Oid
 	var rprt *rizzopb.PuppetReport
 	parentNoopFailures := false
 	errNoopNodes := make(map[string]*Node)
@@ -506,17 +493,10 @@ func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repo
 		logger.Printf("Nooping: %s (%d of %d)", commitToNoop.String(), i+1, len(commitsToNoop))
 		noopHosts := make(map[string]bool)
 		for _, node := range ns.nodes.active {
-			// PERMA-DIFF: We need a noop report of the last applied commit so we can
-			// use it to subtract away perma-diffs from children.
-			if commitToNoop != *commit.Id() && commitAlreadyApplied(node.lastApply, commitToNoop, repo) {
-				nodeCommitToNoop = node.lastApply
-			} else {
-				nodeCommitToNoop = commitToNoop
-			}
-			if rprt, err = loadNoop(nodeCommitToNoop, node, noopDir, repo, logger); err == nil {
-				ns.nodes.active[node.host].commitReports[nodeCommitToNoop] = rprt
+			if rprt, err = loadNoop(commitToNoop, node, noopDir, repo, logger); err == nil {
+				ns.nodes.active[node.host].commitReports[commitToNoop] = rprt
 			} else if os.IsNotExist(err) {
-				par := rizzopb.PuppetApplyRequest{Rev: nodeCommitToNoop.String(), Noop: true}
+				par := rizzopb.PuppetApplyRequest{Rev: commitToNoop.String(), Noop: true}
 				go hecklerApply(node, puppetReportChan, par)
 				noopHosts[node.host] = true
 			} else {
@@ -525,7 +505,7 @@ func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repo
 		}
 		noopRequests := len(noopHosts)
 		if noopRequests > 0 {
-			logger.Printf("Requesting noops for %s: %s", nodeCommitToNoop.String(), compressHostsMap(noopHosts))
+			logger.Printf("Requesting noops for %s: %s", commitToNoop.String(), compressHostsMap(noopHosts))
 		}
 		for j := 0; j < noopRequests; j++ {
 			logger.Printf("Waiting for (%d) outstanding noop requests: %s", noopRequests-j, compressHostsMap(noopHosts))
@@ -559,23 +539,12 @@ func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repo
 	}
 
 	for _, node := range ns.nodes.active {
-		// PERMA-DIFF: If the commit is already applied we can assume that the
-		// delta of resources is empty. NOTE: Ideally we would not need this
-		// special case as the noop for an already applied commit should be empty,
-		// but we purposefully substitute the noop of the last applied commit in
-		// loadNoop() to subtract away perma-diffs, so those would show up without
-		// this special case.
-		if commitAlreadyApplied(node.lastApply, *commit.Id(), repo) {
-			node.commitDeltaResources[*commit.Id()] = make(map[ResourceTitle]*deltaResource)
-			logger.Printf("Already applied substituting empty delta resource for commit %s@%s", node.host, commit.Id().String())
-		} else {
-			logger.Printf("Creating delta resource for commit %s@%s", node.host, commit.Id().String())
-			parentFailures, parentReports := commitParentReports(*commit, node.lastApply, node.commitReports, node.host, repo, logger)
-			if parentFailures {
-				parentNoopFailures = true
-			}
-			node.commitDeltaResources[*commit.Id()] = subtractNoops(node.commitReports[*commit.Id()], parentReports, ignoredResources)
+		logger.Printf("Creating delta resource for commit %s@%s", node.host, commit.Id().String())
+		parentFailures, parentReports := commitParentReports(*commit, node.lastApply, node.commitReports, node.host, repo, logger)
+		if parentFailures {
+			parentNoopFailures = true
 		}
+		node.commitDeltaResources[*commit.Id()] = subtractNoops(node.commitReports[*commit.Id()], parentReports, ignoredResources)
 	}
 
 	logger.Printf("Grouping: %s", commit.Id().String())
