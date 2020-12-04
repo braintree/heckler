@@ -445,19 +445,40 @@ func unmarshalGroupedReport(oid *git.Oid, groupedNoopDir string) (groupedReport,
 	return gr, nil
 }
 
-func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir string, logger *log.Logger) error {
+func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir string, conf *HecklerdConf, logger *log.Logger) error {
 	var err error
 	var rprt *rizzopb.PuppetReport
 	errNoopNodes := make(map[string]*Node)
+	lockedByAnotherNoopNodes := make(map[string]*Node)
 	puppetReportChan := make(chan applyResult)
 	noopHosts := make(map[string]bool)
-	for _, node := range ns.nodes.active {
+	for host, node := range ns.nodes.active {
 		if rprt, err = loadNoop(commitId, node, noopDir, repo, logger); err == nil {
 			ns.nodes.active[node.host].commitReports[commitId] = rprt
 		} else if os.IsNotExist(err) {
-			par := rizzopb.PuppetApplyRequest{Rev: commitId.String(), Noop: true}
-			go hecklerApply(node, puppetReportChan, par)
-			noopHosts[node.host] = true
+			rizzoLockNode(
+				rizzopb.PuppetLockRequest{
+					Type:    rizzopb.LockReqType_lock,
+					User:    "root",
+					Comment: conf.LockMessage,
+					Force:   false,
+				},
+				node)
+			switch node.lockState.LockStatus {
+			case heckler.LockedByAnother:
+				lockedByAnotherNoopNodes[host] = node
+				delete(ns.nodes.active, host)
+				continue
+			case heckler.LockUnknown:
+				errNoopNodes[host] = node
+				delete(ns.nodes.active, host)
+				logger.Println(errNoopNodes[host].err)
+				continue
+			case heckler.LockedByUser:
+				par := rizzopb.PuppetApplyRequest{Rev: commitId.String(), Noop: true}
+				go hecklerApply(node, puppetReportChan, par)
+				noopHosts[node.host] = true
+			}
 		} else {
 			logger.Fatalf("Unable to load noop: %v", err)
 		}
@@ -469,6 +490,15 @@ func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir st
 	for j := 0; j < noopRequests; j++ {
 		logger.Printf("Waiting for (%d) outstanding noop requests: %s", noopRequests-j, compressHostsMap(noopHosts))
 		r := <-puppetReportChan
+		rizzoLockNode(
+			rizzopb.PuppetLockRequest{
+				Type:  rizzopb.LockReqType_unlock,
+				User:  "root",
+				Force: false,
+			}, ns.nodes.active[r.host])
+		if ns.nodes.active[r.host].lockState.LockStatus != heckler.Unlocked {
+			logger.Printf("Unlock of %s failed", r.host)
+		}
 		if r.err != nil {
 			ns.nodes.active[r.host].err = fmt.Errorf("Noop failed: %w", r.err)
 			errNoopNodes[r.host] = ns.nodes.active[r.host]
@@ -496,13 +526,14 @@ func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir st
 		}
 	}
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errNoopNodes)
+	ns.nodes.lockedByAnother = mergeNodeMaps(ns.nodes.lockedByAnother, lockedByAnotherNoopNodes)
 	if ok := thresholdExceededNodeSet(ns, logger); ok {
 		return ErrThresholdExceeded
 	}
 	return nil
 }
 
-func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, ignoredResources []string, noopDir string, logger *log.Logger) (groupedReport, error) {
+func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, ignoredResources []string, noopDir string, conf *HecklerdConf, logger *log.Logger) (groupedReport, error) {
 	var err error
 	for host, _ := range ns.nodes.active {
 		os.Mkdir(noopDir+"/"+host, 0755)
@@ -542,7 +573,7 @@ func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *g
 	}
 
 	for _, commitId := range commitIdsToNoop {
-		err = noopNodeSet(ns, commitId, repo, noopDir, logger)
+		err = noopNodeSet(ns, commitId, repo, noopDir, conf, logger)
 		if err != nil {
 			return groupedReport{}, err
 		}
@@ -1199,7 +1230,7 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 		}
-		groupedReport, err := groupReportNodeSet(ns, commit, req.DeltaNoop, hs.repo, hs.conf.IgnoredResources, hs.conf.NoopDir, logger)
+		groupedReport, err := groupReportNodeSet(ns, commit, req.DeltaNoop, hs.repo, hs.conf.IgnoredResources, hs.conf.NoopDir, hs.conf, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -1298,11 +1329,6 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	if err != nil {
 		return nil, err
 	}
-	err = lockNodeSet(req.User, hs.conf.LockMessage, false, ns, logger)
-	if err != nil {
-		return nil, err
-	}
-	defer unlockNodeSet(req.User, false, ns, logger)
 	commitLogIds, commits, err := commitLogIdList(hs.repo, req.BeginRev, req.EndRev)
 	if err != nil {
 		return nil, err
@@ -1314,7 +1340,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	rprt := new(hecklerpb.HecklerNoopRangeReport)
 	var md string
 	for _, gi := range commitLogIds {
-		groupedReport, err := groupReportNodeSet(ns, commits[gi], true, hs.repo, hs.conf.IgnoredResources, hs.conf.NoopDir, logger)
+		groupedReport, err := groupReportNodeSet(ns, commits[gi], true, hs.repo, hs.conf.IgnoredResources, hs.conf.NoopDir, hs.conf, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -2055,6 +2081,16 @@ func rizzoLockNodes(req rizzopb.PuppetLockRequest, nodes map[string]*Node) (map[
 	}
 
 	return lockedNodes, unlockedNodes, lockedByAnotherNodes, errNodes
+}
+
+func rizzoLockNode(req rizzopb.PuppetLockRequest, node *Node) {
+	reportChan := make(chan rizzopb.PuppetLockReport)
+	go rizzoLock(node.host, node.rizzoClient, req, reportChan)
+	r := <-reportChan
+	node.lockState = heckler.LockReportToLockState(r)
+	if node.lockState.LockStatus == heckler.LockUnknown {
+		node.err = errors.New(r.Error)
+	}
 }
 
 func rizzoLock(host string, rc rizzopb.RizzoClient, req rizzopb.PuppetLockRequest, c chan<- rizzopb.PuppetLockReport) {
@@ -3370,14 +3406,14 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 		}
 		return
 	}
-	lockReq := rizzopb.PuppetLockRequest{
-		Type:    rizzopb.LockReqType_lock,
-		User:    "root",
-		Comment: conf.LockMessage,
-		Force:   false,
-	}
-	lockedNodes, _, _, _ := rizzoLockNodes(lockReq, map[string]*Node{node.host: node})
-	if len(lockedNodes) != 1 {
+	rizzoLockNode(
+		rizzopb.PuppetLockRequest{
+			Type:    rizzopb.LockReqType_lock,
+			User:    "root",
+			Comment: conf.LockMessage,
+			Force:   false,
+		}, node)
+	if node.lockState.LockStatus != heckler.LockedByUser {
 		c <- cleanNodeResult{
 			host:  node.host,
 			clean: false,
@@ -3420,13 +3456,13 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 			}
 		}
 	}
-	lockReq = rizzopb.PuppetLockRequest{
-		Type:  rizzopb.LockReqType_unlock,
-		User:  "root",
-		Force: false,
-	}
-	_, unlockedNodes, _, _ := rizzoLockNodes(lockReq, map[string]*Node{node.host: node})
-	if len(unlockedNodes) != 1 {
+	rizzoLockNode(
+		rizzopb.PuppetLockRequest{
+			Type:  rizzopb.LockReqType_unlock,
+			User:  "root",
+			Force: false,
+		}, node)
+	if node.lockState.LockStatus != heckler.Unlocked {
 		logger.Printf("Unlock of %s failed", node.host)
 	}
 	c <- cleanNodeResult{
@@ -3497,24 +3533,16 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 					closeNodeSet(perNoop, logger)
 					break
 				}
-				err = lockNodeSet("root", conf.LockMessage, false, perNoop, logger)
-				if err != nil {
-					logger.Printf("Unable to lock nodes, sleeping, %v", err)
-					closeNodeSet(perNoop, logger)
-					break
-				}
 				for _, node := range perNoop.nodes.active {
 					node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 					node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 				}
-				gr, err = groupReportNodeSet(perNoop, commit, true, repo, conf.IgnoredResources, conf.NoopDir, logger)
+				gr, err = groupReportNodeSet(perNoop, commit, true, repo, conf.IgnoredResources, conf.NoopDir, conf, logger)
 				if err != nil {
 					logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
-					unlockNodeSet("root", false, perNoop, logger)
 					closeNodeSet(perNoop, logger)
 					continue
 				}
-				unlockNodeSet("root", false, perNoop, logger)
 				closeNodeSet(perNoop, logger)
 				err = marshalGroupedReport(commit.Id(), gr, conf.GroupedNoopDir)
 				if err != nil {
