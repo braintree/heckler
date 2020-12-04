@@ -445,9 +445,65 @@ func unmarshalGroupedReport(oid *git.Oid, groupedNoopDir string) (groupedReport,
 	return gr, nil
 }
 
+func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir string, logger *log.Logger) error {
+	var err error
+	var rprt *rizzopb.PuppetReport
+	errNoopNodes := make(map[string]*Node)
+	puppetReportChan := make(chan applyResult)
+	noopHosts := make(map[string]bool)
+	for _, node := range ns.nodes.active {
+		if rprt, err = loadNoop(commitId, node, noopDir, repo, logger); err == nil {
+			ns.nodes.active[node.host].commitReports[commitId] = rprt
+		} else if os.IsNotExist(err) {
+			par := rizzopb.PuppetApplyRequest{Rev: commitId.String(), Noop: true}
+			go hecklerApply(node, puppetReportChan, par)
+			noopHosts[node.host] = true
+		} else {
+			logger.Fatalf("Unable to load noop: %v", err)
+		}
+	}
+	noopRequests := len(noopHosts)
+	if noopRequests > 0 {
+		logger.Printf("Requesting noops for %s: %s", commitId.String(), compressHostsMap(noopHosts))
+	}
+	for j := 0; j < noopRequests; j++ {
+		logger.Printf("Waiting for (%d) outstanding noop requests: %s", noopRequests-j, compressHostsMap(noopHosts))
+		r := <-puppetReportChan
+		if r.err != nil {
+			ns.nodes.active[r.host].err = fmt.Errorf("Noop failed: %w", r.err)
+			errNoopNodes[r.host] = ns.nodes.active[r.host]
+			logger.Println(errNoopNodes[r.host].err)
+			delete(ns.nodes.active, r.host)
+			delete(noopHosts, r.host)
+			continue
+		}
+		newRprt := normalizeReport(r.report, logger)
+		// Failed reports are created by rizzod, so they lack the Host field
+		// which is set by Puppet
+		if newRprt.Status == "failed" {
+			newRprt.Host = r.host
+		}
+		logger.Printf("Received noop: %s@%s", newRprt.Host, newRprt.ConfigurationVersion)
+		delete(noopHosts, newRprt.Host)
+		commitId, err := git.NewOid(newRprt.ConfigurationVersion)
+		if err != nil {
+			logger.Fatalf("Unable to convert ConfigurationVersion to a git oid: %v", err)
+		}
+		ns.nodes.active[newRprt.Host].commitReports[*commitId] = &newRprt
+		err = marshalReport(newRprt, noopDir, *commitId)
+		if err != nil {
+			logger.Fatalf("Unable to marshal report: %v", err)
+		}
+	}
+	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errNoopNodes)
+	if ok := thresholdExceededNodeSet(ns, logger); ok {
+		return ErrThresholdExceeded
+	}
+	return nil
+}
+
 func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, ignoredResources []string, noopDir string, logger *log.Logger) (groupedReport, error) {
 	var err error
-
 	for host, _ := range ns.nodes.active {
 		os.Mkdir(noopDir+"/"+host, 0755)
 	}
@@ -470,13 +526,13 @@ func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *g
 		return groupedReport{CommitNotInAllNodeLineages: true}, nil
 	}
 
-	commitsToNoop := make([]git.Oid, 0)
-	commitsToNoop = append(commitsToNoop, *commit.Id())
+	commitIdsToNoop := make([]git.Oid, 0)
+	commitIdsToNoop = append(commitIdsToNoop, *commit.Id())
 
 	parentCount := commit.ParentCount()
 	for i := uint(0); i < parentCount; i++ {
 		if deltaNoop {
-			commitsToNoop = append(commitsToNoop, *commit.ParentId(i))
+			commitIdsToNoop = append(commitIdsToNoop, *commit.ParentId(i))
 		} else {
 			for _, node := range ns.nodes.active {
 				node.commitReports[*commit.ParentId(i)] = &rizzopb.PuppetReport{}
@@ -485,59 +541,14 @@ func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *g
 		}
 	}
 
-	var rprt *rizzopb.PuppetReport
-	parentNoopFailures := false
-	errNoopNodes := make(map[string]*Node)
-	puppetReportChan := make(chan applyResult)
-	for i, commitToNoop := range commitsToNoop {
-		logger.Printf("Nooping: %s (%d of %d)", commitToNoop.String(), i+1, len(commitsToNoop))
-		noopHosts := make(map[string]bool)
-		for _, node := range ns.nodes.active {
-			if rprt, err = loadNoop(commitToNoop, node, noopDir, repo, logger); err == nil {
-				ns.nodes.active[node.host].commitReports[commitToNoop] = rprt
-			} else if os.IsNotExist(err) {
-				par := rizzopb.PuppetApplyRequest{Rev: commitToNoop.String(), Noop: true}
-				go hecklerApply(node, puppetReportChan, par)
-				noopHosts[node.host] = true
-			} else {
-				logger.Fatalf("Unable to load noop: %v", err)
-			}
-		}
-		noopRequests := len(noopHosts)
-		if noopRequests > 0 {
-			logger.Printf("Requesting noops for %s: %s", commitToNoop.String(), compressHostsMap(noopHosts))
-		}
-		for j := 0; j < noopRequests; j++ {
-			logger.Printf("Waiting for (%d) outstanding noop requests: %s", noopRequests-j, compressHostsMap(noopHosts))
-			r := <-puppetReportChan
-			if r.err != nil {
-				ns.nodes.active[r.host].err = fmt.Errorf("Noop failed: %w", r.err)
-				errNoopNodes[r.host] = ns.nodes.active[r.host]
-				logger.Println(errNoopNodes[r.host].err)
-				delete(ns.nodes.active, r.host)
-				delete(noopHosts, r.host)
-				continue
-			}
-			newRprt := normalizeReport(r.report, logger)
-			// Failed reports are created by rizzod, so they lack the Host field
-			// which is set by Puppet
-			if newRprt.Status == "failed" {
-				newRprt.Host = r.host
-			}
-			logger.Printf("Received noop: %s@%s", newRprt.Host, newRprt.ConfigurationVersion)
-			delete(noopHosts, newRprt.Host)
-			commitId, err := git.NewOid(newRprt.ConfigurationVersion)
-			if err != nil {
-				logger.Fatalf("Unable to convert ConfigurationVersion to a git oid: %v", err)
-			}
-			ns.nodes.active[newRprt.Host].commitReports[*commitId] = &newRprt
-			err = marshalReport(newRprt, noopDir, *commitId)
-			if err != nil {
-				logger.Fatalf("Unable to marshal report: %v", err)
-			}
+	for _, commitId := range commitIdsToNoop {
+		err = noopNodeSet(ns, commitId, repo, noopDir, logger)
+		if err != nil {
+			return groupedReport{}, err
 		}
 	}
 
+	parentNoopFailures := false
 	for _, node := range ns.nodes.active {
 		logger.Printf("Creating delta resource for commit %s@%s", node.host, commit.Id().String())
 		parentFailures, parentReports := commitParentReports(*commit, node.lastApply, node.commitReports, node.host, repo, logger)
@@ -564,10 +575,6 @@ func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *g
 				groupedFailures = append(groupedFailures, groupFailures(*commit.Id(), puppetLog, ns.nodes.active))
 			}
 		}
-	}
-	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errNoopNodes)
-	if ok := thresholdExceededNodeSet(ns, logger); ok {
-		return groupedReport{}, ErrThresholdExceeded
 	}
 	compressedErrStrNodes := make(map[string]string)
 	compressedErrNodes := compressErrorNodes(ns.nodes.errored)
