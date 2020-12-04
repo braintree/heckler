@@ -445,7 +445,7 @@ func unmarshalGroupedReport(oid *git.Oid, groupedNoopDir string) (groupedReport,
 	return gr, nil
 }
 
-func noopNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, ignoredResources []string, noopDir string, logger *log.Logger) (groupedReport, error) {
+func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, ignoredResources []string, noopDir string, logger *log.Logger) (groupedReport, error) {
 	var err error
 
 	for host, _ := range ns.nodes.active {
@@ -1192,7 +1192,7 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 		}
-		groupedReport, err := noopNodeSet(ns, commit, req.DeltaNoop, hs.repo, hs.conf.IgnoredResources, hs.conf.NoopDir, logger)
+		groupedReport, err := groupReportNodeSet(ns, commit, req.DeltaNoop, hs.repo, hs.conf.IgnoredResources, hs.conf.NoopDir, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -1307,7 +1307,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	rprt := new(hecklerpb.HecklerNoopRangeReport)
 	var md string
 	for _, gi := range commitLogIds {
-		groupedReport, err := noopNodeSet(ns, commits[gi], true, hs.repo, hs.conf.IgnoredResources, hs.conf.NoopDir, logger)
+		groupedReport, err := groupReportNodeSet(ns, commits[gi], true, hs.repo, hs.conf.IgnoredResources, hs.conf.NoopDir, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -3500,7 +3500,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 					node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 					node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 				}
-				gr, err = noopNodeSet(perNoop, commit, true, repo, conf.IgnoredResources, conf.NoopDir, logger)
+				gr, err = groupReportNodeSet(perNoop, commit, true, repo, conf.IgnoredResources, conf.NoopDir, logger)
 				if err != nil {
 					logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
 					unlockNodeSet("root", false, perNoop, logger)
