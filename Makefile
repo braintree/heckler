@@ -69,7 +69,7 @@ vet: ## Vet heckler, usually called inside the container
 	go vet ./...
 
 .PHONY: test
-test: ## Test heckler, usually called inside the container
+test: vendor/github.com/libgit2/git2go/v31/static-build ## Test heckler, usually called inside the container
 	go test ./...
 
 vendor/github.com/libgit2/git2go/v31/static-build: ## Build libgit2
