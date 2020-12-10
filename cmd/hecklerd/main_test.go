@@ -125,9 +125,28 @@ func TestGroupedResourceOwners(t *testing.T) {
 				},
 			},
 		},
+		{
+			[]*groupedResource{
+				&groupedResource{
+					Title:           "Group[gonzo]",
+					ContainmentPath: []string{"Stage[main]", "Muppetshow", "Group[gonzo]"},
+				},
+			},
+			[]*groupedResource{
+				&groupedResource{
+					Title:           "Group[gonzo]",
+					ContainmentPath: []string{"Stage[main]", "Muppetshow", "Group[gonzo]"},
+					Owners: groupedResourceOwners{
+						File:      nil,
+						Module:    []string{"@kermit"},
+						NodeFiles: map[string][]string{},
+					},
+				},
+			},
+		},
 	}
 	for _, test := range tests {
-		actual, err := groupedResourcesOwners(test.input, "../../muppetshow")
+		actual, err := groupedResourcesOwners(test.input, "../../muppetshow", []string{"modules"})
 		if err != nil {
 			t.Fatalf("groupedResourcesOwners returned an unexpected error: %v", err)
 			return
@@ -253,6 +272,66 @@ func TestResourcesApproved(t *testing.T) {
 		},
 	}
 	tests = append(tests, testNodeOwners)
+	testModuleOwners := resorcesApprovedTest{
+		resourcesApprovedInput{
+			[]*groupedResource{
+				&groupedResource{
+					Title:           "File[/data/puppet_apply/laughtrack]",
+					File:            "modules/muppetshow/manifests/episode.pp",
+					ContainmentPath: []string{"Stage[main]", "Muppetshow", "Group[gonzo]"},
+					Nodes:           []string{"fozzie.example.com", "waldorf.example.com"},
+					NodeFiles: []string{
+						"nodes/fozzie.pp",
+						"nodes/waldorf.pp",
+					},
+					Owners: groupedResourceOwners{
+						File:   []string{"@misspiggy"},
+						Module: []string{"@kermit"},
+						NodeFiles: map[string][]string{
+							"nodes/fozzie.pp":  {"@misspiggy"},
+							"nodes/waldorf.pp": {"@misspiggy"},
+						},
+					},
+				},
+			},
+			[]string{"@kermit"},
+			map[string][]string{
+				"@braintree/muppets": []string{"@kermit", "@misspiggy"},
+			},
+		},
+		resourcesApprovedExpected{
+			true,
+			[]*groupedResource{
+				&groupedResource{
+					Title:           "File[/data/puppet_apply/laughtrack]",
+					File:            "modules/muppetshow/manifests/episode.pp",
+					Nodes:           []string{"fozzie.example.com", "waldorf.example.com"},
+					ContainmentPath: []string{"Stage[main]", "Muppetshow", "Group[gonzo]"},
+					NodeFiles: []string{
+						"nodes/fozzie.pp",
+						"nodes/waldorf.pp",
+					},
+					Owners: groupedResourceOwners{
+						File:   []string{"@misspiggy"},
+						Module: []string{"@kermit"},
+						NodeFiles: map[string][]string{
+							"nodes/fozzie.pp":  {"@misspiggy"},
+							"nodes/waldorf.pp": {"@misspiggy"},
+						},
+					},
+					Approvals: groupedResourceApprovals{
+						File:   []string{},
+						Module: []string{"@kermit"},
+						NodeFiles: map[string][]string{
+							"nodes/fozzie.pp":  {},
+							"nodes/waldorf.pp": {},
+						},
+					},
+				},
+			},
+		},
+	}
+	tests = append(tests, testModuleOwners)
 	for _, test := range tests {
 		approved := resourcesApproved(test.input.gr, test.input.groups, test.input.approvers)
 		if test.expected.approved != approved {

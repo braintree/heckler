@@ -114,6 +114,7 @@ type HecklerdConf struct {
 	NoopDir                    string                `yaml:"noop_dir"`
 	GroupedNoopDir             string                `yaml:"grouped_noop_dir"`
 	AdminOwners                []string              `yaml:"admin_owners"`
+	ModulesPaths               []string              `yaml:"module_paths"`
 }
 
 type NodeSetCfg struct {
@@ -179,13 +180,14 @@ type cleanNodeResult struct {
 }
 
 type deltaResource struct {
-	Title      ResourceTitle
-	Type       string
-	DefineType string
-	File       string
-	Line       int64
-	Events     []*rizzopb.Event
-	Logs       []*rizzopb.Log
+	Title           ResourceTitle
+	Type            string
+	DefineType      string
+	File            string
+	Line            int64
+	ContainmentPath []string
+	Events          []*rizzopb.Event
+	Logs            []*rizzopb.Log
 }
 
 type groupedReport struct {
@@ -212,6 +214,7 @@ type groupedResource struct {
 	Diff            string
 	File            string
 	Line            int64
+	ContainmentPath []string
 	Nodes           []string
 	NodeFiles       []string
 	CompressedNodes string
@@ -224,11 +227,13 @@ type groupedResource struct {
 
 type groupedResourceOwners struct {
 	File      []string
+	Module    []string
 	NodeFiles map[string][]string
 }
 
 type groupedResourceApprovals struct {
 	File      []string
+	Module    []string
 	NodeFiles map[string][]string
 }
 
@@ -674,6 +679,7 @@ func initDeltaResource(resourceTitle ResourceTitle, r *rizzopb.ResourceStatus, d
 	deltaRes.DefineType = resourceDefineType(r)
 	deltaRes.File = r.File
 	deltaRes.Line = r.Line
+	deltaRes.ContainmentPath = r.ContainmentPath
 	return deltaRes
 }
 
@@ -1722,7 +1728,7 @@ func noopOwnersToMarkdown(conf *HecklerdConf, commit *git.Commit, groupedResourc
 	if err != nil {
 		return "", err
 	}
-	groupedResources, err = groupedResourcesOwners(groupedResources, conf.WorkRepo)
+	groupedResources, err = groupedResourcesOwners(groupedResources, conf.WorkRepo, conf.ModulesPaths)
 	if err != nil {
 		return "", err
 	}
@@ -2546,7 +2552,7 @@ func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources 
 	if err != nil {
 		return notApproved, err
 	}
-	groupedResources, err = groupedResourcesOwners(groupedResources, conf.WorkRepo)
+	groupedResources, err = groupedResourcesOwners(groupedResources, conf.WorkRepo, conf.ModulesPaths)
 	if err != nil {
 		return notApproved, err
 	}
@@ -2685,7 +2691,7 @@ func groupedResourcesNodeFiles(groupedResources []*groupedResource, puppetCodePa
 // on each grouped resource with the groups & users from the CODEOWNERS file
 // who are assigned to the source code files and node files of the grouped
 // resource. Return the populated groupedResource slice.
-func groupedResourcesOwners(groupedResources []*groupedResource, puppetCodePath string) ([]*groupedResource, error) {
+func groupedResourcesOwners(groupedResources []*groupedResource, puppetCodePath string, modulesPaths []string) ([]*groupedResource, error) {
 	co, err := codeowners.NewCodeowners(puppetCodePath)
 	if err != nil {
 		return nil, err
@@ -2701,6 +2707,15 @@ func groupedResourcesOwners(groupedResources []*groupedResource, puppetCodePath 
 		}
 		if gr.File != "" {
 			gr.Owners.File = co.Owners(gr.File)
+		}
+		for _, module := range containmentPathModules(gr.ContainmentPath) {
+			for _, modulesPath := range modulesPaths {
+				modulePath := fmt.Sprintf("%s/%s", modulesPath, module)
+				fullPath := fmt.Sprintf("%s/%s", puppetCodePath, modulePath)
+				if _, err := os.Stat(fullPath); err == nil {
+					gr.Owners.Module = append(gr.Owners.Module, co.Owners(modulePath)...)
+				}
+			}
 		}
 	}
 	return groupedResources, nil
@@ -2740,6 +2755,29 @@ func groupedResourcesUniqueOwners(groupedResources []*groupedResource) noopOwner
 		}
 	}
 	return no
+}
+
+func containmentPathModules(containmentPath []string) []string {
+	var modules []string
+	if len(containmentPath) == 0 {
+		return nil
+	}
+	regexPuppetStage := regexp.MustCompile(`^Stage\[`)
+	for i, path := range containmentPath {
+		if i == len(containmentPath)-1 {
+			// Skip the last element which is the resource itself
+			continue
+		}
+		if regexPuppetStage.MatchString(path) {
+			// Skip Puppet Stages
+			continue
+		}
+		// TODO: allow ownership of nested modules
+		// Grab only the name of the first module
+		baseModule := strings.Split(path, "::")[0]
+		modules = append(modules, strings.ToLower(baseModule))
+	}
+	return modules
 }
 
 // Strips the `@` prefix from users and groups so that they are not notified on
@@ -2849,6 +2887,12 @@ func resourcesApproved(groupedResources []*groupedResource, groups map[string][]
 		if gr.File != "" {
 			gr.Approvals.File = intersectionOwnersApprovers(gr.Owners.File, approvers, groups)
 			if len(gr.Approvals.File) > 0 {
+				grApproved = true
+			}
+		}
+		if len(gr.Owners.Module) > 0 {
+			gr.Approvals.Module = intersectionOwnersApprovers(gr.Owners.Module, approvers, groups)
+			if len(gr.Approvals.Module) > 0 {
 				grApproved = true
 			}
 		}
@@ -3858,6 +3902,7 @@ func main() {
 	conf.LoopApprovalSleepSeconds = 10
 	conf.LoopDirtySleepSeconds = 10
 	conf.ApplySetOrder = []string{"all"}
+	conf.ModulesPaths = []string{"modules", "vendor/modules"}
 	err = yaml.Unmarshal([]byte(data), conf)
 	if err != nil {
 		logger.Fatalf("Cannot unmarshal config: %v", err)
