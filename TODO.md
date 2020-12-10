@@ -2,7 +2,6 @@
 
 ## Next Up
 
-- [ ] Add module approval, based on containment in puppet report?
 - [ ] Rename AutoClose to AutoApprove
 - [ ] Slack notifications
 - [ ] Highlight Service Refreshes in GitHub issue
