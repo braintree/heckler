@@ -56,6 +56,3 @@
   - [ ] Cancel all contexes
   - [x] Unlock all nodes
 - [ ] Send permadiffs to server owners??
-- [ ] Rizzod crash recovery of git repo
-  - [ ] Remove index.lock
-  - [ ] Git checkout; git clean -fd

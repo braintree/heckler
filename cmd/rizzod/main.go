@@ -469,6 +469,18 @@ func main() {
 
 	logger.Printf("rizzod: v%s\n", Version)
 
+	// Open the port earlier than needed, to ensure we are the only process
+	// running. This ensures the gitutil.ResetRepo command is safe to run.
+	lis, err := net.Listen("tcp", port)
+	if err != nil {
+		logger.Fatalf("failed to listen: %v", err)
+	}
+
+	err = gitutil.ResetRepo(conf.RepoDir, logger)
+	if err != nil {
+		logger.Fatalf("Error: unable to reset repo, exiting: %v", err)
+	}
+
 	// Clone a copy of the repo on startup so that future fetches are quicker.
 	repoUrl := "http://" + conf.HecklerHost + ":8080/puppetcode"
 	logger.Printf("Pulling: %s", repoUrl)
@@ -477,10 +489,6 @@ func main() {
 		logger.Fatalf("Error: unable to pull repo, exiting: %v", err)
 	}
 
-	lis, err := net.Listen("tcp", port)
-	if err != nil {
-		logger.Fatalf("failed to listen: %v", err)
-	}
 	grpcServer := grpc.NewServer()
 	rizzoServer := new(rizzoServer)
 	go func() {

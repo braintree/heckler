@@ -291,3 +291,32 @@ func Gc(repoDir string, logger *log.Logger) error {
 	logger.Printf("Completed git gc of: '%s'", repoDir)
 	return nil
 }
+
+// Cleanup a git repo that is in an interim state from a crashed process
+func ResetRepo(repoDir string, logger *log.Logger) error {
+	// Remove stale git lock files left by any crashed processes
+	gitLockFile := repoDir + "/.git/index.lock"
+	if _, err := os.Stat(gitLockFile); err == nil {
+		err = os.Remove(gitLockFile)
+		if err != nil {
+			return err
+		}
+	}
+	// Remove untracked files from interrupted checkout
+	gitClean := exec.Command("git", "-C", repoDir, "clean", "-f", "-d", "-q")
+	logger.Printf("Running git clean: %v", gitClean.Args)
+	cleanOut, err := gitClean.Output()
+	if err != nil {
+		logger.Printf("Error: git clean failed, %v, '%s'", err, cleanOut)
+		return err
+	}
+	// Reset any modified files from an interrupted checkout
+	gitReset := exec.Command("git", "-C", repoDir, "reset", "--hard", "-q")
+	logger.Printf("Running git reset: %v", gitReset.Args)
+	resetOut, err := gitReset.Output()
+	if err != nil {
+		logger.Printf("Error: git clean failed, %v, '%s'", err, resetOut)
+		return err
+	}
+	return nil
+}
