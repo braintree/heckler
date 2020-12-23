@@ -2509,7 +2509,7 @@ func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 			if issue.GetState() == "closed" {
 				continue
 			}
-			if len(gr.Resources) == 0 {
+			if len(gr.Resources) == 0 && len(gr.Failures) == 0 {
 				err := closeIssue(ghclient, conf, issue, "No noop output marking issue as 'closed'")
 				if err != nil {
 					logger.Printf("Error: unable to close approved issue(%d): %v", issue.GetNumber(), err)
@@ -3128,7 +3128,9 @@ func tagApproved(repo *git.Repository, ghclient *github.Client, conf *HecklerdCo
 		} else if err != nil {
 			return false, fmt.Errorf("Unable to unmarshal groupedCommit: %w", err)
 		}
-		if len(gr.Resources) == 0 {
+		// Failures are not changes, but we should not auto approve the commit if
+		// it introduced some type of breakage manifesting in an EvalError
+		if len(gr.Resources) == 0 && len(gr.Failures) == 0 {
 			approved[gi] = "Approved, no changes in noop"
 			continue
 		}
