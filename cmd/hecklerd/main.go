@@ -1650,6 +1650,12 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 		return nil, err
 	}
 
+	// If we can't determine the commmit authors, assign the issue to the admins
+	// as a fallback
+	if len(authors) == 0 {
+		authors = append(authors, conf.AdminOwners...)
+	}
+
 	body, err := noopToMarkdown(conf, commit, gr, templates)
 	if err != nil {
 		return nil, err
@@ -1688,9 +1694,7 @@ func commitAuthorsLogins(ghclient *github.Client, commit *git.Commit) ([]string,
 		return []string{}, err
 	}
 	authors := make([]string, 0)
-	if githubUser == nil {
-		return nil, fmt.Errorf("Unable to find GitHub user for commit author email: '%s'", commit.Author().Email)
-	} else {
+	if githubUser != nil {
 		authors = append(authors, *githubUser.Login)
 	}
 	trailers, err := git.MessageTrailers(commit.Message())
@@ -1711,9 +1715,7 @@ func commitAuthorsLogins(ghclient *github.Client, commit *git.Commit) ([]string,
 		if err != nil {
 			return []string{}, err
 		}
-		if githubUser == nil {
-			return nil, fmt.Errorf("Unable to find GitHub user for commit author email: '%s'", email[1])
-		} else {
+		if githubUser != nil {
 			authors = append(authors, *githubUser.Login)
 		}
 	}
@@ -2568,14 +2570,17 @@ func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources 
 	if err != nil {
 		return notApproved, err
 	}
-	// Remove commit authors if they approved the noop, since we do not want
-	// authors approving their own noops.
-	// TODO make this configurable
-	approvers := setDifferenceStrSlice(noopApprovers, commitAuthors)
-	// TODO Use the populated groupedResources to provide helpful debug messages
-	// on what a noop still needs for approval, need to determine the best way to
-	// present the information.
-	codeownersHaveApproved := resourcesApproved(groupedResources, groups, approvers)
+	codeownersHaveApproved := false
+	if len(commitAuthors) > 0 {
+		// Remove commit authors if they approved the noop, since we do not want
+		// authors approving their own noops.
+		// TODO make this configurable
+		approvers := setDifferenceStrSlice(noopApprovers, commitAuthors)
+		// TODO Use the populated groupedResources to provide helpful debug messages
+		// on what a noop still needs for approval, need to determine the best way to
+		// present the information.
+		codeownersHaveApproved = resourcesApproved(groupedResources, groups, approvers)
+	}
 	adminHasApproved := adminOwnerApproved(groupedResources, conf.AdminOwners, noopApprovers)
 	if codeownersHaveApproved {
 		return codeownersApproved, nil
