@@ -3245,7 +3245,7 @@ func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 		for _, nextTag := range nextTags {
 			err = reconcileMilestone(priorTag, nextTag, repo, conf, logger)
 			if err != nil {
-				logger.Printf("Error: unable to reconcile milestone for nextTag '%s', sleeping: %v", nextTag, err)
+				logger.Printf("Error: Unable to reconcilMilestone for nextTag(%s) after priorTag(%s)', sleeping: %v", nextTag, priorTag, err)
 				break
 			}
 			priorTag = nextTag
@@ -3264,12 +3264,12 @@ func reconcileMilestone(priorTag string, nextTag string, repo *git.Repository, c
 	if err == context.DeadlineExceeded {
 		return errors.New("Timeout reaching GitHub for milestone, sleeping")
 	} else if err != nil {
-		return err
+		return fmt.Errorf("Unable to query for milestoneFromTag: %w", err)
 	}
 	if nextTagMilestone == nil {
 		nextTagMilestone, err = createMilestone(nextTag, ghclient, conf)
 		if err != nil {
-			return err
+			return fmt.Errorf("Unable to createMilestone: %w", err)
 		}
 		logger.Printf("Successfully created new milestone: %v", *nextTagMilestone.Title)
 	}
