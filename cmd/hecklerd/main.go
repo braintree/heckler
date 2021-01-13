@@ -1767,15 +1767,15 @@ func noopOwnersToMarkdown(conf *HecklerdConf, commit *git.Commit, groupedResourc
 // nodeFile takes node name and a map of a puppet node source file to its node
 // regexes contained in the source file. Then nodeFile returns the node source
 // file path which matches the node.
-func nodeFile(node string, nodeFileRegexes map[string][]*regexp.Regexp, puppetCodePath string) (string, error) {
+func nodeFile(node string, nodeFileRegexes map[string][]*regexp.Regexp, puppetCodePath string) (string, bool) {
 	for file, regexes := range nodeFileRegexes {
 		for _, regex := range regexes {
 			if regex.MatchString(node) {
-				return strings.TrimPrefix(file, puppetCodePath+"/"), nil
+				return strings.TrimPrefix(file, puppetCodePath+"/"), true
 			}
 		}
 	}
-	return "", fmt.Errorf("Unable to find node file for node: %v", node)
+	return "", false
 }
 
 func noopTitle(commit *git.Commit, prefix string) string {
@@ -2696,9 +2696,8 @@ func groupedResourcesNodeFiles(groupedResources []*groupedResource, puppetCodePa
 	for _, gr := range groupedResources {
 		for _, node := range gr.Nodes {
 			if _, ok := nodesToFile[node]; !ok {
-				nodesToFile[node], err = nodeFile(node, nodeFileRegexes, puppetCodePath)
-				if err != nil {
-					return nil, err
+				if nf, ok := nodeFile(node, nodeFileRegexes, puppetCodePath); ok {
+					nodesToFile[node] = nf
 				}
 			}
 		}
@@ -2707,7 +2706,9 @@ func groupedResourcesNodeFiles(groupedResources []*groupedResource, puppetCodePa
 	for _, gr := range groupedResources {
 		nodeFiles := make([]string, 0)
 		for _, node := range gr.Nodes {
-			nodeFiles = append(nodeFiles, nodesToFile[node])
+			if nf, ok := nodesToFile[node]; ok {
+				nodeFiles = append(nodeFiles, nf)
+			}
 		}
 		gr.NodeFiles = uniqueStrSlice(nodeFiles)
 	}
