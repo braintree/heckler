@@ -292,8 +292,21 @@ func Gc(repoDir string, logger *log.Logger) error {
 	return nil
 }
 
-// Cleanup a git repo that is in an interim state from a crashed process
+// Cleanup a git repo that is in an interim state from a crashed process, or
+// remove if unable to cleanup
 func ResetRepo(repoDir string, logger *log.Logger) error {
+	if _, err := os.Stat(repoDir); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	// If we don't have a git directory, delete our repo
+	if _, err := os.Stat(repoDir + "/.git"); os.IsNotExist(err) {
+		os.RemoveAll(repoDir)
+		return nil
+	} else if err != nil {
+		return err
+	}
 	// Remove stale git lock files left by any crashed processes
 	gitLockFile := repoDir + "/.git/index.lock"
 	if _, err := os.Stat(gitLockFile); err == nil {
