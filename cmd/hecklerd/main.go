@@ -281,7 +281,7 @@ func grpcConnect(ctx context.Context, node *Node, clientConnChan chan *Node) {
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, address, grpc.WithInsecure(), grpc.WithBlock(), grpc.FailOnNonTempDialError(true))
 	if err != nil {
-		node.err = err
+		node.err = fmt.Errorf("grpc Connect failed: %w", err)
 		clientConnChan <- node
 	} else {
 		node.rizzoClient = rizzopb.NewRizzoClient(conn)
