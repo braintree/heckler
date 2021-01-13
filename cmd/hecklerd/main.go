@@ -3163,7 +3163,7 @@ func tagApproved(repo *git.Repository, ghclient *github.Client, conf *HecklerdCo
 		}
 		noopApproved, err := noopApproved(ghclient, conf, gr.Resources, commit, issue)
 		if err != nil {
-			return false, fmt.Errorf("Unable to determine if issue(%d) is approved: %w", issue.Number, err)
+			return false, fmt.Errorf("Unable to determine if issue(%s) is approved: %w", issue.GetHTMLURL(), err)
 		}
 		switch noopApproved {
 		case notApproved:
