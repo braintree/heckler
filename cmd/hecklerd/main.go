@@ -1448,11 +1448,20 @@ func milestoneFromTag(milestone string, ghclient *github.Client, conf *HecklerdC
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	milestoneOpts := &github.MilestoneListOptions{
-		State: "all",
+		State:       "all",
+		ListOptions: github.ListOptions{PerPage: 100},
 	}
-	allMilestones, _, err := ghclient.Issues.ListMilestones(ctx, conf.RepoOwner, conf.Repo, milestoneOpts)
-	if err != nil {
-		return nil, err
+	var allMilestones []*github.Milestone
+	for {
+		milestones, resp, err := ghclient.Issues.ListMilestones(ctx, conf.RepoOwner, conf.Repo, milestoneOpts)
+		if err != nil {
+			return nil, err
+		}
+		allMilestones = append(allMilestones, milestones...)
+		if resp.NextPage == 0 {
+			break
+		}
+		milestoneOpts.Page = resp.NextPage
 	}
 	for _, ms := range allMilestones {
 		if *ms.Title == milestone {
