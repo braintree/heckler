@@ -200,14 +200,13 @@ func RevparseToCommit(rev string, repo *git.Repository) (*git.Commit, error) {
 		return nil, err
 	}
 
-	// Annotated tags are separate git objects, so we need to find the target
-	// commit object of the tag.
+	// Annotated tags are separate git objects, so we need to peel the tag until
+	// we get to the target commit object of the tag.
 	if obj.Type() == git.ObjectTag {
-		tagObj, err := obj.AsTag()
+		obj, err = obj.Peel(git.ObjectCommit)
 		if err != nil {
 			return nil, err
 		}
-		obj = tagObj.Target()
 	}
 
 	commit, err := obj.AsCommit()
