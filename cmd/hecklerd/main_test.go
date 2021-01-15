@@ -374,7 +374,7 @@ func TestIntersectionOwnersApprovers(t *testing.T) {
 	}
 }
 
-func TestNextSemVerTag(t *testing.T) {
+func TestNextSemVerTags(t *testing.T) {
 	t.Parallel()
 	type input struct {
 		priorTag string
@@ -383,7 +383,7 @@ func TestNextSemVerTag(t *testing.T) {
 	}
 	tests := []struct {
 		input    input
-		expected string
+		expected []string
 	}{
 		{
 			input{
@@ -391,11 +391,11 @@ func TestNextSemVerTag(t *testing.T) {
 				prefix:   "",
 				tags:     []string{"v1", "v1.1", "v2"},
 			},
-			"v1.1",
+			[]string{"v1.1", "v2"},
 		},
 	}
 	for _, test := range tests {
-		actual, err := nextSemVerTag(test.input.priorTag, test.input.prefix, test.input.tags)
+		actual, err := nextSemVerTags(test.input.priorTag, test.input.prefix, test.input.tags)
 		if err != nil {
 			t.Fatalf("nextSemVerTag returned an unexpected error: %v", err)
 			return
