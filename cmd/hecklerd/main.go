@@ -2459,7 +2459,8 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			if (nodeSetIndex + 1) < len(conf.ApplySetOrder) {
 				if applySetSleep > 0 {
 					logger.Printf("Sleeping for %v, before applying next set '%s'...", applySetSleep, conf.ApplySetOrder[nodeSetIndex+1])
-					sleepAndLog(applySetSleep, time.Duration(10)*time.Second, "Waiting to apply next node set", logger)
+					sleepLogMsg := fmt.Sprintf("Node sets '%v' applied, Next sets to apply '%v'", conf.ApplySetOrder[:nodeSetIndex+1], conf.ApplySetOrder[nodeSetIndex+1:])
+					sleepAndLog(applySetSleep, time.Duration(10)*time.Second, sleepLogMsg, logger)
 				}
 			}
 		}
