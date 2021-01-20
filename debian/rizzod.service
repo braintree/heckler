@@ -12,6 +12,13 @@ MemoryLimit=1024M
 MemoryMax=1024M
 Restart=on-failure
 RestartSec=10s
+# We would like to be able to upgrade rizzod's deb with rizzod. This requires
+# that rizzod does not stop during the package upgrade. So signal for rizzod to
+# stop, but do not kill any processes via systemd. Without these two settings
+# the puppet process receives a SIGTERM from systemd and dies during the
+# package upgrade.
+ExecStop=/bin/kill -- $MAINPID
+KillMode=none
 
 [Install]
 WantedBy=multi-user.target
