@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path"
 	"regexp"
 	"runtime"
 	"runtime/pprof"
@@ -49,6 +50,15 @@ var Version string
 var ErrLastApplyUnknown = errors.New("Unable to determine lastApply commit, use force flag to update")
 var ErrThresholdExceeded = errors.New("Threshold for err nodes or lock nodes exceeded")
 
+type applyError struct {
+	Host   string
+	Report rizzopb.PuppetReport
+}
+
+func (e *applyError) Error() string {
+	return fmt.Sprintf("Apply status: '%s', %s", e.Report.Status, e.Report.ConfigurationVersion)
+}
+
 type lastApplyStatus int
 type noopApproverType int
 
@@ -79,6 +89,7 @@ var Debug = false
 // resources in node blocks to be mistaken for define types. Is there a more
 // robust way to match for define types?
 var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
+var RegexGithubGroup = regexp.MustCompile(`^@.*/.*$`)
 
 type HecklerdConf struct {
 	Repo                       string                `yaml:"repo"`
@@ -1306,7 +1317,7 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 			ns.nodes.active[r.host].err = fmt.Errorf("Apply failed: %w", r.err)
 			errApplyNodes[r.host] = ns.nodes.active[r.host]
 		} else if r.report.Status == "failed" {
-			ns.nodes.active[r.host].err = fmt.Errorf("Apply status: '%s', %s", r.report.Status, r.report.ConfigurationVersion)
+			ns.nodes.active[r.host].err = &applyError{r.host, r.report}
 			errApplyNodes[r.host] = ns.nodes.active[r.host]
 		} else {
 			if noop {
@@ -1624,7 +1635,7 @@ func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue
 	return err
 }
 
-func noopToMarkdown(conf *HecklerdConf, commit *git.Commit, gr groupedReport, templates *template.Template) (string, error) {
+func noopToMarkdown(conf *HecklerdConf, commit *git.Commit, gr groupedReport, templates *template.Template) (string, string, error) {
 	var body string
 	if gr.ParentNoopFailures {
 		body += fmt.Sprintf("## WARNING: Unable to noop some parents of this commit!\n\n")
@@ -1646,14 +1657,15 @@ func noopToMarkdown(conf *HecklerdConf, commit *git.Commit, gr groupedReport, te
 	if len(gr.Resources) > 0 {
 		noopOwnersMarkdown, err := noopOwnersToMarkdown(conf, commit, gr.Resources, templates)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		body += noopOwnersMarkdown
 	}
-	return body, nil
+	title := fmt.Sprintf("%sPuppet noop output for commit: %s - %s", issuePrefix(conf.EnvPrefix), commit.Id().String(), commit.Summary())
+	return title, body, nil
 }
 
-func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.Commit, gr groupedReport, templates *template.Template) (*github.Issue, error) {
+func githubCreateCommitIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.Commit, gr groupedReport, templates *template.Template) (*github.Issue, error) {
 	authors, err := commitAuthorsLogins(ghclient, commit)
 	if err != nil {
 		return nil, err
@@ -1665,14 +1677,21 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 		authors = append(authors, conf.AdminOwners...)
 	}
 
-	body, err := noopToMarkdown(conf, commit, gr, templates)
+	title, body, err := noopToMarkdown(conf, commit, gr, templates)
 	if err != nil {
 		return nil, err
 	}
+	return githubCreateIssue(ghclient, conf, title, body, authors)
+}
 
+func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, title, body string, authors []string) (*github.Issue, error) {
+	if conf.GitHubDisableNotifications {
+		body = fmt.Sprintf("Notifications disabled, not assigning to: %v\n\n", authors) + body
+	}
 	// GitHub has a max issue body size of 65536
 	if len(body) >= 65536 {
-		notice := fmt.Sprintf("## Noop Output Trimmed!\n\nOutput has been trimmed because it is too long for the GitHub issue\n\n")
+		notice := fmt.Sprintf("## Noop Output Trimmed!\n\n")
+		notice += fmt.Sprintf("Output has been trimmed because it is too long for the GitHub issue\n\n")
 		body = notice + body
 		runeBody := []rune(body)
 		// trim to less then the max, just to be sure it will fit
@@ -1680,11 +1699,16 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.
 		body = string(trimmedRunes)
 	}
 	githubIssue := &github.IssueRequest{
-		Title: github.String(noopTitle(commit, conf.EnvPrefix)),
+		Title: github.String(title),
 		Body:  github.String(body),
 	}
+	// Assignees must not be prefixed with '@'
+	trimmedAuthors := make([]string, len(authors))
+	for i, author := range authors {
+		trimmedAuthors[i] = strings.TrimPrefix(author, "@")
+	}
 	if !conf.GitHubDisableNotifications {
-		githubIssue.Assignees = &authors
+		githubIssue.Assignees = &trimmedAuthors
 	}
 	ctx := context.Background()
 	ni, _, err := ghclient.Issues.Create(ctx, conf.RepoOwner, conf.Repo, githubIssue)
@@ -1778,16 +1802,12 @@ func nodeFile(node string, nodeFileRegexes map[string][]*regexp.Regexp, puppetCo
 	return "", false
 }
 
-func noopTitle(commit *git.Commit, prefix string) string {
-	return fmt.Sprintf("%sPuppet noop output for commit: %s - %s", issuePrefix(prefix), commit.Id().String(), commit.Summary())
-}
-
 func commitToMarkdown(conf *HecklerdConf, commit *git.Commit, gr groupedReport, templates *template.Template) (string, error) {
-	body, err := noopToMarkdown(conf, commit, gr, templates)
+	title, body, err := noopToMarkdown(conf, commit, gr, templates)
 	if err != nil {
 		return "", err
 	}
-	md := fmt.Sprintf("## %s\n\n", noopTitle(commit, conf.EnvPrefix))
+	md := fmt.Sprintf("## %s\n\n", title)
 	md += body
 	return md, nil
 }
@@ -2383,7 +2403,7 @@ func greatestApprovedTag(nextTags []string, priorTag string, conf *HecklerdConf,
 //       If yes
 //         Apply new tag across all nodes
 //   If no, do nothing
-func applyLoop(conf *HecklerdConf, repo *git.Repository) {
+func applyLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	var err error
 	var ns *NodeSet
 	var perApply *NodeSet
@@ -2433,6 +2453,7 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			continue
 		}
 		logger.Printf("Tag '%s' is ready to apply, applying with set order: %v", nextTag, conf.ApplySetOrder)
+		var applyErrors []error
 		for nodeSetIndex, nodeSetName := range conf.ApplySetOrder {
 			logger.Printf("Applying Set '%s' (%d of %d sets)", nodeSetName, nodeSetIndex+1, len(conf.ApplySetOrder))
 			perApply = &NodeSet{
@@ -2452,6 +2473,11 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 			}
 			closeNodeSet(perApply, logger)
 			compressedErrNodes := compressErrorNodes(perApply.nodes.errored)
+			for _, node := range perApply.nodes.errored {
+				if _, ok := node.err.(*applyError); ok {
+					applyErrors = append(applyErrors, node.err)
+				}
+			}
 			for host, err := range compressedErrNodes {
 				logger.Printf("errNodes: %s, Error: %v", host, err)
 			}
@@ -2463,6 +2489,10 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository) {
 					sleepAndLog(applySetSleep, time.Duration(10)*time.Second, sleepLogMsg, logger)
 				}
 			}
+		}
+		err = reportErrors(applyErrors, conf, templates, logger)
+		if err != nil {
+			logger.Printf("Error: unable to report apply errors, '%v'", err)
 		}
 		logger.Println("Apply complete, sleeping")
 	}
@@ -2850,16 +2880,15 @@ func githubNoopApprovals(ghclient *github.Client, conf *HecklerdConf, issue *git
 func githubGroupsForGroupedResources(ghclient *github.Client, groupedResources []*groupedResource) (map[string][]string, error) {
 	var err error
 	groups := make(map[string][]string)
-	regexGithubGroup := regexp.MustCompile(`^@.*/.*$`)
 	for _, gr := range groupedResources {
 		for _, owner := range gr.Owners.File {
-			if regexGithubGroup.MatchString(owner) {
+			if RegexGithubGroup.MatchString(owner) {
 				groups[owner] = nil
 			}
 		}
 		for _, nodeFileOwners := range gr.Owners.NodeFiles {
 			for _, owner := range nodeFileOwners {
-				if regexGithubGroup.MatchString(owner) {
+				if RegexGithubGroup.MatchString(owner) {
 					groups[owner] = nil
 				}
 			}
@@ -2900,6 +2929,36 @@ func githubGroupMembersUsernames(ghclient *github.Client, group string) ([]strin
 		usernames[i] = "@" + user.GetLogin()
 	}
 	return usernames, nil
+}
+
+// Given a slice of GitHub user & groups return a slice with all groups
+// expanded to their members and any dups removed.
+func githubExpandGroups(ghclient *github.Client, usersOrGroups []string) ([]string, error) {
+	var err error
+	var groups []string
+	uniqueUsers := make(map[string]bool)
+	for _, thing := range usersOrGroups {
+		if RegexGithubGroup.MatchString(thing) {
+			groups = append(groups, thing)
+		} else {
+			uniqueUsers[thing] = true
+		}
+	}
+	var groupUsers []string
+	for _, group := range groups {
+		groupUsers, err = githubGroupMembersUsernames(ghclient, group)
+		if err != nil {
+			return nil, err
+		}
+		for _, user := range groupUsers {
+			uniqueUsers[user] = true
+		}
+	}
+	var users []string
+	for user := range uniqueUsers {
+		users = append(users, user)
+	}
+	return users, nil
 }
 
 // Given a slice of groupedResources and a slice of approvers, populate the
@@ -3423,6 +3482,124 @@ func dirtyLoop(conf *HecklerdConf, repo *git.Repository) {
 	}
 }
 
+func reportErrors(errors []error, conf *HecklerdConf, templates *template.Template, logger *log.Logger) error {
+	ghclient, _, err := githubConn(conf)
+	if err != nil {
+		return err
+	}
+	for _, err := range errors {
+		if _, ok := err.(*applyError); ok {
+			continue
+		}
+		return fmt.Errorf("%T is not a known error type", err)
+	}
+	nodeFileRegexes, err := puppetutil.NodeFileRegexes(conf.WorkRepo + "/nodes")
+	if err != nil {
+		return err
+	}
+	nodeFilesToErrors := make(map[string][]error)
+	for _, err := range errors {
+		applyErr := err.(*applyError)
+		if nf, ok := nodeFile(applyErr.Host, nodeFileRegexes, conf.WorkRepo); ok {
+			nodeFilesToErrors[nf] = append(nodeFilesToErrors[nf], err)
+		} else {
+			return fmt.Errorf("No node file found for '%s'", applyErr.Host)
+		}
+	}
+	// Create issues if they do not already exist
+	for nodeFile, perNodeFileErrors := range nodeFilesToErrors {
+		issue, err := githubIssueForApplyFailure(ghclient, nodeFile, conf)
+		if err != nil {
+			return err
+		}
+		if issue != nil {
+			logger.Printf("Skipping Creation, issue already exists for ApplyFailures for '%s'", nodeFile)
+			continue
+		}
+		_, err = githubCreateApplyFailureIssue(ghclient, perNodeFileErrors, nodeFile, conf, templates)
+		if err != nil {
+			return err
+		}
+		logger.Printf("Created ApplyFailure issue for '%s'", nodeFile)
+	}
+	return nil
+}
+
+func applyFailuresToMarkdown(nodeErrors []error, nodeFile string, prefix string, templates *template.Template) (string, string, error) {
+	var body strings.Builder
+	var err error
+
+	if len(nodeErrors) == 0 {
+		return "", "", fmt.Errorf("nodeErrors is zero length")
+	}
+	var hosts []string
+	for _, err := range nodeErrors {
+		hosts = append(hosts, err.(*applyError).Host)
+	}
+
+	compressedHosts := compressHosts(hosts)
+
+	data := struct {
+		CompressedHosts string
+		Report          rizzopb.PuppetReport
+	}{
+		compressedHosts,
+		nodeErrors[0].(*applyError).Report,
+	}
+	err = templates.ExecuteTemplate(&body, "applyFailure.tmpl", data)
+	if err != nil {
+		return "", "", err
+	}
+	title := fmt.Sprintf("%sPuppetApplyFailed for %s from %s", issuePrefix(prefix), compressedHosts, path.Base(nodeFile))
+	return title, body.String(), nil
+}
+
+func githubCreateApplyFailureIssue(ghclient *github.Client, nodeErrors []error, nodeFile string, conf *HecklerdConf, templates *template.Template) (*github.Issue, error) {
+	title, body, err := applyFailuresToMarkdown(nodeErrors, nodeFile, conf.EnvPrefix, templates)
+	if err != nil {
+		return nil, err
+	}
+	co, err := codeowners.NewCodeowners(conf.WorkRepo)
+	if err != nil {
+		return nil, err
+	}
+	nodeFileOwners := co.Owners(nodeFile)
+	authors, err := githubExpandGroups(ghclient, nodeFileOwners)
+	if err != nil {
+		return nil, err
+	}
+	// If we can't determine the node owners, assign the issue to the admins
+	// as a fallback
+	if len(authors) == 0 {
+		authors = append(authors, conf.AdminOwners...)
+	}
+	return githubCreateIssue(ghclient, conf, title, body, authors)
+}
+
+func githubIssueForApplyFailure(ghclient *github.Client, nodeFile string, conf *HecklerdConf) (*github.Issue, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	prefix := conf.EnvPrefix
+	query := fmt.Sprintf("%s in:title", path.Base(nodeFile))
+	if prefix != "" {
+		query += fmt.Sprintf(" %sin:title", issuePrefix(prefix))
+	}
+	query += fmt.Sprintf(" %sin:title", "PuppetApplyFailed")
+	query += " state:open"
+	query += fmt.Sprintf(" author:app/%s", conf.GitHubAppSlug)
+	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to search GitHub Issues: %w", err)
+	}
+	if searchResults.GetTotal() == 0 {
+		return nil, nil
+	} else if searchResults.GetTotal() == 1 {
+		return &searchResults.Issues[0], nil
+	} else {
+		return nil, errors.New("More than one issue exists for a single commit")
+	}
+}
+
 // Noop a dirty node with its dirty commit and also childThreshold number of
 // child commits. If a diffless noop is found, apply the commit, which marks
 // the node as clean.
@@ -3634,7 +3811,7 @@ func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Temp
 				continue
 			}
 			if issue == nil {
-				issue, err = githubCreateIssue(ghclient, conf, commit, gr, templates)
+				issue, err = githubCreateCommitIssue(ghclient, conf, commit, gr, templates)
 				if err != nil {
 					logger.Printf("Error: unable to create github issue: %v", err)
 					continue
@@ -3940,6 +4117,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if len(conf.AdminOwners) == 0 {
+		logger.Println("You must supply at least one GitHub AdminOwner")
+		os.Exit(1)
+	}
+
 	if clearState && clearGitHub {
 		logger.Println("clear & ghclear are mutually exclusive")
 		os.Exit(1)
@@ -4059,7 +4241,7 @@ func main() {
 		if conf.LoopApplySleepSeconds == 0 {
 			logger.Println("applyLoop disabled")
 		} else {
-			go applyLoop(conf, repo)
+			go applyLoop(conf, repo, templates)
 		}
 		if conf.LoopApprovalSleepSeconds == 0 {
 			logger.Println("approvalLoop disabled")
