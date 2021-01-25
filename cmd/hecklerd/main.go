@@ -3619,11 +3619,12 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 	var commitList []git.Oid
 	if commitInNodeLineage(*headCommit.Id(), node, repo, logger) {
 		beginRev = node.lastApply.String()
-		commitList = []git.Oid{node.lastApply}
+		// Consider the dirty lastApply commit as well
+		commitList = append(commitList, node.lastApply)
 	} else {
-		logger.Printf("Commit %s@%s is not in the lineage of branch: %s", node.lastApply.String(), node.host, conf.RepoBranch)
+		// Since the dirty lastApply is not in the node lineage, try starting
+		// childThreshold commits before the HEAD commit
 		beginRev = fmt.Sprintf("%s~%d", conf.RepoBranch, childThreshold)
-		commitList = make([]git.Oid, 0)
 	}
 	newCommitList, _, err := commitLogIdList(repo, beginRev, conf.RepoBranch)
 	if err != nil {
@@ -3643,6 +3644,7 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 	}
 	commitsToNoop := make([]git.Oid, 0)
 	for _, id := range commitsToConsider {
+		// Only noop commit if we have not done so already, in a previous run
 		if _, ok := dn.commitIds[id]; !ok {
 			commitsToNoop = append(commitsToNoop, id)
 		}
@@ -3690,7 +3692,7 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 		// if newRprt.ResourceStatuses is length zero than the noop reported no
 		// changes were needed, i.e. the node is clean
 		if len(newRprt.ResourceStatuses) == 0 {
-			logger.Printf("Applying %s@%s", node.host, id.String())
+			logger.Printf("Noop was clean, applying %s@%s", node.host, id.String())
 			par := rizzopb.PuppetApplyRequest{Rev: id.String(), Noop: false}
 			go hecklerApply(node, applyResults, par)
 			r := <-applyResults
