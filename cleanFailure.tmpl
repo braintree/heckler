@@ -1,0 +1,14 @@
+### Puppet Clean Failures
+
+The following hosts were applied with a dirty version of the Puppet repo {{ .DirtyLastApply }}-dirty.  Heckler has tried to noop this box with its dirty rev as well as nearby revs, but it is unable to find a noop which does not result in a diff. Please apply these hosts with a known commit.
+
+#### *Hosts:* `{{ .CompressedHosts }}`
+
+#### *Logs:*
+
+{{ range $log := .Report.Logs }}
+-  **{{ $log.Source }}**
+    ```
+{{ indent 4 $log.Message }}
+    ```
+{{ end }}

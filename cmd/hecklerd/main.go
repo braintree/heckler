@@ -59,6 +59,16 @@ func (e *applyError) Error() string {
 	return fmt.Sprintf("Apply status: '%s', %s", e.Report.Status, e.Report.ConfigurationVersion)
 }
 
+type cleanError struct {
+	Host      string
+	LastApply git.Oid
+	Report    rizzopb.PuppetReport
+}
+
+func (e *cleanError) Error() string {
+	return fmt.Sprintf("Unable to clean %s, no diffless noops found near its last apply of '%s-dirty'", e.Host, e.LastApply.String())
+}
+
 type lastApplyStatus int
 type noopApproverType int
 
@@ -180,6 +190,7 @@ type applyResult struct {
 
 type dirtyNoops struct {
 	rev       git.Oid
+	dirtyNoop rizzopb.PuppetReport
 	commitIds map[git.Oid]bool
 }
 
@@ -3428,7 +3439,7 @@ func commonTagNodeSet(conf *HecklerdConf, ns *NodeSet, repo *git.Repository, log
 //          Does the commit noop clean?
 //            If No, mark failure
 //            If Yes, apply commit and stop nooping node
-func dirtyLoop(conf *HecklerdConf, repo *git.Repository) {
+func dirtyLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	var err error
 	var ns *NodeSet
 	logger := log.New(os.Stdout, "[dirtyLoop] ", log.Lshortfile)
@@ -3453,6 +3464,12 @@ func dirtyLoop(conf *HecklerdConf, repo *git.Repository) {
 			closeNodeSet(ns, logger)
 			continue
 		}
+		// Delete dirtyNoops for nodes which are no longer in our dirty node set
+		for host := range nodeDirtyNoops {
+			if _, ok := ns.nodes.active[host]; !ok {
+				delete(nodeDirtyNoops, host)
+			}
+		}
 		if len(ns.nodes.active) > 0 {
 			logger.Printf("Dirty Nodes: %s\n", compressNodesMap(ns.nodes.active))
 		}
@@ -3465,20 +3482,30 @@ func dirtyLoop(conf *HecklerdConf, repo *git.Repository) {
 			}
 			go cleanNode(node, nodeDirtyNoops[host], cleanChan, repo, conf, logger)
 		}
+		var cleanErrors []error
 		for range ns.nodes.active {
 			cr := <-cleanChan
 			if cr.err != nil {
-				logger.Printf("Clean failed for %s: %v", cr.host, cr.err)
+				if _, ok := cr.err.(*cleanError); ok {
+					cleanErrors = append(cleanErrors, cr.err)
+				} else {
+					logger.Printf("Clean failed for %s: %v", cr.host, cr.err)
+				}
 			} else {
 				nodeDirtyNoops[cr.host] = cr.dn
 				if cr.clean {
 					logger.Printf("Cleaned %s", cr.host)
 				} else {
-					logger.Printf("Unable to clean %s, no diffless noops found", cr.host)
+					logger.Printf("Unable to clean %s, no diffless noops found, yet", cr.host)
 				}
 			}
 		}
 		closeNodeSet(ns, logger)
+		err = reportErrors(cleanErrors, conf, templates, logger)
+		if err != nil {
+			logger.Printf("Error: unable to report clean errors, '%v'", err)
+		}
+		logger.Println("Dirty Loop complete, sleeping")
 	}
 }
 
@@ -3488,39 +3515,60 @@ func reportErrors(errors []error, conf *HecklerdConf, templates *template.Templa
 		return err
 	}
 	for _, err := range errors {
-		if _, ok := err.(*applyError); ok {
+		switch err.(type) {
+		case *applyError:
 			continue
+		case *cleanError:
+			continue
+		default:
+			return fmt.Errorf("%T is not a known error type on which to report", err)
 		}
-		return fmt.Errorf("%T is not a known error type", err)
 	}
 	nodeFileRegexes, err := puppetutil.NodeFileRegexes(conf.WorkRepo + "/nodes")
 	if err != nil {
 		return err
 	}
 	nodeFilesToErrors := make(map[string][]error)
+	var host string
 	for _, err := range errors {
-		applyErr := err.(*applyError)
-		if nf, ok := nodeFile(applyErr.Host, nodeFileRegexes, conf.WorkRepo); ok {
+		switch err.(type) {
+		case *applyError:
+			host = err.(*applyError).Host
+		case *cleanError:
+			host = err.(*cleanError).Host
+		}
+		if nf, ok := nodeFile(host, nodeFileRegexes, conf.WorkRepo); ok {
 			nodeFilesToErrors[nf] = append(nodeFilesToErrors[nf], err)
 		} else {
-			return fmt.Errorf("No node file found for '%s'", applyErr.Host)
+			return fmt.Errorf("No node file found for '%s'", host)
 		}
 	}
 	// Create issues if they do not already exist
+	var issue *github.Issue
 	for nodeFile, perNodeFileErrors := range nodeFilesToErrors {
-		issue, err := githubIssueForApplyFailure(ghclient, nodeFile, conf)
+		switch perNodeFileErrors[0].(type) {
+		case *applyError:
+			issue, err = githubIssueForApplyFailure(ghclient, nodeFile, conf)
+		case *cleanError:
+			issue, err = githubIssueForCleanFailure(ghclient, nodeFile, conf)
+		}
 		if err != nil {
 			return err
 		}
 		if issue != nil {
-			logger.Printf("Skipping Creation, issue already exists for ApplyFailures for '%s'", nodeFile)
+			logger.Printf("Skipping Creation, issue already exists for %T for '%s'", perNodeFileErrors[0], nodeFile)
 			continue
 		}
-		_, err = githubCreateApplyFailureIssue(ghclient, perNodeFileErrors, nodeFile, conf, templates)
+		switch perNodeFileErrors[0].(type) {
+		case *applyError:
+			_, err = githubCreateApplyFailureIssue(ghclient, perNodeFileErrors, nodeFile, conf, templates)
+		case *cleanError:
+			_, err = githubCreateCleanFailureIssue(ghclient, perNodeFileErrors, nodeFile, conf, templates)
+		}
 		if err != nil {
 			return err
 		}
-		logger.Printf("Created ApplyFailure issue for '%s'", nodeFile)
+		logger.Printf("Created %T issue for '%s'", perNodeFileErrors[0], nodeFile)
 	}
 	return nil
 }
@@ -3551,6 +3599,37 @@ func applyFailuresToMarkdown(nodeErrors []error, nodeFile string, prefix string,
 		return "", "", err
 	}
 	title := fmt.Sprintf("%sPuppetApplyFailed for %s from %s", issuePrefix(prefix), compressedHosts, path.Base(nodeFile))
+	return title, body.String(), nil
+}
+
+func cleanFailuresToMarkdown(nodeErrors []error, nodeFile string, prefix string, templates *template.Template) (string, string, error) {
+	var body strings.Builder
+	var err error
+
+	if len(nodeErrors) == 0 {
+		return "", "", fmt.Errorf("nodeErrors is zero length")
+	}
+	var hosts []string
+	for _, err := range nodeErrors {
+		hosts = append(hosts, err.(*cleanError).Host)
+	}
+
+	compressedHosts := compressHosts(hosts)
+
+	data := struct {
+		CompressedHosts string
+		DirtyLastApply  string
+		Report          rizzopb.PuppetReport
+	}{
+		compressedHosts,
+		nodeErrors[0].(*cleanError).LastApply.String(),
+		nodeErrors[0].(*cleanError).Report,
+	}
+	err = templates.ExecuteTemplate(&body, "cleanFailure.tmpl", data)
+	if err != nil {
+		return "", "", err
+	}
+	title := fmt.Sprintf("%sPuppetCleanFailed for %s from %s", issuePrefix(prefix), compressedHosts, path.Base(nodeFile))
 	return title, body.String(), nil
 }
 
@@ -3585,6 +3664,52 @@ func githubIssueForApplyFailure(ghclient *github.Client, nodeFile string, conf *
 		query += fmt.Sprintf(" %sin:title", issuePrefix(prefix))
 	}
 	query += fmt.Sprintf(" %sin:title", "PuppetApplyFailed")
+	query += " state:open"
+	query += fmt.Sprintf(" author:app/%s", conf.GitHubAppSlug)
+	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to search GitHub Issues: %w", err)
+	}
+	if searchResults.GetTotal() == 0 {
+		return nil, nil
+	} else if searchResults.GetTotal() == 1 {
+		return &searchResults.Issues[0], nil
+	} else {
+		return nil, errors.New("More than one issue exists for a single commit")
+	}
+}
+
+func githubCreateCleanFailureIssue(ghclient *github.Client, nodeErrors []error, nodeFile string, conf *HecklerdConf, templates *template.Template) (*github.Issue, error) {
+	title, body, err := cleanFailuresToMarkdown(nodeErrors, nodeFile, conf.EnvPrefix, templates)
+	if err != nil {
+		return nil, err
+	}
+	co, err := codeowners.NewCodeowners(conf.WorkRepo)
+	if err != nil {
+		return nil, err
+	}
+	nodeFileOwners := co.Owners(nodeFile)
+	authors, err := githubExpandGroups(ghclient, nodeFileOwners)
+	if err != nil {
+		return nil, err
+	}
+	// If we can't determine the node owners, assign the issue to the admins
+	// as a fallback
+	if len(authors) == 0 {
+		authors = append(authors, conf.AdminOwners...)
+	}
+	return githubCreateIssue(ghclient, conf, title, body, authors)
+}
+
+func githubIssueForCleanFailure(ghclient *github.Client, nodeFile string, conf *HecklerdConf) (*github.Issue, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	prefix := conf.EnvPrefix
+	query := fmt.Sprintf("%s in:title", path.Base(nodeFile))
+	if prefix != "" {
+		query += fmt.Sprintf(" %sin:title", issuePrefix(prefix))
+	}
+	query += fmt.Sprintf(" %sin:title", "PuppetCleanFailed")
 	query += " state:open"
 	query += fmt.Sprintf(" author:app/%s", conf.GitHubAppSlug)
 	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
@@ -3650,11 +3775,17 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 		}
 	}
 	if len(commitsToNoop) == 0 {
-		c <- cleanNodeResult{
+		cnr := cleanNodeResult{
 			host:  node.host,
 			clean: false,
 			dn:    dn,
 		}
+		// If we have examined childThreshold number of commits, return an
+		// error for reporting.
+		if len(commitsToConsider) == childThreshold {
+			cnr.err = &cleanError{node.host, node.lastApply, dn.dirtyNoop}
+		}
+		c <- cnr
 		return
 	}
 	rizzoLockNode(
@@ -3674,7 +3805,7 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 	}
 	applyResults := make(chan applyResult)
 	clean := false
-	for _, id := range commitsToNoop {
+	for i, id := range commitsToNoop {
 		logger.Printf("Nooping commit: %s@%s", node.host, id.String())
 		par := rizzopb.PuppetApplyRequest{Rev: id.String(), Noop: true}
 		go hecklerApply(node, applyResults, par)
@@ -3686,6 +3817,11 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 		newRprt := normalizeReport(r.report, logger)
 		if newRprt.Status == "failed" {
 			newRprt.Host = r.host
+		}
+		// Save our first dirtyNoop for error reporting if we are unable to clean
+		// the node
+		if i == 0 {
+			dn.dirtyNoop = newRprt
 		}
 		dn.commitIds[id] = true
 		logger.Printf("Received noop: %s@%s", newRprt.Host, newRprt.ConfigurationVersion)
@@ -4253,7 +4389,7 @@ func main() {
 		if conf.LoopDirtySleepSeconds == 0 {
 			logger.Println("dirtyLoop disabled")
 		} else {
-			go dirtyLoop(conf, repo)
+			go dirtyLoop(conf, repo, templates)
 		}
 		hecklerdCron := cron.New()
 		if conf.AutoTagCronSchedule == "" {
