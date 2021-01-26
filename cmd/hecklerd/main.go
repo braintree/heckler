@@ -1697,7 +1697,7 @@ func githubCreateCommitIssue(ghclient *github.Client, conf *HecklerdConf, commit
 
 func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, title, body string, authors []string) (*github.Issue, error) {
 	if conf.GitHubDisableNotifications {
-		body = fmt.Sprintf("Notifications disabled, not assigning to: %v\n\n", authors) + body
+		body = fmt.Sprintf("Notifications disabled, not assigning to: %v\n\n", stripAtSignsSlice(authors)) + body
 	}
 	// GitHub has a max issue body size of 65536
 	if len(body) >= 65536 {
@@ -1780,7 +1780,7 @@ func noopOwnersToMarkdown(conf *HecklerdConf, commit *git.Commit, groupedResourc
 	}
 	no := groupedResourcesUniqueOwners(groupedResources)
 	if conf.GitHubDisableNotifications {
-		stripAtSigns(&no)
+		stripAtSignsNoopOwners(&no)
 	}
 	data := struct {
 		Commit     *git.Commit
@@ -2852,7 +2852,7 @@ func containmentPathModules(containmentPath []string) []string {
 
 // Strips the `@` prefix from users and groups so that they are not notified on
 // GitHub
-func stripAtSigns(no *noopOwners) {
+func stripAtSignsNoopOwners(no *noopOwners) {
 	for _, owners := range no.OwnedSourceFiles {
 		for i, owner := range owners {
 			owners[i] = strings.TrimPrefix(owner, "@")
@@ -2863,6 +2863,15 @@ func stripAtSigns(no *noopOwners) {
 			owners[i] = strings.TrimPrefix(owner, "@")
 		}
 	}
+}
+
+// Strips the `@` prefix from users and groups so that they are not notified on
+// GitHub
+func stripAtSignsSlice(users []string) []string {
+	for i, user := range users {
+		users[i] = strings.TrimPrefix(user, "@")
+	}
+	return users
 }
 
 // Given a github issue return the set of github logins which have approved the issue
