@@ -41,6 +41,7 @@ import (
 	"github.com/lollipopman/heckler/internal/puppetutil"
 	"github.com/lollipopman/heckler/internal/rizzopb"
 	"github.com/robfig/cron/v3"
+	"github.com/slack-go/slack"
 	"github.com/square/grange"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
@@ -102,45 +103,56 @@ var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 var RegexGithubGroup = regexp.MustCompile(`^@.*/.*$`)
 
 type HecklerdConf struct {
-	Repo                       string                `yaml:"repo"`
-	RepoOwner                  string                `yaml:"repo_owner"`
-	RepoBranch                 string                `yaml:"repo_branch"`
-	GitHubDomain               string                `yaml:"github_domain"`
-	GitHubPrivateKeyPath       string                `yaml:"github_private_key_path"`
-	GitHubAppSlug              string                `yaml:"github_app_slug"`
-	GitHubAppId                int64                 `yaml:"github_app_id"`
-	GitHubAppEmail             string                `yaml:"github_app_email"`
-	GitHubAppInstallId         int64                 `yaml:"github_app_install_id"`
-	GitHubDisableNotifications bool                  `yaml:"github_disable_notifications"`
-	GitHubHttpProxy            string                `yaml:"github_http_proxy"`
-	IgnoredResources           []string              `yaml:"ignored_resources"`
-	NodeSets                   map[string]NodeSetCfg `yaml:"node_sets"`
-	AutoTagCronSchedule        string                `yaml:"auto_tag_cron_schedule"`
+	AdminOwners                []string              `yaml:"admin_owners"`
+	ApplySetOrder              []string              `yaml:"apply_set_order"`
+	ApplySetSleepSeconds       int                   `yaml:"apply_set_sleep_seconds"`
 	AutoCloseIssues            bool                  `yaml:"auto_close_issues"`
+	AutoTagCronSchedule        string                `yaml:"auto_tag_cron_schedule"`
 	EnvPrefix                  string                `yaml:"env_prefix"`
-	MaxNodeThresholds          NodeThresholds        `yaml:"max_node_thresholds"`
+	GitHubAppEmail             string                `yaml:"github_app_email"`
+	GitHubAppId                int64                 `yaml:"github_app_id"`
+	GitHubAppInstallId         int64                 `yaml:"github_app_install_id"`
+	GitHubAppSlug              string                `yaml:"github_app_slug"`
+	GitHubDisableNotifications bool                  `yaml:"github_disable_notifications"`
+	GitHubDomain               string                `yaml:"github_domain"`
+	GitHubHttpProxy            string                `yaml:"github_http_proxy"`
+	GitHubPrivateKeyPath       string                `yaml:"github_private_key_path"`
 	GitServerMaxClients        int                   `yaml:"git_server_max_clients"`
-	ManualMode                 bool                  `yaml:"manual_mode"`
+	GroupedNoopDir             string                `yaml:"grouped_noop_dir"`
+	IgnoredResources           []string              `yaml:"ignored_resources"`
 	LockMessage                string                `yaml:"lock_message"`
-	LoopNoopSleepSeconds       int                   `yaml:"loop_noop_sleep_seconds"`
-	LoopMilestoneSleepSeconds  int                   `yaml:"loop_milestone_sleep_seconds"`
 	LoopApplySleepSeconds      int                   `yaml:"loop_apply_sleep_seconds"`
 	LoopApprovalSleepSeconds   int                   `yaml:"loop_approval_sleep_seconds"`
 	LoopDirtySleepSeconds      int                   `yaml:"loop_dirty_sleep_seconds"`
-	ApplySetOrder              []string              `yaml:"apply_set_order"`
-	ApplySetSleepSeconds       int                   `yaml:"apply_set_sleep_seconds"`
+	LoopMilestoneSleepSeconds  int                   `yaml:"loop_milestone_sleep_seconds"`
+	LoopNoopSleepSeconds       int                   `yaml:"loop_noop_sleep_seconds"`
+	ManualMode                 bool                  `yaml:"manual_mode"`
+	MaxNodeThresholds          NodeThresholds        `yaml:"max_node_thresholds"`
+	ModulesPaths               []string              `yaml:"module_paths"`
+	NodeSets                   map[string]NodeSetCfg `yaml:"node_sets"`
+	NoopDir                    string                `yaml:"noop_dir"`
+	Repo                       string                `yaml:"repo"`
+	RepoBranch                 string                `yaml:"repo_branch"`
+	RepoOwner                  string                `yaml:"repo_owner"`
+	ServedRepo                 string                `yaml:"served_repo"`
+	SlackAnnounceChannels      []SlackChannelCfg     `yaml:"slack_announce_channels"`
+	SlackPrivateConfPath       string                `yaml:"slack_private_conf_path"`
 	StateDir                   string                `yaml:"state_dir"`
 	WorkRepo                   string                `yaml:"work_repo"`
-	ServedRepo                 string                `yaml:"served_repo"`
-	NoopDir                    string                `yaml:"noop_dir"`
-	GroupedNoopDir             string                `yaml:"grouped_noop_dir"`
-	AdminOwners                []string              `yaml:"admin_owners"`
-	ModulesPaths               []string              `yaml:"module_paths"`
+}
+
+type SlackConf struct {
+	Token string `yaml:"token"`
 }
 
 type NodeSetCfg struct {
 	Cmd       []string `yaml:"cmd"`
 	Blacklist []string `yaml:"blacklist"`
+}
+
+type SlackChannelCfg struct {
+	Id   string `yaml:"id"`
+	Name string `yaml:"name"`
 }
 
 type NodeSet struct {
@@ -1440,6 +1452,72 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 	return client, itr, nil
 }
 
+func slackClient(conf *HecklerdConf) (*slack.Client, error) {
+	var file *os.File
+	var data []byte
+	var err error
+
+	var privateConfPath string
+	if conf.SlackPrivateConfPath != "" {
+		privateConfPath = conf.SlackPrivateConfPath
+	} else {
+		privateConfPath = "./slack_conf.yaml"
+	}
+	if _, err := os.Stat(privateConfPath); err == nil {
+		file, err = os.Open(privateConfPath)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+		data, err = ioutil.ReadAll(file)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, fmt.Errorf("Unable to load Slack private conf from '%s'", privateConfPath)
+	}
+
+	slackConf := new(SlackConf)
+	err = yaml.Unmarshal([]byte(data), slackConf)
+	if err != nil {
+		return nil, err
+	}
+
+	if slackConf.Token == "" {
+		return nil, fmt.Errorf("No token found in slack_conf.yaml")
+	}
+
+	tr := http.DefaultTransport
+	if conf.GitHubHttpProxy != "" {
+		proxyUrl, err := url.Parse(conf.GitHubHttpProxy)
+		if err != nil {
+			return nil, err
+		}
+		tr.(*http.Transport).Proxy = http.ProxyURL(proxyUrl)
+	}
+	httpClient := &http.Client{Transport: tr}
+
+	return slack.New(slackConf.Token, slack.OptionHTTPClient(httpClient)), nil
+}
+
+func slackAnnounce(announceChannels []SlackChannelCfg, msg string, conf *HecklerdConf) error {
+	sc, err := slackClient(conf)
+	if err != nil {
+		return err
+	}
+	for _, cc := range announceChannels {
+		_, _, err := sc.PostMessage(
+			cc.Id,
+			slack.MsgOptionText(msg, false),
+			slack.MsgOptionAsUser(true),
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func createMilestone(milestone string, ghclient *github.Client, conf *HecklerdConf) (*github.Milestone, error) {
 	ms := &github.Milestone{
 		Title: github.String(milestone),
@@ -2468,6 +2546,15 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Tem
 			logger.Printf("No approved nextTag found after tag '%s', sleeping", priorTag)
 			closeNodeSet(ns, logger)
 			continue
+		}
+		if len(conf.SlackAnnounceChannels) > 0 {
+			tagURL := fmt.Sprintf("<%s|%s>", nextTagMilestone.GetHTMLURL()+"?closed=1", nextTag)
+			msg := fmt.Sprintf("Puppet applying tag %s with set order: %s", tagURL, strings.Join(conf.ApplySetOrder, ", "))
+			msg = issuePrefix(conf.EnvPrefix) + msg
+			err = slackAnnounce(conf.SlackAnnounceChannels, msg, conf)
+			if err != nil {
+				logger.Printf("Error: unable to announce to slack: %v", err)
+			}
 		}
 		logger.Printf("Tag '%s' is ready to apply, applying with set order: %v", nextTag, conf.ApplySetOrder)
 		var applyErrors []error

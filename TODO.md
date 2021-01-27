@@ -3,7 +3,6 @@
 ## Next Up
 
 - [ ] Rename AutoClose to AutoApprove
-- [ ] Slack notifications
 - [ ] Stale Lock notifications
 - [ ] Highlight Service Refreshes in GitHub issue
 - [ ] Additional Tests

@@ -22,6 +22,7 @@ require (
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.1 // indirect
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/slack-go/slack v0.8.0
 	github.com/square/grange v0.0.0-20200108221412-2a4cb7b5b334
 	golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5 // indirect
 	google.golang.org/genproto v0.0.0-20200205142000-a86caf926a67 // indirect
