@@ -1406,22 +1406,24 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 		tr.(*http.Transport).Proxy = http.ProxyURL(proxyUrl)
 	}
 
+	var privateKeyPath string
 	if conf.GitHubPrivateKeyPath != "" {
-		file, err = os.Open(conf.GitHubPrivateKeyPath)
-		if err != nil {
-			return nil, nil, err
-		}
-		defer file.Close()
-		privateKey, err = ioutil.ReadAll(file)
-	} else if _, err := os.Stat("github-private-key.pem"); err == nil {
-		file, err = os.Open("github-private-key.pem")
-		if err != nil {
-			return nil, nil, err
-		}
-		defer file.Close()
-		privateKey, err = ioutil.ReadAll(file)
+		privateKeyPath = conf.GitHubPrivateKeyPath
 	} else {
-		return nil, nil, errors.New("Unable to load github-private-key.pem in /etc/hecklerd or .")
+		privateKeyPath = "./github-private-key.pem"
+	}
+	if _, err := os.Stat(privateKeyPath); err == nil {
+		file, err = os.Open(privateKeyPath)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer file.Close()
+		privateKey, err = ioutil.ReadAll(file)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		return nil, nil, fmt.Errorf("Unable to load GitHub private key from '%s'", privateKeyPath)
 	}
 	itr, err := ghinstallation.New(tr, conf.GitHubAppId, conf.GitHubAppInstallId, privateKey)
 	if err != nil {
