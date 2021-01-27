@@ -2361,51 +2361,55 @@ func sleepAndLog(sleepDur, logDur time.Duration, msg string, logger *log.Logger)
 	time.Sleep(sleepDurRem)
 }
 
-func tagReadyAndApproved(nextTag string, priorTag string, ghclient *github.Client, conf *HecklerdConf, repo *git.Repository, logger *log.Logger) (bool, error) {
+func tagReadyAndApproved(nextTag string, priorTag string, ghclient *github.Client, conf *HecklerdConf, repo *git.Repository, logger *log.Logger) (bool, *github.Milestone, error) {
 	nextTagMilestone, err := milestoneFromTag(nextTag, ghclient, conf)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	if nextTagMilestone == nil {
 		logger.Printf("Milestone for nextTag '%s', not created", nextTag)
-		return false, nil
+		return false, nil, nil
 	}
 	approved, err := tagApproved(repo, ghclient, conf, priorTag, nextTag, logger)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	if !approved {
-		return false, nil
+		return false, nextTagMilestone, nil
 	}
 	if nextTagMilestone.GetState() != "closed" {
 		err = closeMilestone(nextTag, ghclient, conf)
 		if err != nil {
-			return false, err
+			return false, nil, err
 		}
 	}
-	return true, nil
+	return true, nextTagMilestone, nil
 }
 
-func greatestApprovedTag(nextTags []string, priorTag string, conf *HecklerdConf, repo *git.Repository, logger *log.Logger) (string, error) {
+func greatestApprovedTag(nextTags []string, priorTag string, conf *HecklerdConf, repo *git.Repository, logger *log.Logger) (string, *github.Milestone, error) {
 	ghclient, _, err := githubConn(conf)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	var tagApproved bool
+	var nextTagApproved bool
+	var nextTagMilestone *github.Milestone
+	var approvedMilestone *github.Milestone
 	approvedTag := ""
 	for _, nextTag := range nextTags {
-		tagApproved, err = tagReadyAndApproved(nextTag, priorTag, ghclient, conf, repo, logger)
+		nextTagApproved, nextTagMilestone, err = tagReadyAndApproved(nextTag, priorTag, ghclient, conf, repo, logger)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
-		// If the tag is not approved return the last approved tag if any
-		if !tagApproved {
-			return approvedTag, nil
+		// If the tag is not approved break, and return the last approved tag if
+		// any
+		if !nextTagApproved {
+			break
 		}
 		approvedTag = nextTag
+		approvedMilestone = nextTagMilestone
 		priorTag = nextTag
 	}
-	return approvedTag, nil
+	return approvedTag, approvedMilestone, nil
 }
 
 // Are there newer release tags than our common lastApply tag across "all"
@@ -2454,7 +2458,7 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Tem
 			closeNodeSet(ns, logger)
 			continue
 		}
-		nextTag, err := greatestApprovedTag(nextTags, priorTag, conf, repo, logger)
+		nextTag, nextTagMilestone, err := greatestApprovedTag(nextTags, priorTag, conf, repo, logger)
 		if err != nil {
 			logger.Printf("Error: unable to find greatestApprovedTag in set %v: %v, sleeping", nextTags, err)
 			closeNodeSet(ns, logger)
