@@ -1,8 +1,0 @@
-### Errored Nodes
-
-The following nodes errored during the noop run, consequently they are
-unrepresented in the noop output.
-{{ range $hosts, $error := .Errored }}
-- *Hosts:* `{{ $hosts }}`
-  -  *Error:* **{{ $error }}**
-{{ end }}

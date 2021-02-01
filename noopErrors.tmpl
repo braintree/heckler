@@ -1,0 +1,30 @@
+### Errors
+
+The following hosts errored during the noop run, consequently they are unrepresented in the above noop output.
+{{- if or (gt (len $.GroupedEvalErrors) 0) (gt (len $.CompressedParentEvalErrors) 0) }}
+
+#### Puppet Language Evaluation Errors
+
+{{ range $error := .GroupedEvalErrors }}
+- *Hosts:* `{{ $error.CompressedNodes }}`
+  - *Error:*
+    ```
+{{ indent 4 $error.Log.Message }}
+    ```
+{{- end }}
+{{- if $.CompressedParentEvalErrors }}
+- *Hosts:* `{{ .CompressedParentEvalErrors }}`
+  - *Error:* An evaluation error occured in a parent commit, stopping the creation of a delta noop.
+{{- end }}
+{{- end }}
+
+{{- if gt (len $.CompressedErrors) 0 }}
+#### Other Errors
+
+{{- range $hosts, $error := .CompressedErrors }}
+- *Hosts:* `{{ $hosts }}`
+  - *Error:* {{ $error }}
+{{- end }}
+
+{{- end }}
+

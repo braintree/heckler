@@ -226,15 +226,15 @@ type deltaResource struct {
 
 type groupedReport struct {
 	CommitNotInAllNodeLineages bool
-	ParentNoopFailures         bool
-	Failures                   []*groupedFailure
 	Resources                  []*groupedResource
-	CompressedErrored          map[string]string
+	EvalErrors                 []*groupedEvalError
+	CompressedParentEvalErrors string
+	CompressedErrors           map[string]string
 	CompressedBeyondRev        map[string]string
 	CompressedLockedByAnother  map[string]string
 }
 
-type groupedFailure struct {
+type groupedEvalError struct {
 	Source          string
 	Nodes           []string
 	CompressedNodes string
@@ -294,7 +294,7 @@ func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map
 	var parentReport *rizzopb.PuppetReport
 	parentReports := make([]*rizzopb.PuppetReport, 0)
 	parentCount := commit.ParentCount()
-	parentFailures := false
+	parentEvalErrors := false
 	for i := uint(0); i < parentCount; i++ {
 		parentReport = commitReports[*commit.ParentId(i)]
 		if parentReport == nil {
@@ -302,11 +302,11 @@ func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map
 		} else {
 			parentReports = append(parentReports, parentReport)
 			if parentReport.Status == "failed" {
-				parentFailures = true
+				parentEvalErrors = true
 			}
 		}
 	}
-	return parentFailures, parentReports
+	return parentEvalErrors, parentReports
 }
 
 func grpcConnect(ctx context.Context, node *Node, clientConnChan chan *Node) {
@@ -618,31 +618,36 @@ func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *g
 		}
 	}
 
-	parentNoopFailures := false
-	for _, node := range ns.nodes.active {
-		logger.Printf("Creating delta resource for commit %s@%s", node.host, commit.Id().String())
-		parentFailures, parentReports := commitParentReports(*commit, node.lastApply, node.commitReports, node.host, repo, logger)
-		if parentFailures {
-			parentNoopFailures = true
+	var parentEvalErrorHosts []string
+	EvalErrorNodes := make(map[string]*Node)
+	for host, node := range ns.nodes.active {
+		if node.commitReports[*commit.Id()].Status == "failed" {
+			EvalErrorNodes[host] = node
+			delete(ns.nodes.active, host)
+			continue
 		}
+		parentEvalErrors, parentReports := commitParentReports(*commit, node.lastApply, node.commitReports, node.host, repo, logger)
+		if parentEvalErrors {
+			parentEvalErrorHosts = append(parentEvalErrorHosts, host)
+			delete(ns.nodes.active, host)
+			continue
+		}
+		logger.Printf("Creating delta resource for commit %s@%s", node.host, commit.Id().String())
 		node.commitDeltaResources[*commit.Id()] = subtractNoops(node.commitReports[*commit.Id()], parentReports, ignoredResources)
 	}
 
-	logger.Printf("Grouping: %s", commit.Id().String())
+	logger.Printf("Grouping commit %s", commit.Id().String())
 	groupedResources := make([]*groupedResource, 0)
 	for _, node := range ns.nodes.active {
 		for _, nodeDeltaRes := range node.commitDeltaResources[*commit.Id()] {
 			groupedResources = append(groupedResources, groupResources(*commit.Id(), nodeDeltaRes, ns.nodes.active))
 		}
 	}
-	groupedFailures := make([]*groupedFailure, 0)
-	for _, node := range ns.nodes.active {
-		if node.commitReports[*commit.Id()].Status != "failed" {
-			continue
-		}
+	groupedEvalErrors := make([]*groupedEvalError, 0)
+	for _, node := range EvalErrorNodes {
 		for _, puppetLog := range node.commitReports[*commit.Id()].Logs {
 			if puppetLog.Source == "EvalError" {
-				groupedFailures = append(groupedFailures, groupFailures(*commit.Id(), puppetLog, ns.nodes.active))
+				groupedEvalErrors = append(groupedEvalErrors, groupEvalErrors(*commit.Id(), puppetLog, EvalErrorNodes))
 			}
 		}
 	}
@@ -658,12 +663,12 @@ func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *g
 		}
 	}
 	gr := groupedReport{
-		ParentNoopFailures:        parentNoopFailures,
-		Resources:                 groupedResources,
-		Failures:                  groupedFailures,
-		CompressedErrored:         compressedErrStrNodes,
-		CompressedBeyondRev:       compressHostsStr(beyondRevNodes),
-		CompressedLockedByAnother: compressLockNodes(ns.nodes.lockedByAnother),
+		Resources:                  groupedResources,
+		EvalErrors:                 groupedEvalErrors,
+		CompressedParentEvalErrors: compressHosts(parentEvalErrorHosts),
+		CompressedErrors:           compressedErrStrNodes,
+		CompressedBeyondRev:        compressHostsStr(beyondRevNodes),
+		CompressedLockedByAnother:  compressLockNodes(ns.nodes.lockedByAnother),
 	}
 	return gr, nil
 }
@@ -911,7 +916,7 @@ func uniqueStrSlice(strSlice []string) []string {
 	return uniqueList
 }
 
-func groupFailures(gi git.Oid, targetPuppetLog *rizzopb.Log, nodes map[string]*Node) *groupedFailure {
+func groupEvalErrors(gi git.Oid, targetPuppetLog *rizzopb.Log, nodes map[string]*Node) *groupedEvalError {
 	nodeList := make([]string, 0)
 	for nodeName, node := range nodes {
 		unmatched := make([]*rizzopb.Log, 0)
@@ -925,16 +930,16 @@ func groupFailures(gi git.Oid, targetPuppetLog *rizzopb.Log, nodes map[string]*N
 		node.commitReports[gi].Logs = unmatched
 	}
 
-	gf := new(groupedFailure)
-	gf.Source = targetPuppetLog.Source
+	ge := new(groupedEvalError)
+	ge.Source = targetPuppetLog.Source
 	sort.Strings(nodeList)
-	gf.Nodes = nodeList
-	gf.CompressedNodes = compressHosts(nodeList)
-	gf.Log = groupLog{
+	ge.Nodes = nodeList
+	ge.CompressedNodes = compressHosts(nodeList)
+	ge.Log = groupLog{
 		Level:   targetPuppetLog.Level,
 		Message: targetPuppetLog.Message,
 	}
-	return gf
+	return ge
 }
 
 func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node) *groupedResource {
@@ -1728,10 +1733,6 @@ func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue
 
 func noopToMarkdown(conf *HecklerdConf, commit *git.Commit, gr groupedReport, templates *template.Template) (string, string, error) {
 	var body string
-	if gr.ParentNoopFailures {
-		body += fmt.Sprintf("## WARNING: Unable to noop some parents of this commit!\n\n")
-		body += fmt.Sprintf("Some noops failed, so their changes could not be subtracted from the changes specific to this commit.\n\n")
-	}
 	if gr.CommitNotInAllNodeLineages {
 		body += fmt.Sprintf("## Notice: No noop produced for this commit!\n\n")
 		body += fmt.Sprintf("This commit was not in the lineage of all nodes in the environment. ")
@@ -1740,8 +1741,7 @@ func noopToMarkdown(conf *HecklerdConf, commit *git.Commit, gr groupedReport, te
 		body += fmt.Sprintf("commit of this branch.\n\n")
 	}
 	body += commitMsgToMarkdown(commit, conf, templates)
-	body += groupedFailuresToMarkdown(gr.Failures, templates)
-	body += erroredNodesToMarkdown(gr.CompressedErrored, templates)
+	body += noopErrorsToMarkdown(gr.EvalErrors, gr.CompressedParentEvalErrors, gr.CompressedErrors, templates)
 	body += lockedNodesToMarkdown(gr.CompressedLockedByAnother, templates)
 	body += beyondRevNodesToMarkdown(gr.CompressedBeyondRev, templates)
 	body += groupedResourcesToMarkdown(gr.Resources, commit, conf, templates)
@@ -1953,40 +1953,24 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource, commit *git
 	return body.String()
 }
 
-func groupedFailuresToMarkdown(gf []*groupedFailure, templates *template.Template) string {
+func noopErrorsToMarkdown(eval []*groupedEvalError, parentEval string, other map[string]string, templates *template.Template) string {
 	var body strings.Builder
 	var err error
 
-	if len(gf) == 0 {
+	if len(eval) == 0 && len(parentEval) == 0 && len(other) == 0 {
 		return ""
 	}
 
 	data := struct {
-		GroupedFailures []*groupedFailure
+		GroupedEvalErrors          []*groupedEvalError
+		CompressedParentEvalErrors string
+		CompressedErrors           map[string]string
 	}{
-		gf,
+		eval,
+		parentEval,
+		other,
 	}
-	err = templates.ExecuteTemplate(&body, "groupedFailure.tmpl", data)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return body.String()
-}
-
-func erroredNodesToMarkdown(errored map[string]string, templates *template.Template) string {
-	var body strings.Builder
-	var err error
-
-	if len(errored) == 0 {
-		return ""
-	}
-
-	data := struct {
-		Errored map[string]string
-	}{
-		errored,
-	}
-	err = templates.ExecuteTemplate(&body, "erroredNodes.tmpl", data)
+	err = templates.ExecuteTemplate(&body, "noopErrors.tmpl", data)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -2667,7 +2651,7 @@ func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 			if issue.GetState() == "closed" {
 				continue
 			}
-			if len(gr.Resources) == 0 && len(gr.Failures) == 0 {
+			if len(gr.Resources) == 0 && len(gr.EvalErrors) == 0 {
 				err := closeIssue(ghclient, conf, issue, "No noop output marking issue as 'closed'")
 				if err != nil {
 					logger.Printf("Error: unable to close approved issue(%d): %v", issue.GetNumber(), err)
@@ -3327,7 +3311,7 @@ func tagApproved(repo *git.Repository, ghclient *github.Client, conf *HecklerdCo
 		}
 		// Failures are not changes, but we should not auto approve the commit if
 		// it introduced some type of breakage manifesting in an EvalError
-		if len(gr.Resources) == 0 && len(gr.Failures) == 0 {
+		if len(gr.Resources) == 0 && len(gr.EvalErrors) == 0 {
 			approved[gi] = "Approved, no changes in noop"
 			continue
 		}
