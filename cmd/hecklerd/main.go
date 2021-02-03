@@ -1807,8 +1807,8 @@ func githubCreateCommitIssue(ghclient *github.Client, conf *HecklerdConf, commit
 
 func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, title, body string, authors []string) (*github.Issue, error) {
 	if conf.GitHubDisableNotifications {
-		strippedAuthors := strings.Join(stripAtSignsSlice(authors), ", ") + body
-		body = fmt.Sprintf("Notifications disabled, not assigning to: %s\n\n", strippedAuthors) + body
+		strippedAuthors := strings.Join(stripAtSignsSlice(authors), ", ")
+		body = fmt.Sprintf("*Notifications Disabled to Assignees:* %s\n\n", strippedAuthors) + body
 	}
 	// GitHub has a max issue body size of 65536
 	if len(body) >= 65536 {
