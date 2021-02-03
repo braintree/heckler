@@ -227,18 +227,43 @@ type deltaResource struct {
 type groupedReport struct {
 	CommitNotInAllNodeLineages bool
 	Resources                  []*groupedResource
-	EvalErrors                 []*groupedEvalError
-	CompressedParentEvalErrors string
-	CompressedErrors           map[string]string
-	CompressedBeyondRev        map[string]string
-	CompressedLockedByAnother  map[string]string
+	Errors                     []*groupedError
+	BeyondRev                  []*groupedBeyondRev
+	LockedByAnother            []*groupedLockState
 }
 
-type groupedEvalError struct {
-	Source          string
-	Nodes           []string
-	CompressedNodes string
-	Log             groupLog
+type groupedHosts []string
+
+func (gh groupedHosts) String() string {
+	return fmt.Sprintf("%s", compressHosts(gh))
+}
+
+type groupedError struct {
+	Type  string
+	Hosts groupedHosts
+	Error string
+}
+
+func (ge groupedError) String() string {
+	msg := fmt.Sprintf("Hosts: %v, Error: %s", ge.Hosts, ge.Type)
+	if ge.Error != "" {
+		msg += fmt.Sprintf(" - '%s'", ge.Error)
+	}
+	return msg
+}
+
+type groupedBeyondRev struct {
+	LastApply git.Oid
+	Hosts     groupedHosts
+}
+
+type groupedLockState struct {
+	LockState heckler.LockState
+	Hosts     groupedHosts
+}
+
+func (gls groupedLockState) String() string {
+	return fmt.Sprintf("Hosts: %v, %v", gls.Hosts, gls.LockState)
 }
 
 type groupedResource struct {
@@ -249,9 +274,8 @@ type groupedResource struct {
 	File            string
 	Line            int64
 	ContainmentPath []string
-	Nodes           []string
+	Hosts           groupedHosts
 	NodeFiles       []string
-	CompressedNodes string
 	Events          []*groupEvent
 	Logs            []*groupLog
 	Owners          groupedResourceOwners
@@ -315,7 +339,7 @@ func grpcConnect(ctx context.Context, node *Node, clientConnChan chan *Node) {
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, address, grpc.WithInsecure(), grpc.WithBlock(), grpc.FailOnNonTempDialError(true))
 	if err != nil {
-		node.err = fmt.Errorf("grpc Connect failed: %w", err)
+		node.err = err
 		clientConnChan <- node
 	} else {
 		node.rizzoClient = rizzopb.NewRizzoClient(conn)
@@ -618,7 +642,11 @@ func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *g
 		}
 	}
 
-	var parentEvalErrorHosts []string
+	var ge []*groupedError
+	groupedParentEvalErrors := &groupedError{
+		Type:  "ParentEvalError",
+		Error: "An evaluation error occured in a parent commit, stopping the creation of a delta noop.",
+	}
 	EvalErrorNodes := make(map[string]*Node)
 	for host, node := range ns.nodes.active {
 		if node.commitReports[*commit.Id()].Status == "failed" {
@@ -628,12 +656,15 @@ func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *g
 		}
 		parentEvalErrors, parentReports := commitParentReports(*commit, node.lastApply, node.commitReports, node.host, repo, logger)
 		if parentEvalErrors {
-			parentEvalErrorHosts = append(parentEvalErrorHosts, host)
+			groupedParentEvalErrors.Hosts = append(groupedParentEvalErrors.Hosts, host)
 			delete(ns.nodes.active, host)
 			continue
 		}
 		logger.Printf("Creating delta resource for commit %s@%s", node.host, commit.Id().String())
 		node.commitDeltaResources[*commit.Id()] = subtractNoops(node.commitReports[*commit.Id()], parentReports, ignoredResources)
+	}
+	if len(groupedParentEvalErrors.Hosts) > 0 {
+		ge = append(ge, groupedParentEvalErrors)
 	}
 
 	logger.Printf("Grouping commit %s", commit.Id().String())
@@ -643,32 +674,25 @@ func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *g
 			groupedResources = append(groupedResources, groupResources(*commit.Id(), nodeDeltaRes, ns.nodes.active))
 		}
 	}
-	groupedEvalErrors := make([]*groupedEvalError, 0)
 	for _, node := range EvalErrorNodes {
 		for _, puppetLog := range node.commitReports[*commit.Id()].Logs {
 			if puppetLog.Source == "EvalError" {
-				groupedEvalErrors = append(groupedEvalErrors, groupEvalErrors(*commit.Id(), puppetLog, EvalErrorNodes))
+				ge = append(ge, groupEvalErrors(*commit.Id(), puppetLog, EvalErrorNodes))
 			}
 		}
 	}
-	compressedErrStrNodes := make(map[string]string)
-	compressedErrNodes := compressErrorNodes(ns.nodes.errored)
-	for host, err := range compressedErrNodes {
-		compressedErrStrNodes[host] = err.Error()
-	}
-	beyondRevNodes := make(map[string]string)
+	ge = append(ge, groupErrorNodes(ns.nodes.errored)...)
+	beyondRevNodes := make(map[string]*Node)
 	for host, node := range ns.nodes.active {
 		if commitAlreadyApplied(node.lastApply, *commit.Id(), repo) {
-			beyondRevNodes[host] = node.lastApply.String()
+			beyondRevNodes[host] = node
 		}
 	}
 	gr := groupedReport{
-		Resources:                  groupedResources,
-		EvalErrors:                 groupedEvalErrors,
-		CompressedParentEvalErrors: compressHosts(parentEvalErrorHosts),
-		CompressedErrors:           compressedErrStrNodes,
-		CompressedBeyondRev:        compressHostsStr(beyondRevNodes),
-		CompressedLockedByAnother:  compressLockNodes(ns.nodes.lockedByAnother),
+		Resources:       groupedResources,
+		Errors:          ge,
+		BeyondRev:       groupBeyondRevNodes(beyondRevNodes),
+		LockedByAnother: groupLockNodes(ns.nodes.lockedByAnother),
 	}
 	return gr, nil
 }
@@ -845,12 +869,12 @@ func compressNodesMap(nodesMap map[string]*Node) string {
 	return compressHosts(hosts)
 }
 
-func compressErrorNodes(nodes map[string]*Node) map[string]error {
+func groupErrorNodes(nodes map[string]*Node) []*groupedError {
 	var errType string
 	errHosts := make(map[string][]string)
 	for host, node := range nodes {
-		// If we don't have a custom error, than don't compress, this is a bit of a
-		// wack a mole approach.
+		// If we don't have a custom error, than don't group based on the dynamic
+		// type of the error, this is a bit of a wack a mole approach.
 		if fmt.Sprintf("%T", node.err) == "*errors.errorString" ||
 			fmt.Sprintf("%T", node.err) == "*fmt.wrapError" {
 			errType = fmt.Sprintf("%v", node.err)
@@ -863,43 +887,44 @@ func compressErrorNodes(nodes map[string]*Node) map[string]error {
 			errHosts[errType] = []string{host}
 		}
 	}
-	compressedHostErr := make(map[string]error)
+	var ge []*groupedError
 	for errType, hosts := range errHosts {
-		compressedHostErr[compressHosts(hosts)] = fmt.Errorf("%s", errType)
+		ge = append(ge, &groupedError{
+			Type:  errType,
+			Hosts: hosts,
+		})
 	}
-	return compressedHostErr
+	return ge
 }
 
-func compressLockNodes(nodes map[string]*Node) map[string]string {
+func groupBeyondRevNodes(nodes map[string]*Node) []*groupedBeyondRev {
+	beyondRevHosts := make(map[git.Oid][]string)
+	for host, node := range nodes {
+		beyondRevHosts[node.lastApply] = append(beyondRevHosts[node.lastApply], host)
+	}
+	var gbr []*groupedBeyondRev
+	for oid, hosts := range beyondRevHosts {
+		gbr = append(gbr, &groupedBeyondRev{
+			LastApply: oid,
+			Hosts:     hosts,
+		})
+	}
+	return gbr
+}
+
+func groupLockNodes(nodes map[string]*Node) []*groupedLockState {
 	lockedHosts := make(map[heckler.LockState][]string)
 	for host, node := range nodes {
-		if hosts, ok := lockedHosts[node.lockState]; ok {
-			lockedHosts[node.lockState] = append(hosts, host)
-		} else {
-			lockedHosts[node.lockState] = []string{host}
-		}
+		lockedHosts[node.lockState] = append(lockedHosts[node.lockState], host)
 	}
-	compressedHostStr := make(map[string]string)
+	var gls []*groupedLockState
 	for ls, hosts := range lockedHosts {
-		compressedHostStr[compressHosts(hosts)] = fmt.Sprintf("User: '%s' Comment: '%s'", ls.User, ls.Comment)
+		gls = append(gls, &groupedLockState{
+			LockState: ls,
+			Hosts:     hosts,
+		})
 	}
-	return compressedHostStr
-}
-
-func compressHostsStr(hostsStr map[string]string) map[string]string {
-	strHosts := make(map[string][]string)
-	for host, str := range hostsStr {
-		if hosts, ok := strHosts[str]; ok {
-			strHosts[str] = append(hosts, host)
-		} else {
-			strHosts[str] = []string{host}
-		}
-	}
-	compressedHostStr := make(map[string]string)
-	for str, hosts := range strHosts {
-		compressedHostStr[compressHosts(hosts)] = str
-	}
-	return compressedHostStr
+	return gls
 }
 
 func uniqueStrSlice(strSlice []string) []string {
@@ -916,7 +941,7 @@ func uniqueStrSlice(strSlice []string) []string {
 	return uniqueList
 }
 
-func groupEvalErrors(gi git.Oid, targetPuppetLog *rizzopb.Log, nodes map[string]*Node) *groupedEvalError {
+func groupEvalErrors(gi git.Oid, targetPuppetLog *rizzopb.Log, nodes map[string]*Node) *groupedError {
 	nodeList := make([]string, 0)
 	for nodeName, node := range nodes {
 		unmatched := make([]*rizzopb.Log, 0)
@@ -927,18 +952,15 @@ func groupEvalErrors(gi git.Oid, targetPuppetLog *rizzopb.Log, nodes map[string]
 				unmatched = append(unmatched, puppetLog)
 			}
 		}
+		// TODO: rewrite to not modify the node reports
 		node.commitReports[gi].Logs = unmatched
 	}
 
-	ge := new(groupedEvalError)
-	ge.Source = targetPuppetLog.Source
+	ge := new(groupedError)
+	ge.Type = targetPuppetLog.Source
 	sort.Strings(nodeList)
-	ge.Nodes = nodeList
-	ge.CompressedNodes = compressHosts(nodeList)
-	ge.Log = groupLog{
-		Level:   targetPuppetLog.Level,
-		Message: targetPuppetLog.Message,
-	}
+	ge.Hosts = nodeList
+	ge.Error = targetPuppetLog.Message
 	return ge
 }
 
@@ -972,8 +994,7 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 	gr.File = targetDeltaResource.File
 	gr.Line = targetDeltaResource.Line
 	sort.Strings(nodeList)
-	gr.Nodes = nodeList
-	gr.CompressedNodes = compressHosts(nodeList)
+	gr.Hosts = nodeList
 
 	for _, e := range targetDeltaResource.Events {
 		ge = new(groupEvent)
@@ -1008,6 +1029,15 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 		}
 	}
 	return gr
+}
+
+func hasEvalErrors(groupedErrors []*groupedError) bool {
+	for _, ge := range groupedErrors {
+		if ge.Type == "EvalError" {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeLogs(puppetLogs []*rizzopb.Log, logger *log.Logger) []*rizzopb.Log {
@@ -1741,10 +1771,10 @@ func noopToMarkdown(conf *HecklerdConf, commit *git.Commit, gr groupedReport, te
 		body += fmt.Sprintf("commit of this branch.\n\n")
 	}
 	body += commitMsgToMarkdown(commit, conf, templates)
-	body += noopErrorsToMarkdown(gr.EvalErrors, gr.CompressedParentEvalErrors, gr.CompressedErrors, templates)
-	body += lockedNodesToMarkdown(gr.CompressedLockedByAnother, templates)
-	body += beyondRevNodesToMarkdown(gr.CompressedBeyondRev, templates)
 	body += groupedResourcesToMarkdown(gr.Resources, commit, conf, templates)
+	body += noopErrorsToMarkdown(gr.Errors, templates)
+	body += lockedNodesToMarkdown(gr.LockedByAnother, templates)
+	body += beyondRevNodesToMarkdown(gr.BeyondRev, templates)
 	if len(gr.Resources) > 0 {
 		noopOwnersMarkdown, err := noopOwnersToMarkdown(conf, commit, gr.Resources, templates)
 		if err != nil {
@@ -1930,8 +1960,8 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource, commit *git
 		groupedResources,
 		func(i, j int) bool {
 			if string(groupedResources[i].Title) == string(groupedResources[j].Title) {
-				// if the resources titles are equal sort by the list of nodes affected
-				return strings.Join(groupedResources[i].Nodes[:], ",") < strings.Join(groupedResources[j].Nodes[:], ",")
+				// If the resources titles are equal sort by the list of hosts affected
+				return strings.Join(groupedResources[i].Hosts[:], ",") < strings.Join(groupedResources[j].Hosts[:], ",")
 			} else {
 				return string(groupedResources[i].Title) < string(groupedResources[j].Title)
 			}
@@ -1953,22 +1983,37 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource, commit *git
 	return body.String()
 }
 
-func noopErrorsToMarkdown(eval []*groupedEvalError, parentEval string, other map[string]string, templates *template.Template) string {
+func noopErrorsToMarkdown(groupedErrors []*groupedError, templates *template.Template) string {
 	var body strings.Builder
 	var err error
 
-	if len(eval) == 0 && len(parentEval) == 0 && len(other) == 0 {
+	if len(groupedErrors) == 0 {
 		return ""
 	}
 
+	var evalErrors []*groupedError
+	var parentEvalErrors []*groupedError
+	var otherErrors []*groupedError
+
+	for _, ge := range groupedErrors {
+		switch ge.Type {
+		case "EvalError":
+			evalErrors = append(evalErrors, ge)
+		case "ParentEvalError":
+			parentEvalErrors = append(parentEvalErrors, ge)
+		default:
+			otherErrors = append(otherErrors, ge)
+		}
+	}
+
 	data := struct {
-		GroupedEvalErrors          []*groupedEvalError
-		CompressedParentEvalErrors string
-		CompressedErrors           map[string]string
+		EvalErrors       []*groupedError
+		ParentEvalErrors []*groupedError
+		OtherErrors      []*groupedError
 	}{
-		eval,
-		parentEval,
-		other,
+		evalErrors,
+		parentEvalErrors,
+		otherErrors,
 	}
 	err = templates.ExecuteTemplate(&body, "noopErrors.tmpl", data)
 	if err != nil {
@@ -1977,18 +2022,18 @@ func noopErrorsToMarkdown(eval []*groupedEvalError, parentEval string, other map
 	return body.String()
 }
 
-func lockedNodesToMarkdown(locked map[string]string, templates *template.Template) string {
+func lockedNodesToMarkdown(groupedLockStates []*groupedLockState, templates *template.Template) string {
 	var body strings.Builder
 	var err error
 
-	if len(locked) == 0 {
+	if len(groupedLockStates) == 0 {
 		return ""
 	}
 
 	data := struct {
-		Locked map[string]string
+		GroupedLockStates []*groupedLockState
 	}{
-		locked,
+		groupedLockStates,
 	}
 	err = templates.ExecuteTemplate(&body, "lockedNodes.tmpl", data)
 	if err != nil {
@@ -1997,18 +2042,18 @@ func lockedNodesToMarkdown(locked map[string]string, templates *template.Templat
 	return body.String()
 }
 
-func beyondRevNodesToMarkdown(beyondRev map[string]string, templates *template.Template) string {
+func beyondRevNodesToMarkdown(groupedBeyondRevs []*groupedBeyondRev, templates *template.Template) string {
 	var body strings.Builder
 	var err error
 
-	if len(beyondRev) == 0 {
+	if len(groupedBeyondRevs) == 0 {
 		return ""
 	}
 
 	data := struct {
-		BeyondRev map[string]string
+		GroupedBeyondRevs []*groupedBeyondRev
 	}{
-		beyondRev,
+		groupedBeyondRevs,
 	}
 	err = templates.ExecuteTemplate(&body, "beyondRevNodes.tmpl", data)
 	if err != nil {
@@ -2141,12 +2186,11 @@ func unlockNodeSet(user string, force bool, ns *NodeSet, logger *log.Logger) {
 	} else {
 		logger.Printf("Tried to unlock %d nodes, but only succeeded in unlocking, %d", len(ns.nodes.locked), len(unlockedNodes))
 	}
-	for host, str := range compressLockNodes(lockedByAnotherNodes) {
-		logger.Printf("Unlock requested, but locked by another: %s, %s", host, str)
+	for _, gls := range groupLockNodes(lockedByAnotherNodes) {
+		logger.Printf("Unlock requested, but locked by another: %v", gls)
 	}
-	compressedErrNodes := compressErrorNodes(errLockNodes)
-	for host, err := range compressedErrNodes {
-		logger.Printf("Unlock failed, errNodes: %s, Error: %v", host, err)
+	for _, ge := range groupErrorNodes(errLockNodes) {
+		logger.Printf("Unlock failed, %v", ge)
 	}
 	ns.nodes.active = unlockedNodes
 	ns.nodes.errored = mergeNodeMaps(ns.nodes.errored, errLockNodes)
@@ -2561,14 +2605,13 @@ func applyLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Tem
 				break
 			}
 			closeNodeSet(perApply, logger)
-			compressedErrNodes := compressErrorNodes(perApply.nodes.errored)
 			for _, node := range perApply.nodes.errored {
 				if _, ok := node.err.(*applyError); ok {
 					applyErrors = append(applyErrors, node.err)
 				}
 			}
-			for host, err := range compressedErrNodes {
-				logger.Printf("errNodes: %s, Error: %v", host, err)
+			for _, ge := range groupErrorNodes(perApply.nodes.errored) {
+				logger.Printf("Apply Errors, %v", ge)
 			}
 			logger.Printf("Applied Set '%s': (%d); Beyond rev nodes: (%d); Error nodes: (%d)", nodeSetName, len(appliedNodes), len(beyondRevNodes), len(perApply.nodes.errored))
 			if (nodeSetIndex + 1) < len(conf.ApplySetOrder) {
@@ -2651,7 +2694,7 @@ func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 			if issue.GetState() == "closed" {
 				continue
 			}
-			if len(gr.Resources) == 0 && len(gr.EvalErrors) == 0 {
+			if len(gr.Resources) == 0 && !hasEvalErrors(gr.Errors) {
 				err := closeIssue(ghclient, conf, issue, "No noop output marking issue as 'closed'")
 				if err != nil {
 					logger.Printf("Error: unable to close approved issue(%d): %v", issue.GetNumber(), err)
@@ -2814,7 +2857,7 @@ func groupedResourcesNodeFiles(groupedResources []*groupedResource, puppetCodePa
 	// Get node source file for each node in groupedResource
 	nodesToFile := make(map[string]string)
 	for _, gr := range groupedResources {
-		for _, node := range gr.Nodes {
+		for _, node := range gr.Hosts {
 			if _, ok := nodesToFile[node]; !ok {
 				if nf, ok := nodeFile(node, nodeFileRegexes, puppetCodePath); ok {
 					nodesToFile[node] = nf
@@ -2825,7 +2868,7 @@ func groupedResourcesNodeFiles(groupedResources []*groupedResource, puppetCodePa
 	// Add unique node files set to groupedResource
 	for _, gr := range groupedResources {
 		nodeFiles := make([]string, 0)
-		for _, node := range gr.Nodes {
+		for _, node := range gr.Hosts {
 			if nf, ok := nodesToFile[node]; ok {
 				nodeFiles = append(nodeFiles, nf)
 			}
@@ -3145,9 +3188,8 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 	if len(unlockedHosts) > 0 {
 		logger.Printf("Unlocked: %s", compressHosts(unlockedHosts))
 	}
-	compressedErrNodes := compressErrorNodes(ns.nodes.errored)
-	for host, err := range compressedErrNodes {
-		logger.Printf("Unlock errNodes: %s, Error: %v", host, err)
+	for _, ge := range groupErrorNodes(ns.nodes.errored) {
+		logger.Printf("Unlock errors, %v", ge)
 	}
 	return nil
 }
@@ -3311,7 +3353,7 @@ func tagApproved(repo *git.Repository, ghclient *github.Client, conf *HecklerdCo
 		}
 		// Failures are not changes, but we should not auto approve the commit if
 		// it introduced some type of breakage manifesting in an EvalError
-		if len(gr.Resources) == 0 && len(gr.EvalErrors) == 0 {
+		if len(gr.Resources) == 0 && !hasEvalErrors(gr.Errors) {
 			approved[gi] = "Approved, no changes in noop"
 			continue
 		}
@@ -3464,14 +3506,14 @@ func reconcileMilestone(priorTag string, nextTag string, repo *git.Repository, c
 func thresholdExceededNodeSet(ns *NodeSet, logger *log.Logger) bool {
 	if ns.nodeThresholds.Errored > -1 && len(ns.nodes.errored) > ns.nodeThresholds.Errored {
 		logger.Printf("Error nodes(%d) exceeds the threshold(%d)", len(ns.nodes.errored), ns.nodeThresholds.Errored)
-		for host, err := range compressErrorNodes(ns.nodes.errored) {
-			logger.Printf("errNodes: %s, Error: %v", host, err)
+		for _, ge := range groupErrorNodes(ns.nodes.errored) {
+			logger.Printf("Errors, %v", ge)
 		}
 		return true
 	} else if ns.nodeThresholds.LockedByAnother > -1 && len(ns.nodes.lockedByAnother) > ns.nodeThresholds.LockedByAnother {
 		logger.Printf("Locked by another nodes(%d) exceeds the threshold(%d)", len(ns.nodes.lockedByAnother), ns.nodeThresholds.LockedByAnother)
-		for host, str := range compressLockNodes(ns.nodes.lockedByAnother) {
-			logger.Printf("Locked by another: %s, %s", host, str)
+		for _, gls := range groupLockNodes(ns.nodes.lockedByAnother) {
+			logger.Printf("Locked by another: %v", gls)
 		}
 		return true
 	}

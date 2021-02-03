@@ -1,6 +1,7 @@
 package heckler
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/lollipopman/heckler/internal/rizzopb"
@@ -19,6 +20,10 @@ type LockState struct {
 	LockStatus
 	User    string
 	Comment string
+}
+
+func (ls LockState) String() string {
+	return fmt.Sprintf("LockState, User: '%s' Comment: '%s'", ls.User, ls.Comment)
 }
 
 func LockReportToLockState(lr rizzopb.PuppetLockReport) LockState {
