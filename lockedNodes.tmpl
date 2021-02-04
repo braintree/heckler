@@ -1,7 +1,6 @@
 ### Locked Nodes
 
-The following nodes were locked by another user during the noop run,
-consequently they are unrepresented in the noop output.
+The following nodes were locked by another user during the noop run, consequently they are unrepresented in the noop output.
 {{ range $gls := .GroupedLockStates }}
 - *Hosts:* `{{ $gls.Hosts }}`
   -  *User:* {{ $gls.LockState.User }}
