@@ -32,6 +32,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/go-github/v29/github"
+	"github.com/gregjones/httpcache"
 	codeowners "github.com/hairyhenderson/go-codeowners"
 	git "github.com/libgit2/git2go/v31"
 	gitcgiserver "github.com/lollipopman/git-cgi-server"
@@ -1453,6 +1454,13 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 		tr.(*http.Transport).Proxy = http.ProxyURL(proxyUrl)
 	}
 
+	// Configure HTTP memory caching
+	cacheTr := &httpcache.Transport{
+		Transport:           tr,
+		Cache:               httpcache.NewMemoryCache(),
+		MarkCachedResponses: true,
+	}
+
 	var privateKeyPath string
 	if conf.GitHubPrivateKeyPath != "" {
 		privateKeyPath = conf.GitHubPrivateKeyPath
@@ -1472,7 +1480,7 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 	} else {
 		return nil, nil, fmt.Errorf("Unable to load GitHub private key from '%s'", privateKeyPath)
 	}
-	itr, err := ghinstallation.New(tr, conf.GitHubAppId, conf.GitHubAppInstallId, privateKey)
+	itr, err := ghinstallation.New(cacheTr, conf.GitHubAppId, conf.GitHubAppInstallId, privateKey)
 	if err != nil {
 		return nil, nil, err
 	}

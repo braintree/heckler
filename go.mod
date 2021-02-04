@@ -12,6 +12,7 @@ require (
 	github.com/google/go-cmp v0.4.1
 	github.com/google/go-github/v29 v29.0.3
 	github.com/google/uuid v1.1.1 // indirect
+	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
 	github.com/hairyhenderson/go-codeowners v0.2.2
 	github.com/huandu/xstrings v1.3.0 // indirect
 	github.com/imdario/mergo v0.3.8 // indirect
