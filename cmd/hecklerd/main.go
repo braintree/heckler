@@ -2507,7 +2507,7 @@ func greatestApprovedTag(nextTags []string, priorTag string, conf *HecklerdConf,
 		if err != nil {
 			return "", nil, err
 		}
-		// If the tag is not approved break, and return the last approved tag if
+		// If the tag is not approved, break and return the last approved tag if
 		// any
 		if !nextTagApproved {
 			break
