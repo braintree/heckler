@@ -119,7 +119,7 @@ Puppet::Reports.register_report(:heckler) do
       Puppet.log_exception(detail, "Could not write report for #{host} at #{file}: #{detail}")
     end
 
-    if report["noop"] == false && report["status"] != "falied"
+    if report["noop"] == false && report["status"] != "failed"
       apply_name = "heckler_last_apply.json"
       apply_file = File.join(dir, apply_name)
       begin
