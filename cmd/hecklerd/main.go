@@ -22,6 +22,7 @@ import (
 	"runtime/pprof"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"text/template"
 	"time"
@@ -2550,6 +2551,17 @@ func greatestApprovedTag(nextTags []string, priorTag string, conf *HecklerdConf,
 	return approvedTag, approvedMilestone, nil
 }
 
+func applyLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
+	logger := log.New(os.Stdout, "[applyLoop] ", log.Lshortfile)
+	loopSleep := (time.Duration(conf.LoopApplySleepSeconds) * time.Second)
+	logger.Printf("Started, looping every %v", loopSleep)
+	for {
+		apply(noopLock, conf, repo, templates, logger)
+		logger.Println("Apply complete, sleeping")
+		time.Sleep(loopSleep)
+	}
+}
+
 // Are there newer release tags than our common lastApply tag across "all"
 // nodes?
 //   If yes
@@ -2558,107 +2570,103 @@ func greatestApprovedTag(nextTags []string, priorTag string, conf *HecklerdConf,
 //       If yes
 //         Apply new tag across all nodes
 //   If no, do nothing
-func applyLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
+func apply(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template, logger *log.Logger) {
 	var err error
 	var ns *NodeSet
 	var perApply *NodeSet
-	logger := log.New(os.Stdout, "[applyLoop] ", log.Lshortfile)
 	applySetSleep := (time.Duration(conf.ApplySetSleepSeconds) * time.Second)
-	loopSleep := (time.Duration(conf.LoopApplySleepSeconds) * time.Second)
-	logger.Printf("Started, looping every %v", loopSleep)
-	for {
-		time.Sleep(loopSleep)
-		ns = &NodeSet{
-			name:           "all",
+	noopLock.Lock()
+	defer noopLock.Unlock()
+	ns = &NodeSet{
+		name:           "all",
+		nodeThresholds: conf.MaxNodeThresholds,
+	}
+	err = dialNodeSet(conf, ns, logger)
+	if err != nil {
+		logger.Printf("Error: unable to dial node set: %v", err)
+		return
+	}
+	err = commonTagNodeSet(conf, ns, repo, logger)
+	if err != nil {
+		logger.Printf("Error: unable to query for commonTag: %v", err)
+		closeNodeSet(ns, logger)
+		return
+	}
+	logger.Printf("Found common tag: %s", ns.commonTag)
+	priorTag := ns.commonTag
+	nextTags, err := nextTagsInRepo(priorTag, conf.EnvPrefix, repo)
+	if err != nil {
+		logger.Printf("Error: unable to query for nextTags after '%s', sleeping: %v", priorTag, err)
+		closeNodeSet(ns, logger)
+		return
+	}
+	if len(nextTags) == 0 {
+		logger.Printf("No nextTags found after tag '%s', sleeping", priorTag)
+		closeNodeSet(ns, logger)
+		return
+	}
+	nextTag, nextTagMilestone, err := greatestApprovedTag(nextTags, priorTag, conf, repo, logger)
+	if err != nil {
+		logger.Printf("Error: unable to find greatestApprovedTag in set %v: %v, sleeping", nextTags, err)
+		closeNodeSet(ns, logger)
+		return
+	}
+	if nextTag == "" {
+		logger.Printf("No approved nextTag found after tag '%s', sleeping", priorTag)
+		closeNodeSet(ns, logger)
+		return
+	}
+	if len(conf.SlackAnnounceChannels) > 0 {
+		tagURL := fmt.Sprintf("<%s|%s>", nextTagMilestone.GetHTMLURL()+"?closed=1", nextTag)
+		msg := fmt.Sprintf("Puppet applying tag %s with set order: %s", tagURL, strings.Join(conf.ApplySetOrder, ", "))
+		msg = issuePrefix(conf.EnvPrefix) + msg
+		err = slackAnnounce(conf.SlackAnnounceChannels, msg, conf)
+		if err != nil {
+			logger.Printf("Error: unable to announce to slack: %v", err)
+		}
+	}
+	logger.Printf("Tag '%s' is ready to apply, applying with set order: %v", nextTag, conf.ApplySetOrder)
+	var applyErrors []error
+	for nodeSetIndex, nodeSetName := range conf.ApplySetOrder {
+		logger.Printf("Applying Set '%s' (%d of %d sets)", nodeSetName, nodeSetIndex+1, len(conf.ApplySetOrder))
+		perApply = &NodeSet{
+			name:           nodeSetName,
 			nodeThresholds: conf.MaxNodeThresholds,
 		}
-		err = dialNodeSet(conf, ns, logger)
+		err = dialNodeSet(conf, perApply, logger)
 		if err != nil {
 			logger.Printf("Error: unable to dial node set: %v", err)
-			continue
+			break
 		}
-		err = commonTagNodeSet(conf, ns, repo, logger)
+		appliedNodes, beyondRevNodes, err := applyNodeSet(perApply, false, false, nextTag, repo, conf.LockMessage, logger)
 		if err != nil {
-			logger.Printf("Error: unable to query for commonTag: %v", err)
-			closeNodeSet(ns, logger)
-			continue
-		}
-		logger.Printf("Found common tag: %s", ns.commonTag)
-		priorTag := ns.commonTag
-		nextTags, err := nextTagsInRepo(priorTag, conf.EnvPrefix, repo)
-		if err != nil {
-			logger.Printf("Error: unable to query for nextTags after '%s', sleeping: %v", priorTag, err)
-			closeNodeSet(ns, logger)
-			continue
-		}
-		if len(nextTags) == 0 {
-			logger.Printf("No nextTags found after tag '%s', sleeping", priorTag)
-			closeNodeSet(ns, logger)
-			continue
-		}
-		nextTag, nextTagMilestone, err := greatestApprovedTag(nextTags, priorTag, conf, repo, logger)
-		if err != nil {
-			logger.Printf("Error: unable to find greatestApprovedTag in set %v: %v, sleeping", nextTags, err)
-			closeNodeSet(ns, logger)
-			continue
-		}
-		if nextTag == "" {
-			logger.Printf("No approved nextTag found after tag '%s', sleeping", priorTag)
-			closeNodeSet(ns, logger)
-			continue
-		}
-		if len(conf.SlackAnnounceChannels) > 0 {
-			tagURL := fmt.Sprintf("<%s|%s>", nextTagMilestone.GetHTMLURL()+"?closed=1", nextTag)
-			msg := fmt.Sprintf("Puppet applying tag %s with set order: %s", tagURL, strings.Join(conf.ApplySetOrder, ", "))
-			msg = issuePrefix(conf.EnvPrefix) + msg
-			err = slackAnnounce(conf.SlackAnnounceChannels, msg, conf)
-			if err != nil {
-				logger.Printf("Error: unable to announce to slack: %v", err)
-			}
-		}
-		logger.Printf("Tag '%s' is ready to apply, applying with set order: %v", nextTag, conf.ApplySetOrder)
-		var applyErrors []error
-		for nodeSetIndex, nodeSetName := range conf.ApplySetOrder {
-			logger.Printf("Applying Set '%s' (%d of %d sets)", nodeSetName, nodeSetIndex+1, len(conf.ApplySetOrder))
-			perApply = &NodeSet{
-				name:           nodeSetName,
-				nodeThresholds: conf.MaxNodeThresholds,
-			}
-			err = dialNodeSet(conf, perApply, logger)
-			if err != nil {
-				logger.Printf("Error: unable to dial node set: %v", err)
-				break
-			}
-			appliedNodes, beyondRevNodes, err := applyNodeSet(perApply, false, false, nextTag, repo, conf.LockMessage, logger)
-			if err != nil {
-				logger.Printf("Error: unable to apply nodes, sleeping: %v", err)
-				closeNodeSet(perApply, logger)
-				break
-			}
+			logger.Printf("Error: unable to apply nodes, sleeping: %v", err)
 			closeNodeSet(perApply, logger)
-			for _, node := range perApply.nodes.errored {
-				if _, ok := node.err.(*applyError); ok {
-					applyErrors = append(applyErrors, node.err)
-				}
-			}
-			for _, ge := range groupErrorNodes(perApply.nodes.errored) {
-				logger.Printf("Apply Errors, %v", ge)
-			}
-			logger.Printf("Applied Set '%s': (%d); Beyond rev nodes: (%d); Error nodes: (%d)", nodeSetName, len(appliedNodes), len(beyondRevNodes), len(perApply.nodes.errored))
-			if (nodeSetIndex + 1) < len(conf.ApplySetOrder) {
-				if applySetSleep > 0 {
-					logger.Printf("Sleeping for %v, before applying next set '%s'...", applySetSleep, conf.ApplySetOrder[nodeSetIndex+1])
-					sleepLogMsg := fmt.Sprintf("Node sets '%v' applied, Next sets to apply '%v'", conf.ApplySetOrder[:nodeSetIndex+1], conf.ApplySetOrder[nodeSetIndex+1:])
-					sleepAndLog(applySetSleep, time.Duration(10)*time.Second, sleepLogMsg, logger)
-				}
+			break
+		}
+		closeNodeSet(perApply, logger)
+		for _, node := range perApply.nodes.errored {
+			if _, ok := node.err.(*applyError); ok {
+				applyErrors = append(applyErrors, node.err)
 			}
 		}
-		err = reportErrors(applyErrors, conf, templates, logger)
-		if err != nil {
-			logger.Printf("Error: unable to report apply errors, '%v'", err)
+		for _, ge := range groupErrorNodes(perApply.nodes.errored) {
+			logger.Printf("Apply Errors, %v", ge)
 		}
-		logger.Println("Apply complete, sleeping")
+		logger.Printf("Applied Set '%s': (%d); Beyond rev nodes: (%d); Error nodes: (%d)", nodeSetName, len(appliedNodes), len(beyondRevNodes), len(perApply.nodes.errored))
+		if (nodeSetIndex + 1) < len(conf.ApplySetOrder) {
+			if applySetSleep > 0 {
+				logger.Printf("Sleeping for %v, before applying next set '%s'...", applySetSleep, conf.ApplySetOrder[nodeSetIndex+1])
+				sleepLogMsg := fmt.Sprintf("Node sets '%v' applied, Next sets to apply '%v'", conf.ApplySetOrder[:nodeSetIndex+1], conf.ApplySetOrder[nodeSetIndex+1:])
+				sleepAndLog(applySetSleep, time.Duration(10)*time.Second, sleepLogMsg, logger)
+			}
+		}
 	}
+	err = reportErrors(applyErrors, conf, templates, logger)
+	if err != nil {
+		logger.Printf("Error: unable to report apply errors, '%v'", err)
+	}
+	return
 }
 
 //  Are there newer commits than our common last applied tag across "all"
@@ -3599,73 +3607,79 @@ func commonTagNodeSet(conf *HecklerdConf, ns *NodeSet, repo *git.Repository, log
 //          Does the commit noop clean?
 //            If No, mark failure
 //            If Yes, apply commit and stop nooping node
-func dirtyLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
+func clean(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, nodeDirtyNoops map[string]dirtyNoops, templates *template.Template, logger *log.Logger) {
+	cleanChan := make(chan cleanNodeResult)
 	var err error
 	var ns *NodeSet
-	logger := log.New(os.Stdout, "[dirtyLoop] ", log.Lshortfile)
-	loopSleep := time.Duration(conf.LoopDirtySleepSeconds) * time.Second
-	logger.Printf("Started, looping every %v", loopSleep)
-	cleanChan := make(chan cleanNodeResult)
-	nodeDirtyNoops := make(map[string]dirtyNoops)
-	for {
-		time.Sleep(loopSleep)
-		ns = &NodeSet{
-			name:           "all",
-			nodeThresholds: conf.MaxNodeThresholds,
-		}
-		err = dialNodeSet(conf, ns, logger)
-		if err != nil {
-			logger.Printf("Unable to dial node set: %v", err)
-			continue
-		}
-		err := dirtyNodeSet(ns, repo, logger)
-		if err != nil {
-			logger.Printf("Unable to obtain dirty node set: %v", err)
-			closeNodeSet(ns, logger)
-			continue
-		}
-		// Delete dirtyNoops for nodes which are no longer in our dirty node set
-		for host := range nodeDirtyNoops {
-			if _, ok := ns.nodes.active[host]; !ok {
-				delete(nodeDirtyNoops, host)
-			}
-		}
-		if len(ns.nodes.active) > 0 {
-			logger.Printf("Dirty Nodes: %s\n", compressNodesMap(ns.nodes.active))
-		}
-		for host, node := range ns.nodes.active {
-			if dn, ok := nodeDirtyNoops[host]; !ok || dn.rev != node.lastApply {
-				nodeDirtyNoops[host] = dirtyNoops{
-					rev:       node.lastApply,
-					commitIds: make(map[git.Oid]bool),
-				}
-			}
-			go cleanNode(node, nodeDirtyNoops[host], cleanChan, repo, conf, logger)
-		}
-		var cleanErrors []error
-		for range ns.nodes.active {
-			cr := <-cleanChan
-			if cr.err != nil {
-				if _, ok := cr.err.(*cleanError); ok {
-					cleanErrors = append(cleanErrors, cr.err)
-				} else {
-					logger.Printf("Clean failed for %s: %v", cr.host, cr.err)
-				}
-			} else {
-				nodeDirtyNoops[cr.host] = cr.dn
-				if cr.clean {
-					logger.Printf("Cleaned %s", cr.host)
-				} else {
-					logger.Printf("Unable to clean %s, no diffless noops found, yet", cr.host)
-				}
-			}
-		}
+	noopLock.Lock()
+	defer noopLock.Unlock()
+	ns = &NodeSet{
+		name:           "all",
+		nodeThresholds: conf.MaxNodeThresholds,
+	}
+	err = dialNodeSet(conf, ns, logger)
+	if err != nil {
+		logger.Printf("Unable to dial node set: %v", err)
+		return
+	}
+	err = dirtyNodeSet(ns, repo, logger)
+	if err != nil {
+		logger.Printf("Unable to obtain dirty node set: %v", err)
 		closeNodeSet(ns, logger)
-		err = reportErrors(cleanErrors, conf, templates, logger)
-		if err != nil {
-			logger.Printf("Error: unable to report clean errors, '%v'", err)
+		return
+	}
+	// Delete dirtyNoops for nodes which are no longer in our dirty node set
+	for host := range nodeDirtyNoops {
+		if _, ok := ns.nodes.active[host]; !ok {
+			delete(nodeDirtyNoops, host)
 		}
+	}
+	if len(ns.nodes.active) > 0 {
+		logger.Printf("Dirty Nodes: %s\n", compressNodesMap(ns.nodes.active))
+	}
+	for host, node := range ns.nodes.active {
+		if dn, ok := nodeDirtyNoops[host]; !ok || dn.rev != node.lastApply {
+			nodeDirtyNoops[host] = dirtyNoops{
+				rev:       node.lastApply,
+				commitIds: make(map[git.Oid]bool),
+			}
+		}
+		go cleanNode(node, nodeDirtyNoops[host], cleanChan, repo, conf, logger)
+	}
+	var cleanErrors []error
+	for range ns.nodes.active {
+		cr := <-cleanChan
+		if cr.err != nil {
+			if _, ok := cr.err.(*cleanError); ok {
+				cleanErrors = append(cleanErrors, cr.err)
+			} else {
+				logger.Printf("Clean failed for %s: %v", cr.host, cr.err)
+			}
+		} else {
+			nodeDirtyNoops[cr.host] = cr.dn
+			if cr.clean {
+				logger.Printf("Cleaned %s", cr.host)
+			} else {
+				logger.Printf("Unable to clean %s, no diffless noops found, yet", cr.host)
+			}
+		}
+	}
+	closeNodeSet(ns, logger)
+	err = reportErrors(cleanErrors, conf, templates, logger)
+	if err != nil {
+		logger.Printf("Error: unable to report clean errors, '%v'", err)
+	}
+}
+
+func cleanLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
+	logger := log.New(os.Stdout, "[cleanLoop] ", log.Lshortfile)
+	loopSleep := time.Duration(conf.LoopDirtySleepSeconds) * time.Second
+	nodeDirtyNoops := make(map[string]dirtyNoops)
+	logger.Printf("Started, looping every %v", loopSleep)
+	for {
+		clean(noopLock, conf, repo, nodeDirtyNoops, templates, logger)
 		logger.Println("Dirty Loop complete, sleeping")
+		time.Sleep(loopSleep)
 	}
 }
 
@@ -4026,98 +4040,105 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 //    If Yes,
 //      - noop each commit or load serialized copy
 //      - create github issue, if it does not exist
-func noopLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
+func noop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template, logger *log.Logger) {
 	var err error
 	var ns *NodeSet
+	noopLock.Lock()
+	defer noopLock.Unlock()
+	ns = &NodeSet{
+		name:           "all",
+		nodeThresholds: conf.MaxNodeThresholds,
+	}
+	err = dialNodeSet(conf, ns, logger)
+	if err != nil {
+		logger.Printf("Unable to dial node set: %v", err)
+		return
+	}
+	err = commonTagNodeSet(conf, ns, repo, logger)
+	if err != nil {
+		logger.Printf("Unable to query for commonTag: %v", err)
+		closeNodeSet(ns, logger)
+		return
+	}
+	logger.Printf("Found common tag: %s", ns.commonTag)
+	_, commits, err := commitLogIdList(repo, ns.commonTag, conf.RepoBranch)
+	if err != nil {
+		logger.Fatalf("Unable to obtain commit log ids: %v", err)
+	}
+	if len(commits) == 0 {
+		logger.Println("No new commits, sleeping")
+		closeNodeSet(ns, logger)
+		return
+	}
+	closeNodeSet(ns, logger)
+	var gr groupedReport
+	var perNoop *NodeSet
+	for gi, commit := range commits {
+		gr, err = unmarshalGroupedReport(commit.Id(), conf.GroupedNoopDir)
+		if os.IsNotExist(err) {
+			perNoop = &NodeSet{
+				name:           "all",
+				nodeThresholds: conf.MaxNodeThresholds,
+			}
+			err = dialNodeSet(conf, perNoop, logger)
+			if err != nil {
+				logger.Printf("Unable to dial node set: %v", err)
+				break
+			}
+			err = lastApplyNodeSet(perNoop, repo, logger)
+			if err != nil {
+				logger.Printf("Unable to get last apply for node set: %v", err)
+				closeNodeSet(perNoop, logger)
+				break
+			}
+			for _, node := range perNoop.nodes.active {
+				node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
+				node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
+			}
+			gr, err = groupReportNodeSet(perNoop, commit, true, repo, conf.IgnoredResources, conf.NoopDir, conf, logger)
+			if err != nil {
+				logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
+				closeNodeSet(perNoop, logger)
+				continue
+			}
+			closeNodeSet(perNoop, logger)
+			err = marshalGroupedReport(commit.Id(), gr, conf.GroupedNoopDir)
+			if err != nil {
+				logger.Fatalf("Error: unable to marshal groupedCommit: %v", err)
+			}
+		} else if err != nil {
+			logger.Fatalf("Error: unable to unmarshal groupedCommit: %v", err)
+		}
+		ghclient, _, err := githubConn(conf)
+		if err != nil {
+			logger.Printf("Error: unable to connect to GitHub, sleeping: %v", err)
+			continue
+		}
+		issue, err := githubIssueFromCommit(ghclient, gi, conf)
+		if err != nil {
+			logger.Printf("Error: unable to determine if issue for commit %s exists: %v", gi.String(), err)
+			continue
+		}
+		if issue == nil {
+			issue, err = githubCreateCommitIssue(ghclient, conf, commit, gr, templates)
+			if err != nil {
+				logger.Printf("Error: unable to create github issue: %v", err)
+				continue
+			}
+			logger.Printf("Successfully created new issue: '%v'", issue.GetTitle())
+		}
+	}
+	return
+}
+
+func noopLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	logger := log.New(os.Stdout, "[noopLoop] ", log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopNoopSleepSeconds) * time.Second
 	logger.Printf("Started, looping every %v", loopSleep)
 	for {
-		time.Sleep(loopSleep)
-		ns = &NodeSet{
-			name:           "all",
-			nodeThresholds: conf.MaxNodeThresholds,
-		}
-		err = dialNodeSet(conf, ns, logger)
-		if err != nil {
-			logger.Printf("Unable to dial node set: %v", err)
-			continue
-		}
-		err = commonTagNodeSet(conf, ns, repo, logger)
-		if err != nil {
-			logger.Printf("Unable to query for commonTag: %v", err)
-			closeNodeSet(ns, logger)
-			continue
-		}
-		logger.Printf("Found common tag: %s", ns.commonTag)
-		_, commits, err := commitLogIdList(repo, ns.commonTag, conf.RepoBranch)
-		if err != nil {
-			logger.Fatalf("Unable to obtain commit log ids: %v", err)
-		}
-		if len(commits) == 0 {
-			logger.Println("No new commits, sleeping")
-			closeNodeSet(ns, logger)
-			continue
-		}
-		closeNodeSet(ns, logger)
-		var gr groupedReport
-		var perNoop *NodeSet
-		for gi, commit := range commits {
-			gr, err = unmarshalGroupedReport(commit.Id(), conf.GroupedNoopDir)
-			if os.IsNotExist(err) {
-				perNoop = &NodeSet{
-					name:           "all",
-					nodeThresholds: conf.MaxNodeThresholds,
-				}
-				err = dialNodeSet(conf, perNoop, logger)
-				if err != nil {
-					logger.Printf("Unable to dial node set: %v", err)
-					break
-				}
-				err = lastApplyNodeSet(perNoop, repo, logger)
-				if err != nil {
-					logger.Printf("Unable to get last apply for node set: %v", err)
-					closeNodeSet(perNoop, logger)
-					break
-				}
-				for _, node := range perNoop.nodes.active {
-					node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
-					node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
-				}
-				gr, err = groupReportNodeSet(perNoop, commit, true, repo, conf.IgnoredResources, conf.NoopDir, conf, logger)
-				if err != nil {
-					logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
-					closeNodeSet(perNoop, logger)
-					continue
-				}
-				closeNodeSet(perNoop, logger)
-				err = marshalGroupedReport(commit.Id(), gr, conf.GroupedNoopDir)
-				if err != nil {
-					logger.Fatalf("Error: unable to marshal groupedCommit: %v", err)
-				}
-			} else if err != nil {
-				logger.Fatalf("Error: unable to unmarshal groupedCommit: %v", err)
-			}
-			ghclient, _, err := githubConn(conf)
-			if err != nil {
-				logger.Printf("Error: unable to connect to GitHub, sleeping: %v", err)
-				continue
-			}
-			issue, err := githubIssueFromCommit(ghclient, gi, conf)
-			if err != nil {
-				logger.Printf("Error: unable to determine if issue for commit %s exists: %v", gi.String(), err)
-				continue
-			}
-			if issue == nil {
-				issue, err = githubCreateCommitIssue(ghclient, conf, commit, gr, templates)
-				if err != nil {
-					logger.Printf("Error: unable to create github issue: %v", err)
-					continue
-				}
-				logger.Printf("Successfully created new issue: '%v'", issue.GetTitle())
-			}
-		}
+		noop(noopLock, conf, repo, templates, logger)
 		logger.Println("Nooping complete, sleeping")
+		time.Sleep(loopSleep)
 	}
 }
 
@@ -4526,10 +4547,16 @@ func main() {
 	if conf.ManualMode {
 		logger.Println("Manual mode, not starting loops")
 	} else {
+		// Use a mutex to prevent loops which noop hosts from running concurrently.
+		// Though having them run concurrently has been mostly harmless in
+		// practice, it does create unexpected side effects. In particular if a
+		// noop kicks off while an apply is sleeping before applying its next set,
+		// the apply might fail and need to start over.
+		noopLock := &sync.Mutex{}
 		if conf.LoopNoopSleepSeconds == 0 {
 			logger.Println("noopLoop disabled")
 		} else {
-			go noopLoop(conf, repo, templates)
+			go noopLoop(noopLock, conf, repo, templates)
 		}
 		if conf.LoopMilestoneSleepSeconds == 0 {
 			logger.Println("milestoneLoop disabled")
@@ -4539,7 +4566,7 @@ func main() {
 		if conf.LoopApplySleepSeconds == 0 {
 			logger.Println("applyLoop disabled")
 		} else {
-			go applyLoop(conf, repo, templates)
+			go applyLoop(noopLock, conf, repo, templates)
 		}
 		if conf.LoopApprovalSleepSeconds == 0 {
 			logger.Println("approvalLoop disabled")
@@ -4547,9 +4574,9 @@ func main() {
 			go approvalLoop(conf, repo)
 		}
 		if conf.LoopDirtySleepSeconds == 0 {
-			logger.Println("dirtyLoop disabled")
+			logger.Println("cleanLoop disabled")
 		} else {
-			go dirtyLoop(conf, repo, templates)
+			go cleanLoop(noopLock, conf, repo, templates)
 		}
 		hecklerdCron := cron.New()
 		if conf.AutoTagCronSchedule == "" {
