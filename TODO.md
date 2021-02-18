@@ -16,9 +16,6 @@
 ## Known Bugs
 
 - [ ] Applying an unknown rev panics hecklerd
-- [ ] Serialized reports grow stale: hecklerd could track the aggregate node
-      status as a hash, similar to go.sum, and renoop if the status has
-      changed?
 
 ## Nice to Have
 

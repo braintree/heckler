@@ -101,11 +101,25 @@ Puppet::Reports.register_report(:heckler) do
       FileUtils.chmod_R(0750, dir)
     end
 
+    last_apply_name = "heckler_last_apply.json"
+    last_apply_path = File.join(dir, last_apply_name)
+
     # We expect a git sha as the config version
     if !(report.has_key?("configuration_version") &&
          report["configuration_version"].length > 0)
       Puppet.crit("Unable to write report: invalid configuration_version")
       return
+    end
+
+    # For a noop set the last_apply_version so we know what applied version the
+    # noop was generated from.
+    if report["noop"] == true
+      if Puppet::FileSystem.exist?(last_apply_path)
+        last_apply_report = JSON.parse(File.read(last_apply_path))
+        report["last_apply_version"] = last_apply_report["configuration_version"]
+      else
+        report["last_apply_version"] = ""
+      end
     end
 
     name = "heckler_" + report["configuration_version"] + ".json"
@@ -120,14 +134,12 @@ Puppet::Reports.register_report(:heckler) do
     end
 
     if report["noop"] == false && report["status"] != "failed"
-      apply_name = "heckler_last_apply.json"
-      apply_file = File.join(dir, apply_name)
       begin
-        Puppet::Util.replace_file(apply_file, 0644) do |fh|
+        Puppet::Util.replace_file(last_apply_path, 0644) do |fh|
           fh.print report.to_json
         end
       rescue => detail
-        Puppet.log_exception(detail, "Could not write apply report for #{host} at #{apply_file}: #{detail}")
+        Puppet.log_exception(detail, "Could not write apply report for #{host} at #{last_apply_path}: #{detail}")
       end
     end
 

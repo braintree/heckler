@@ -70,6 +70,16 @@ func (e *cleanError) Error() string {
 	return fmt.Sprintf("Unable to clean %s, no diffless noops found near its last apply of '%s-dirty'", e.Host, e.LastApply.String())
 }
 
+type noopInvalidError struct {
+	Host          string
+	LastApply     git.Oid
+	NoopLastApply git.Oid
+}
+
+func (e *noopInvalidError) Error() string {
+	return fmt.Sprintf("Noop is invalid, %s last apply is '%s', but noop is against '%s'", e.Host, e.LastApply.String(), e.NoopLastApply.String())
+}
+
 type lastApplyStatus int
 type noopApproverType int
 
@@ -447,9 +457,30 @@ func loadNoop(commit git.Oid, node *Node, noopDir string, repo *git.Repository, 
 			return nil, err
 		}
 		if node.host != rprt.Host {
-			return nil, errors.New(fmt.Sprintf("Host mismatch %s != %s", node.host, rprt.Host))
+			return nil, fmt.Errorf("Host mismatch %s != %s", node.host, rprt.Host)
 		}
-		return rprt, nil
+		// To accurately create delta noops the last applied version which the noop
+		// is taken against must match between all the noops. If it does not some
+		// diffs might not match.  For example if a file is edited before and after
+		// an apply, a noop taken after the apply will only reflect the second
+		// edit, whereas a noop taken before the apply will contain both edits. So
+		// if the serialized noops lastApply does not match the host's current
+		// lastApply we consider the noop invalid.
+		applyStatus, oidPtr, err := parseLastApply(rprt.LastApplyVersion, repo)
+		switch applyStatus {
+		case lastApplyClean:
+			if node.lastApply == *oidPtr {
+				return rprt, nil
+			} else {
+				return nil, &noopInvalidError{node.host, node.lastApply, *oidPtr}
+			}
+		case lastApplyDirty:
+			return nil, fmt.Errorf("Noop last apply was dirty!, %s", rprt.LastApplyVersion)
+		case lastApplyErrored:
+			return nil, fmt.Errorf("Noop last apply was unparseable!, %s", rprt.LastApplyVersion)
+		default:
+			return rprt, errors.New("Unknown lastApplyStatus!")
+		}
 	}
 }
 
@@ -518,7 +549,7 @@ func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir st
 	for host, node := range ns.nodes.active {
 		if rprt, err = loadNoop(commitId, node, noopDir, repo, logger); err == nil {
 			ns.nodes.active[node.host].commitReports[commitId] = rprt
-		} else if os.IsNotExist(err) {
+		} else if _, ok := err.(*noopInvalidError); ok || os.IsNotExist(err) {
 			rizzoLockNode(
 				rizzopb.PuppetLockRequest{
 					Type:    rizzopb.LockReqType_lock,

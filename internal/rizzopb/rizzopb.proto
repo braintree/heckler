@@ -55,6 +55,7 @@ message PuppetReport {
   bool corrective_change = 12;
   string cached_catalog_status = 13;
   string confdir = 14;
+  string last_apply_version = 15;
 }
 
 message ResourceStatus {
