@@ -112,7 +112,7 @@ Puppet::Reports.register_report(:heckler) do
     file = File.join(dir, name)
 
     begin
-      Puppet::Util.replace_file(file, 0640) do |fh|
+      Puppet::Util.replace_file(file, 0644) do |fh|
         fh.print report.to_json
       end
     rescue => detail
@@ -123,7 +123,7 @@ Puppet::Reports.register_report(:heckler) do
       apply_name = "heckler_last_apply.json"
       apply_file = File.join(dir, apply_name)
       begin
-        Puppet::Util.replace_file(apply_file, 0640) do |fh|
+        Puppet::Util.replace_file(apply_file, 0644) do |fh|
           fh.print report.to_json
         end
       rescue => detail
