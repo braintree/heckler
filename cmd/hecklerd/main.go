@@ -1025,6 +1025,7 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 	gr.DefineType = targetDeltaResource.DefineType
 	gr.File = targetDeltaResource.File
 	gr.Line = targetDeltaResource.Line
+	gr.ContainmentPath = targetDeltaResource.ContainmentPath
 	sort.Strings(nodeList)
 	gr.Hosts = nodeList
 
