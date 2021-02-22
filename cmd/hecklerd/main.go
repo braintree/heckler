@@ -2769,7 +2769,7 @@ func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 	}
 }
 
-// Given a commit, the associated github issue, and the groupedResources check
+// Given a commit, its associated github issue, and its groupedResources; check
 // if each grouped resource has been approved by a valid approver, exclude
 // authors of the commit in the approvers set.
 func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources []*groupedResource, commit *git.Commit, issue *github.Issue) (noopApproverType, error) {
@@ -2919,8 +2919,8 @@ func groupedResourcesNodeFiles(groupedResources []*groupedResource, puppetCodePa
 
 // Given a slice of groupedResources populate the groupedResourceOwners struct
 // on each grouped resource with the groups & users from the CODEOWNERS file
-// who are assigned to the source code files and node files of the grouped
-// resource. Return the populated groupedResource slice.
+// who are assigned to the Puppet node files, source code files and modules of
+// the grouped resource. Return the populated groupedResource slice.
 func groupedResourcesOwners(groupedResources []*groupedResource, puppetCodePath string, modulesPaths []string) ([]*groupedResource, error) {
 	co, err := codeowners.NewCodeowners(puppetCodePath)
 	if err != nil {
