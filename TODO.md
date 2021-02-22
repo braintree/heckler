@@ -16,12 +16,14 @@
 ## Known Bugs
 
 - [ ] Applying an unknown rev panics hecklerd
+- [ ] Escape codes are still present in console error logs with
+  `--color=false`. There is a trailing `^[[0m` still present, is this due to our
+  custom color patch for Puppet?
 
 ## Nice to Have
 
 - [ ] IgnoredResources should be a map with the value and a reason for the ignore
   rule
-- [ ] Tune timeouts
 - [ ] Heckler cli should respect sudoers, i.e. if you don't have root, you
   can't apply, otherwise heckler cli should only be accessible by root.
   How do prove who you are? Use HTTP Signatures via ssh keys?
