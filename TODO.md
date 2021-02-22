@@ -2,6 +2,7 @@
 
 ## Next Up
 
+- [ ] Enforce GitHubAppEmail if autoTag enabled
 - [ ] Rename AutoClose to AutoApprove
 - [ ] Stale Lock notifications
 - [ ] Highlight Service Refreshes in GitHub issue
