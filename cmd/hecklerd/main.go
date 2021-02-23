@@ -173,6 +173,11 @@ type NodeSet struct {
 	nodes          Nodes
 }
 
+type Module struct {
+	Name string
+	Path string
+}
+
 type Nodes struct {
 	active          map[string]*Node
 	dialed          map[string]*Node
@@ -284,6 +289,7 @@ type groupedResource struct {
 	Diff            string
 	File            string
 	Line            int64
+	Module          Module
 	ContainmentPath []string
 	Hosts           groupedHosts
 	NodeFiles       []string
@@ -307,10 +313,12 @@ type groupedResourceApprovals struct {
 }
 
 type noopOwners struct {
+	OwnedModules       map[Module][]string
 	OwnedNodeFiles     map[string][]string
-	UnownedNodeFiles   map[string][]string
 	OwnedSourceFiles   map[string][]string
-	UnownedSourceFiles map[string][]string
+	UnownedModules     []Module
+	UnownedNodeFiles   []string
+	UnownedSourceFiles []string
 }
 
 type groupEvent struct {
@@ -703,7 +711,7 @@ func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *g
 	groupedResources := make([]*groupedResource, 0)
 	for _, node := range ns.nodes.active {
 		for _, nodeDeltaRes := range node.commitDeltaResources[*commit.Id()] {
-			groupedResources = append(groupedResources, groupResources(*commit.Id(), nodeDeltaRes, ns.nodes.active))
+			groupedResources = append(groupedResources, groupResources(*commit.Id(), nodeDeltaRes, ns.nodes.active, conf))
 		}
 	}
 	for _, node := range EvalErrorNodes {
@@ -996,7 +1004,7 @@ func groupEvalErrors(gi git.Oid, targetPuppetLog *rizzopb.Log, nodes map[string]
 	return ge
 }
 
-func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node) *groupedResource {
+func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node, conf *HecklerdConf) *groupedResource {
 	var nodeList []string
 	var desiredValue string
 	// TODO Remove this hack, only needed for old versions of puppet 4.5?
@@ -1004,6 +1012,7 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 	var gr *groupedResource
 	var ge *groupEvent
 	var gl *groupLog
+	var err error
 
 	for nodeName, node := range nodes {
 		if nodeDeltaResource, ok := node.commitDeltaResources[commitLogId][targetDeltaResource.Title]; ok {
@@ -1025,6 +1034,10 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 	gr.DefineType = targetDeltaResource.DefineType
 	gr.File = targetDeltaResource.File
 	gr.Line = targetDeltaResource.Line
+	gr.Module, err = containmentPathModule(targetDeltaResource.ContainmentPath, conf.WorkRepo, conf.ModulesPaths)
+	if err != nil {
+		log.Fatal(err)
+	}
 	gr.ContainmentPath = targetDeltaResource.ContainmentPath
 	sort.Strings(nodeList)
 	gr.Hosts = nodeList
@@ -1918,7 +1931,7 @@ func noopOwnersToMarkdown(conf *HecklerdConf, commit *git.Commit, groupedResourc
 	if err != nil {
 		return "", err
 	}
-	groupedResources, err = groupedResourcesOwners(groupedResources, conf.WorkRepo, conf.ModulesPaths)
+	groupedResources, err = groupedResourcesOwners(groupedResources, conf.WorkRepo)
 	if err != nil {
 		return "", err
 	}
@@ -2779,7 +2792,7 @@ func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources 
 	if err != nil {
 		return notApproved, err
 	}
-	groupedResources, err = groupedResourcesOwners(groupedResources, conf.WorkRepo, conf.ModulesPaths)
+	groupedResources, err = groupedResourcesOwners(groupedResources, conf.WorkRepo)
 	if err != nil {
 		return notApproved, err
 	}
@@ -2922,7 +2935,7 @@ func groupedResourcesNodeFiles(groupedResources []*groupedResource, puppetCodePa
 // on each grouped resource with the groups & users from the CODEOWNERS file
 // who are assigned to the Puppet node files, source code files and modules of
 // the grouped resource. Return the populated groupedResource slice.
-func groupedResourcesOwners(groupedResources []*groupedResource, puppetCodePath string, modulesPaths []string) ([]*groupedResource, error) {
+func groupedResourcesOwners(groupedResources []*groupedResource, puppetCodePath string) ([]*groupedResource, error) {
 	co, err := codeowners.NewCodeowners(puppetCodePath)
 	if err != nil {
 		return nil, err
@@ -2939,38 +2952,37 @@ func groupedResourcesOwners(groupedResources []*groupedResource, puppetCodePath 
 		if gr.File != "" {
 			gr.Owners.File = co.Owners(gr.File)
 		}
-		for _, module := range containmentPathModules(gr.ContainmentPath) {
-			for _, modulesPath := range modulesPaths {
-				modulePath := fmt.Sprintf("%s/%s", modulesPath, module)
-				fullPath := fmt.Sprintf("%s/%s", puppetCodePath, modulePath)
-				if _, err := os.Stat(fullPath); err == nil {
-					gr.Owners.Module = append(gr.Owners.Module, co.Owners(modulePath)...)
-				}
-			}
-		}
+		gr.Owners.Module = co.Owners(gr.Module.Path)
 	}
 	return groupedResources, nil
 }
 
 // Given a slice of groupedResources return a noopOwners struct with a unique
-// set of owned node files and source code files. As well as the complementary
-// unique set of unowned node files and source code files.
+// set of owned node files, source code files, and modules. As well as the complementary
+// unique set of unowned node files, source code files, and modules.
 func groupedResourcesUniqueOwners(groupedResources []*groupedResource) noopOwners {
 	no := noopOwners{}
-	no.OwnedSourceFiles = make(map[string][]string)
+	no.OwnedModules = make(map[Module][]string)
 	no.OwnedNodeFiles = make(map[string][]string)
-	no.UnownedSourceFiles = make(map[string][]string)
-	no.UnownedNodeFiles = make(map[string][]string)
+	no.OwnedSourceFiles = make(map[string][]string)
+	unownedModules := make(map[Module]bool)
+	unownedNodeFiles := make(map[string]bool)
+	unownedSourceFiles := make(map[string]bool)
 	for _, gr := range groupedResources {
+		if len(gr.Owners.Module) > 0 {
+			if _, ok := no.OwnedModules[gr.Module]; !ok {
+				no.OwnedModules[gr.Module] = gr.Owners.Module
+			}
+		} else {
+			unownedModules[gr.Module] = true
+		}
 		for nodeFile, owners := range gr.Owners.NodeFiles {
 			if len(owners) > 0 {
 				if _, ok := no.OwnedNodeFiles[nodeFile]; !ok {
 					no.OwnedNodeFiles[nodeFile] = owners
 				}
 			} else {
-				if _, ok := no.UnownedNodeFiles[nodeFile]; !ok {
-					no.UnownedNodeFiles[nodeFile] = owners
-				}
+				unownedNodeFiles[nodeFile] = true
 			}
 		}
 		if gr.File != "" {
@@ -2979,36 +2991,51 @@ func groupedResourcesUniqueOwners(groupedResources []*groupedResource) noopOwner
 					no.OwnedSourceFiles[gr.File] = gr.Owners.File
 				}
 			} else {
-				if _, ok := no.UnownedSourceFiles[gr.File]; !ok {
-					no.UnownedSourceFiles[gr.File] = gr.Owners.File
-				}
+				unownedSourceFiles[gr.File] = true
 			}
 		}
+	}
+	for module := range unownedModules {
+		no.UnownedModules = append(no.UnownedModules, module)
+	}
+	for nodeFile := range unownedNodeFiles {
+		no.UnownedNodeFiles = append(no.UnownedNodeFiles, nodeFile)
+	}
+	for sourceFile := range unownedSourceFiles {
+		no.UnownedSourceFiles = append(no.UnownedSourceFiles, sourceFile)
 	}
 	return no
 }
 
-func containmentPathModules(containmentPath []string) []string {
-	var modules []string
+func containmentPathModule(containmentPath []string, puppetCodePath string, modulesPaths []string) (Module, error) {
 	if len(containmentPath) == 0 {
-		return nil
+		return Module{}, errors.New("No containmentPath!")
 	}
+	var module Module
 	regexPuppetStage := regexp.MustCompile(`^Stage\[`)
-	for i, path := range containmentPath {
-		if i == len(containmentPath)-1 {
-			// Skip the last element which is the resource itself
-			continue
-		}
+	for _, path := range containmentPath {
+		// Skip Puppet Stages
 		if regexPuppetStage.MatchString(path) {
-			// Skip Puppet Stages
 			continue
 		}
-		// TODO: allow ownership of nested modules
-		// Grab only the name of the first module
-		baseModule := strings.Split(path, "::")[0]
-		modules = append(modules, strings.ToLower(baseModule))
+		module.Name = strings.ToLower(strings.Split(path, "::")[0])
+		break
 	}
-	return modules
+	if module.Name == "" {
+		return Module{}, fmt.Errorf("Unable to find module in containmenPath: %v", containmentPath)
+	}
+	for _, modulesPath := range modulesPaths {
+		modulePath := fmt.Sprintf("%s/%s", modulesPath, module.Name)
+		fullPath := fmt.Sprintf("%s/%s", puppetCodePath, modulePath)
+		if _, err := os.Stat(fullPath); err == nil {
+			module.Path = modulePath
+			break
+		}
+	}
+	if module.Path == "" {
+		return Module{}, fmt.Errorf("Unable to find module %s's path in modulesPaths: %v", module.Name, modulesPaths)
+	}
+	return module, nil
 }
 
 // Strips the `@` prefix from users and groups so that they are not notified on

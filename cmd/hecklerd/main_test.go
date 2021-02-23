@@ -22,14 +22,14 @@ func TestGroupedResourceNodeFiles(t *testing.T) {
 				&groupedResource{
 					Title: "File[/data/puppet_apply/cast]",
 					File:  "",
-					Nodes: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
+					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
 				},
 			},
 			[]*groupedResource{
 				&groupedResource{
 					Title: "File[/data/puppet_apply/cast]",
 					File:  "",
-					Nodes: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
+					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
 					NodeFiles: []string{
 						"nodes/fozzie.pp",
 						"nodes/statler.pp",
@@ -62,7 +62,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 				&groupedResource{
 					Title: "File[/data/puppet_apply/cast]",
 					File:  "",
-					Nodes: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
+					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
 					NodeFiles: []string{
 						"nodes/fozzie.pp",
 						"nodes/statler.pp",
@@ -74,7 +74,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 				&groupedResource{
 					Title: "File[/data/puppet_apply/cast]",
 					File:  "",
-					Nodes: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
+					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
 					NodeFiles: []string{
 						"nodes/fozzie.pp",
 						"nodes/statler.pp",
@@ -96,7 +96,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 				&groupedResource{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
-					Nodes: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
+					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
 					NodeFiles: []string{
 						"nodes/fozzie.pp",
 						"nodes/statler.pp",
@@ -108,7 +108,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 				&groupedResource{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
-					Nodes: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
+					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
 					NodeFiles: []string{
 						"nodes/fozzie.pp",
 						"nodes/statler.pp",
@@ -128,14 +128,20 @@ func TestGroupedResourceOwners(t *testing.T) {
 		{
 			[]*groupedResource{
 				&groupedResource{
-					Title:           "Group[gonzo]",
-					ContainmentPath: []string{"Stage[main]", "Muppetshow", "Group[gonzo]"},
+					Title: "Group[gonzo]",
+					Module: Module{
+						Name: "muppetshow",
+						Path: "modules/muppetshow",
+					},
 				},
 			},
 			[]*groupedResource{
 				&groupedResource{
-					Title:           "Group[gonzo]",
-					ContainmentPath: []string{"Stage[main]", "Muppetshow", "Group[gonzo]"},
+					Title: "Group[gonzo]",
+					Module: Module{
+						Name: "muppetshow",
+						Path: "modules/muppetshow",
+					},
 					Owners: groupedResourceOwners{
 						File:      nil,
 						Module:    []string{"@kermit"},
@@ -146,7 +152,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		actual, err := groupedResourcesOwners(test.input, "../../muppetshow", []string{"modules"})
+		actual, err := groupedResourcesOwners(test.input, "../../muppetshow")
 		if err != nil {
 			t.Fatalf("groupedResourcesOwners returned an unexpected error: %v", err)
 			return
@@ -179,7 +185,7 @@ func TestResourcesApproved(t *testing.T) {
 				&groupedResource{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
-					Nodes: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
+					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
 					Owners: groupedResourceOwners{
 						File: []string{"@misspiggy"},
 						NodeFiles: map[string][]string{
@@ -199,7 +205,7 @@ func TestResourcesApproved(t *testing.T) {
 				&groupedResource{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
-					Nodes: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
+					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
 					Owners: groupedResourceOwners{
 						File: []string{"@misspiggy"},
 						NodeFiles: map[string][]string{
@@ -223,7 +229,7 @@ func TestResourcesApproved(t *testing.T) {
 				&groupedResource{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
-					Nodes: []string{"fozzie.example.com", "waldorf.example.com"},
+					Hosts: []string{"fozzie.example.com", "waldorf.example.com"},
 					NodeFiles: []string{
 						"nodes/fozzie.pp",
 						"nodes/waldorf.pp",
@@ -248,7 +254,7 @@ func TestResourcesApproved(t *testing.T) {
 				&groupedResource{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
-					Nodes: []string{"fozzie.example.com", "waldorf.example.com"},
+					Hosts: []string{"fozzie.example.com", "waldorf.example.com"},
 					NodeFiles: []string{
 						"nodes/fozzie.pp",
 						"nodes/waldorf.pp",
@@ -276,10 +282,13 @@ func TestResourcesApproved(t *testing.T) {
 		resourcesApprovedInput{
 			[]*groupedResource{
 				&groupedResource{
-					Title:           "File[/data/puppet_apply/laughtrack]",
-					File:            "modules/muppetshow/manifests/episode.pp",
-					ContainmentPath: []string{"Stage[main]", "Muppetshow", "Group[gonzo]"},
-					Nodes:           []string{"fozzie.example.com", "waldorf.example.com"},
+					Title: "File[/data/puppet_apply/laughtrack]",
+					File:  "modules/muppetshow/manifests/episode.pp",
+					Module: Module{
+						Name: "muppetshow",
+						Path: "modules/muppetshow",
+					},
+					Hosts: []string{"fozzie.example.com", "waldorf.example.com"},
 					NodeFiles: []string{
 						"nodes/fozzie.pp",
 						"nodes/waldorf.pp",
@@ -303,10 +312,13 @@ func TestResourcesApproved(t *testing.T) {
 			true,
 			[]*groupedResource{
 				&groupedResource{
-					Title:           "File[/data/puppet_apply/laughtrack]",
-					File:            "modules/muppetshow/manifests/episode.pp",
-					Nodes:           []string{"fozzie.example.com", "waldorf.example.com"},
-					ContainmentPath: []string{"Stage[main]", "Muppetshow", "Group[gonzo]"},
+					Title: "File[/data/puppet_apply/laughtrack]",
+					File:  "modules/muppetshow/manifests/episode.pp",
+					Hosts: []string{"fozzie.example.com", "waldorf.example.com"},
+					Module: Module{
+						Name: "muppetshow",
+						Path: "modules/muppetshow",
+					},
 					NodeFiles: []string{
 						"nodes/fozzie.pp",
 						"nodes/waldorf.pp",
