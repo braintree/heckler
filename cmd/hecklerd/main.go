@@ -2742,14 +2742,14 @@ func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 			if issue == nil {
 				continue
 			}
+			if issue.GetState() == "closed" {
+				continue
+			}
 			gr, err := unmarshalGroupedReport(commit.Id(), conf.GroupedNoopDir)
 			if os.IsNotExist(err) {
 				continue
 			} else if err != nil {
 				logger.Fatalf("Error: unable to unmarshal groupedCommit: %v", err)
-			}
-			if issue.GetState() == "closed" {
-				continue
 			}
 			if len(gr.Resources) == 0 && !hasEvalErrors(gr.Errors) {
 				err := closeIssue(ghclient, conf, issue, "No noop output marking issue as 'closed'")
