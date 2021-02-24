@@ -1899,7 +1899,7 @@ func commitAuthorsLogins(ghclient *github.Client, commit *git.Commit) ([]string,
 	}
 	authors := make([]string, 0)
 	if githubUser != nil {
-		authors = append(authors, *githubUser.Login)
+		authors = append(authors, "@"+githubUser.GetLogin())
 	}
 	trailers, err := git.MessageTrailers(commit.Message())
 	if err != nil {
@@ -1920,8 +1920,9 @@ func commitAuthorsLogins(ghclient *github.Client, commit *git.Commit) ([]string,
 			return []string{}, err
 		}
 		if githubUser != nil {
-			authors = append(authors, *githubUser.Login)
+			authors = append(authors, "@"+githubUser.GetLogin())
 		}
+		// TODO: handle nil case?
 	}
 	return authors, nil
 }
