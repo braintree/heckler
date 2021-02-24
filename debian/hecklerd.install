@@ -1,8 +1,11 @@
 /usr/bin/hecklerd
+adminApprovalComment.tmpl /usr/share/hecklerd/templates/
+applyFailure.tmpl /usr/share/hecklerd/templates/
+approvalComment.tmpl /usr/share/hecklerd/templates/
 beyondRevNodes.tmpl /usr/share/hecklerd/templates/
+cleanFailure.tmpl /usr/share/hecklerd/templates/
 commit.tmpl /usr/share/hecklerd/templates/
-erroredNodes.tmpl /usr/share/hecklerd/templates/
-groupedFailure.tmpl /usr/share/hecklerd/templates/
 groupedResource.tmpl /usr/share/hecklerd/templates/
 lockedNodes.tmpl /usr/share/hecklerd/templates/
+noopErrors.tmpl /usr/share/hecklerd/templates/
 noopOwners.tmpl /usr/share/hecklerd/templates/
