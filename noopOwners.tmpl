@@ -1,49 +1,49 @@
 ### Noop Approval Ownership
+{{- if or (gt (len $.NoopOwners.OwnedSourceFiles) 0) (gt (len $.NoopOwners.UnownedSourceFiles) 0) }}
 
-#### Node Source Files
+#### Resource Source Files
 
-{{- if gt (len $.NoopOwners.OwnedNodeFiles) 0 }}
-The following node file owners and optionally the resource source file owners may approve this noop.
+The owners of the source files affecting this change may approve this noop:
 
-{{- range $file, $owners := $.NoopOwners.OwnedNodeFiles }}
+  {{- range $file, $owners := $.NoopOwners.OwnedSourceFiles }}
   - [{{ $file }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ $file }}): {{ $owners | join ", " }}
-{{- end }}
-{{- end }}
-{{- if gt (len $.NoopOwners.UnownedNodeFiles) 0 }}
-
-No approvers were found for the following node files affected by this commit. Please update this repository's [CODEOWNERS](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/CODEOWNERS) file with an appropriate reviewer for these node files:
-
-{{- range $file := $.NoopOwners.UnownedNodeFiles }}
-  - [{{ $file }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ $file }})
-{{- end }}
+  {{- end }}
+  {{- range $file := $.NoopOwners.UnownedSourceFiles }}
+  - [{{ $file }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ $file }}): No owner
+  {{- end }}
 {{- end }}
 {{- if or (gt (len $.NoopOwners.OwnedModules) 0) (gt (len $.NoopOwners.UnownedModules) 0) }}
 
 #### Resource Modules
 
-If there are owners of the modules affecting this change they may approve this noop:
+The owners of the modules affecting this change may approve this noop:
 
-{{- range $module, $owners := $.NoopOwners.OwnedModules }}
+  {{- range $module, $owners := $.NoopOwners.OwnedModules }}
   - [{{ $module.Name }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ $module.Path }}): {{ $owners | join ", " }}
-{{- end }}
-{{- range $module := $.NoopOwners.UnownedModules }}
+  {{- end }}
+  {{- range $module := $.NoopOwners.UnownedModules }}
   - [{{ $module.Name }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ $module.Path }}): No owner
+  {{- end }}
 {{- end }}
-{{- end }}
-{{- if or (gt (len $.NoopOwners.OwnedSourceFiles) 0) (gt (len $.NoopOwners.UnownedSourceFiles) 0) }}
 
-#### Resource Source Files
+#### Node Source Files
+{{- if gt (len $.NoopOwners.OwnedNodeFiles) 0 }}
 
-If there are owners of the source files affecting this change they may approve this noop:
+The following node file owners may approve this noop:
 
-{{- range $file, $owners := $.NoopOwners.OwnedSourceFiles }}
+  {{- range $file, $owners := $.NoopOwners.OwnedNodeFiles }}
   - [{{ $file }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ $file }}): {{ $owners | join ", " }}
+  {{- end }}
 {{- end }}
-{{- range $file := $.NoopOwners.UnownedSourceFiles }}
-  - [{{ $file }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ $file }}): No owner
-{{- end }}
+{{- if gt (len $.NoopOwners.UnownedNodeFiles) 0 }}
+
+No approvers were found for the following node files affected by this commit. Please update this repository's [CODEOWNERS](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/CODEOWNERS) file with an appropriate reviewer for these node files:
+
+  {{- range $file := $.NoopOwners.UnownedNodeFiles }}
+  - [{{ $file }}](https://{{ $.Conf.GitHubDomain }}/{{ $.Conf.RepoOwner }}/{{ $.Conf.Repo }}/blob/{{ $.Commit.AsObject.Id }}/{{ $file }})
+  {{- end }}
 {{- end }}
 
 #### How to Approve
 
-If you are an owner of this noop please leave a comment with the message "approved" to approve this noop.
+Anyone from the above approvers list, except for the authors of this commit, may leave a comment with the message "approved" to approve this noop. For compliance reasons authors may not approve their own changes.

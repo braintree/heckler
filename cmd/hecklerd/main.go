@@ -81,19 +81,42 @@ func (e *noopInvalidError) Error() string {
 	return fmt.Sprintf("Noop is invalid, %s last apply is '%s', but noop is against '%s'", e.Host, e.LastApply.String(), e.NoopLastApply.String())
 }
 
-type lastApplyStatus int
-type noopApproverType int
+type resourceApproverType string
 
 const (
-	lastApplyClean lastApplyStatus = iota
-	lastApplyDirty
-	lastApplyErrored
+	resourceNotApproved        resourceApproverType = "Not Approved"
+	resourceSourceFileApproved                      = "Source File Approved"
+	resourceModuleApproved                          = "Module Approved"
+	resourceNodesApproved                           = "Nodes Approved"
 )
+
+type noopApproverType int
 
 const (
 	notApproved noopApproverType = iota
 	codeownersApproved
 	adminApproved
+)
+
+func (noopApproved noopApproverType) String() string {
+	var msg string
+	switch noopApproved {
+	case notApproved:
+		msg = "Unapproved"
+	case codeownersApproved:
+		msg = "Approved"
+	case adminApproved:
+		msg = "Approved by an admin"
+	}
+	return msg
+}
+
+type lastApplyStatus int
+
+const (
+	lastApplyClean lastApplyStatus = iota
+	lastApplyDirty
+	lastApplyErrored
 )
 
 const (
@@ -296,6 +319,7 @@ type groupedResource struct {
 	Events          []*groupEvent
 	Logs            []*groupLog
 	Owners          groupedResourceOwners
+	Approved        resourceApproverType
 	Approvals       groupedResourceApprovals
 	AdminApprovals  []string
 }
@@ -1939,10 +1963,7 @@ func noopOwnersToMarkdown(conf *HecklerdConf, commit *git.Commit, groupedResourc
 	if err != nil {
 		return "", err
 	}
-	no := groupedResourcesUniqueOwners(groupedResources)
-	if conf.GitHubDisableNotifications {
-		stripAtSignsNoopOwners(&no)
-	}
+	no := groupedResourcesUniqueOwners(groupedResources, conf.GitHubDisableNotifications)
 	data := struct {
 		Commit     *git.Commit
 		Conf       *HecklerdConf
@@ -2694,7 +2715,7 @@ func apply(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templ
 //      Is the issue approved?
 //        If No, do nothing
 //        If Yes, note approval and close the issue
-func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
+func approvalLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	var err error
 	var ns *NodeSet
 	logger := log.New(os.Stdout, "[approvalLoop] ", log.Lshortfile)
@@ -2767,16 +2788,20 @@ func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 				}
 				continue
 			}
-			noopApproved, err := noopApproved(ghclient, conf, gr.Resources, commit, issue)
+			noopApproved, noopApprovers, err := noopApproved(ghclient, conf, gr.Resources, commit, issue)
 			if err != nil {
 				logger.Printf("Error: unable to determine if issue(%d) is approved: %v", issue.Number, err)
 				continue
 			}
-			switch noopApproved {
-			case notApproved:
-				continue
-			case codeownersApproved, adminApproved:
-				err := closeIssue(ghclient, conf, issue, approvedComment(noopApproved, gr.Resources, logger))
+			if len(noopApprovers) > 0 {
+				err = updateApprovalComment(ghclient, conf, issue, noopApproved, gr.Resources, templates)
+				if err != nil {
+					logger.Printf("Error: unable to update approval comment for issue(%d): %v", issue.Number, err)
+					continue
+				}
+			}
+			if noopApproved == codeownersApproved || noopApproved == adminApproved {
+				err := closeIssue(ghclient, conf, issue, "")
 				if err != nil {
 					logger.Printf("Error: unable to close approved issue(%d): %v", issue.GetNumber(), err)
 					continue
@@ -2790,27 +2815,27 @@ func approvalLoop(conf *HecklerdConf, repo *git.Repository) {
 // Given a commit, its associated github issue, and its groupedResources; check
 // if each grouped resource has been approved by a valid approver, exclude
 // authors of the commit in the approvers set.
-func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources []*groupedResource, commit *git.Commit, issue *github.Issue) (noopApproverType, error) {
+func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources []*groupedResource, commit *git.Commit, issue *github.Issue) (noopApproverType, []string, error) {
 	var err error
 	groupedResources, err = groupedResourcesNodeFiles(groupedResources, conf.WorkRepo)
 	if err != nil {
-		return notApproved, err
+		return notApproved, nil, err
 	}
 	groupedResources, err = groupedResourcesOwners(groupedResources, conf.WorkRepo)
 	if err != nil {
-		return notApproved, err
+		return notApproved, nil, err
 	}
 	groups, err := githubGroupsForGroupedResources(ghclient, groupedResources)
 	if err != nil {
-		return notApproved, err
+		return notApproved, nil, err
 	}
 	noopApprovers, err := githubNoopApprovals(ghclient, conf, issue)
 	if err != nil {
-		return notApproved, err
+		return notApproved, nil, err
 	}
 	commitAuthors, err := commitAuthorsLogins(ghclient, commit)
 	if err != nil {
-		return notApproved, err
+		return notApproved, nil, err
 	}
 	codeownersHaveApproved := false
 	if len(commitAuthors) > 0 {
@@ -2823,13 +2848,16 @@ func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources 
 		// present the information.
 		codeownersHaveApproved = resourcesApproved(groupedResources, groups, approvers)
 	}
-	adminHasApproved := adminOwnerApproved(groupedResources, conf.AdminOwners, noopApprovers)
+	adminHasApproved := false
+	if !codeownersHaveApproved {
+		adminHasApproved = adminOwnerApproved(groupedResources, conf.AdminOwners, noopApprovers)
+	}
 	if codeownersHaveApproved {
-		return codeownersApproved, nil
+		return codeownersApproved, noopApprovers, nil
 	} else if adminHasApproved {
-		return adminApproved, nil
+		return adminApproved, noopApprovers, nil
 	} else {
-		return notApproved, nil
+		return notApproved, noopApprovers, nil
 	}
 }
 
@@ -2845,37 +2873,34 @@ func adminOwnerApproved(groupedResources []*groupedResource, adminOwnersList []s
 	}
 }
 
-func approvedComment(noopApproved noopApproverType, groupedResources []*groupedResource, logger *log.Logger) string {
-	msg := "Issue has been approved, marking issue as 'closed'\n\n"
-	switch noopApproved {
-	case codeownersApproved:
-		msg += "CODEOWNERS:\n"
-		for _, gr := range groupedResources {
-			if len(gr.Approvals.File) > 0 {
-				msg += "- [" + string(gr.Title) + "]: " + strings.Join(gr.Approvals.File, ",") + "\n"
-			} else {
-				msg += "- [" + string(gr.Title) + "]:\n"
-				for nf, nfa := range gr.Approvals.NodeFiles {
-					msg += "  - " + nf + ": " + strings.Join(nfa, ",") + "\n"
-				}
-			}
-		}
-	case adminApproved:
-		if len(groupedResources) > 0 && len(groupedResources[0].AdminApprovals) > 0 {
-			msg += "Admins: " + strings.Join(groupedResources[0].AdminApprovals, ",") + "\n"
-		} else {
-			log.Fatal("Unexpected groupedResources!")
-		}
-	default:
-		log.Fatal("Unexpected noopApproverType!")
+func approvedComment(noopApproved noopApproverType, groupedResources []*groupedResource, templates *template.Template) (string, *regexp.Regexp, error) {
+	if noopApproved == adminApproved && (len(groupedResources) == 0 || len(groupedResources[0].AdminApprovals) == 0) {
+		return "", nil, fmt.Errorf("Unexpected groupedResources!")
 	}
-	return msg
+	regexApprovalMsg := regexp.MustCompile(`^Approval Status:`)
+	msg := fmt.Sprintf("Approval Status: %s\n", noopApproved)
+	var body strings.Builder
+	var err error
+	data := struct {
+		GroupedResources []*groupedResource
+	}{
+		groupedResources,
+	}
+	if noopApproved == adminApproved {
+		err = templates.ExecuteTemplate(&body, "adminApprovalComment.tmpl", data)
+	} else {
+		err = templates.ExecuteTemplate(&body, "approvalComment.tmpl", data)
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+	return msg + body.String(), regexApprovalMsg, nil
 }
 
 // Given two string slice sets return the elements that are only in a and not
 // in b
 func setDifferenceStrSlice(a []string, b []string) []string {
-	c := make([]string, 0)
+	var c []string
 	mapB := make(map[string]bool)
 	for _, i := range b {
 		mapB[i] = true
@@ -2890,7 +2915,7 @@ func setDifferenceStrSlice(a []string, b []string) []string {
 
 // Given two string slice sets return the intersection of a and b
 func setIntersectionStrSlice(a []string, b []string) []string {
-	c := make([]string, 0)
+	var c []string
 	mapB := make(map[string]bool)
 	for _, i := range b {
 		mapB[i] = true
@@ -2964,15 +2989,24 @@ func groupedResourcesOwners(groupedResources []*groupedResource, puppetCodePath 
 // Given a slice of groupedResources return a noopOwners struct with a unique
 // set of owned node files, source code files, and modules. As well as the complementary
 // unique set of unowned node files, source code files, and modules.
-func groupedResourcesUniqueOwners(groupedResources []*groupedResource) noopOwners {
+func groupedResourcesUniqueOwners(groupedResources []*groupedResource, githubDisableNotifications bool) noopOwners {
 	no := noopOwners{}
+	no.OwnedSourceFiles = make(map[string][]string)
 	no.OwnedModules = make(map[Module][]string)
 	no.OwnedNodeFiles = make(map[string][]string)
-	no.OwnedSourceFiles = make(map[string][]string)
+	unownedSourceFiles := make(map[string]bool)
 	unownedModules := make(map[Module]bool)
 	unownedNodeFiles := make(map[string]bool)
-	unownedSourceFiles := make(map[string]bool)
 	for _, gr := range groupedResources {
+		if gr.File != "" {
+			if len(gr.Owners.File) > 0 {
+				if _, ok := no.OwnedSourceFiles[gr.File]; !ok {
+					no.OwnedSourceFiles[gr.File] = gr.Owners.File
+				}
+			} else {
+				unownedSourceFiles[gr.File] = true
+			}
+		}
 		if len(gr.Owners.Module) > 0 {
 			if _, ok := no.OwnedModules[gr.Module]; !ok {
 				no.OwnedModules[gr.Module] = gr.Owners.Module
@@ -2989,15 +3023,9 @@ func groupedResourcesUniqueOwners(groupedResources []*groupedResource) noopOwner
 				unownedNodeFiles[nodeFile] = true
 			}
 		}
-		if gr.File != "" {
-			if len(gr.Owners.File) > 0 {
-				if _, ok := no.OwnedSourceFiles[gr.File]; !ok {
-					no.OwnedSourceFiles[gr.File] = gr.Owners.File
-				}
-			} else {
-				unownedSourceFiles[gr.File] = true
-			}
-		}
+	}
+	for sourceFile := range unownedSourceFiles {
+		no.UnownedSourceFiles = append(no.UnownedSourceFiles, sourceFile)
 	}
 	for module := range unownedModules {
 		no.UnownedModules = append(no.UnownedModules, module)
@@ -3005,8 +3033,21 @@ func groupedResourcesUniqueOwners(groupedResources []*groupedResource) noopOwner
 	for nodeFile := range unownedNodeFiles {
 		no.UnownedNodeFiles = append(no.UnownedNodeFiles, nodeFile)
 	}
-	for sourceFile := range unownedSourceFiles {
-		no.UnownedSourceFiles = append(no.UnownedSourceFiles, sourceFile)
+	// If all the modules are owned don't notify node owners, this logic could be
+	// improved to take into account the ownership of each resource, rather than
+	// the aggregate.
+	if githubDisableNotifications || len(no.UnownedModules) == 0 {
+		for nodeFile := range no.OwnedNodeFiles {
+			no.OwnedNodeFiles[nodeFile] = stripAtSignsSlice(no.OwnedNodeFiles[nodeFile])
+		}
+	}
+	if githubDisableNotifications {
+		for sourceFile := range no.OwnedSourceFiles {
+			no.OwnedSourceFiles[sourceFile] = stripAtSignsSlice(no.OwnedSourceFiles[sourceFile])
+		}
+		for module := range no.OwnedModules {
+			no.OwnedModules[module] = stripAtSignsSlice(no.OwnedModules[module])
+		}
 	}
 	return no
 }
@@ -3044,21 +3085,6 @@ func containmentPathModule(containmentPath []string, puppetCodePath string, modu
 
 // Strips the `@` prefix from users and groups so that they are not notified on
 // GitHub
-func stripAtSignsNoopOwners(no *noopOwners) {
-	for _, owners := range no.OwnedSourceFiles {
-		for i, owner := range owners {
-			owners[i] = strings.TrimPrefix(owner, "@")
-		}
-	}
-	for _, owners := range no.OwnedNodeFiles {
-		for i, owner := range owners {
-			owners[i] = strings.TrimPrefix(owner, "@")
-		}
-	}
-}
-
-// Strips the `@` prefix from users and groups so that they are not notified on
-// GitHub
 func stripAtSignsSlice(users []string) []string {
 	for i, user := range users {
 		users[i] = strings.TrimPrefix(user, "@")
@@ -3085,6 +3111,51 @@ func githubNoopApprovals(ghclient *github.Client, conf *HecklerdConf, issue *git
 		}
 	}
 	return uniqueStrSlice(approvers), nil
+}
+
+// Given a github issue return the set of github logins which have approved the issue
+func updateApprovalComment(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, noopApproved noopApproverType, groupedResources []*groupedResource, templates *template.Template) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	comments, _, err := ghclient.Issues.ListComments(ctx, conf.RepoOwner, conf.Repo, issue.GetNumber(), nil)
+	if err != nil {
+		return err
+	}
+	approvalMsg, regexApprovalMsg, err := approvedComment(noopApproved, groupedResources, templates)
+	if err != nil {
+		return err
+	}
+	var approvalComment *github.IssueComment
+	for _, comment := range comments {
+		commentAuthor := comment.GetUser().GetLogin()
+		if commentAuthor != conf.GitHubAppSlug+"[bot]" {
+			continue
+		}
+		if regexApprovalMsg.MatchString(comment.GetBody()) {
+			approvalComment = comment
+			break
+		}
+	}
+	githubMsg := &github.IssueComment{
+		Body: github.String(approvalMsg),
+	}
+	// Create or Update Approval Comment
+	if approvalComment == nil {
+		_, _, err := ghclient.Issues.CreateComment(ctx, conf.RepoOwner, conf.Repo, *issue.Number, githubMsg)
+		if err != nil {
+			return err
+		}
+	} else {
+		if approvalComment.GetBody() == approvalMsg {
+			return nil
+		}
+		id := approvalComment.GetID()
+		_, _, err = ghclient.Issues.EditComment(ctx, conf.RepoOwner, conf.Repo, id, githubMsg)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Given a slice of groupedResources return a map of group to github logins for
@@ -3180,20 +3251,23 @@ func githubExpandGroups(ghclient *github.Client, usersOrGroups []string) ([]stri
 // resources were approved.
 func resourcesApproved(groupedResources []*groupedResource, groups map[string][]string, approvers []string) bool {
 	approvedResources := 0
-	var grApproved bool
 	var approvedNodeFiles int
 	for _, gr := range groupedResources {
-		grApproved = false
+		gr.Approved = resourceNotApproved
 		if gr.File != "" {
 			gr.Approvals.File = intersectionOwnersApprovers(gr.Owners.File, approvers, groups)
 			if len(gr.Approvals.File) > 0 {
-				grApproved = true
+				gr.Approved = resourceSourceFileApproved
+				approvedResources++
+				continue
 			}
 		}
 		if len(gr.Owners.Module) > 0 {
 			gr.Approvals.Module = intersectionOwnersApprovers(gr.Owners.Module, approvers, groups)
 			if len(gr.Approvals.Module) > 0 {
-				grApproved = true
+				gr.Approved = resourceModuleApproved
+				approvedResources++
+				continue
 			}
 		}
 		nodeFilesApprovers := make(map[string][]string)
@@ -3205,10 +3279,10 @@ func resourcesApproved(groupedResources []*groupedResource, groups map[string][]
 			}
 		}
 		gr.Approvals.NodeFiles = nodeFilesApprovers
-		if grApproved {
+		if (len(gr.NodeFiles) > 0) && (len(gr.NodeFiles) == approvedNodeFiles) {
+			gr.Approved = resourceNodesApproved
 			approvedResources++
-		} else if (len(gr.NodeFiles) > 0) && (len(gr.NodeFiles) == approvedNodeFiles) {
-			approvedResources++
+			continue
 		}
 	}
 	if len(groupedResources) == approvedResources {
@@ -3222,7 +3296,7 @@ func resourcesApproved(groupedResources []*groupedResource, groups map[string][]
 // the approvers of the resource; return the intersection of the owners and
 // approvers, i.e. the valid approvers.
 func intersectionOwnersApprovers(owners []string, approvers []string, groups map[string][]string) []string {
-	expandedOwners := make([]string, 0)
+	var expandedOwners []string
 	for _, owner := range owners {
 		if _, ok := groups[owner]; ok {
 			for _, user := range groups[owner] {
@@ -3432,7 +3506,7 @@ func tagApproved(repo *git.Repository, ghclient *github.Client, conf *HecklerdCo
 			approved[gi] = "Approved, AutoClose enabled"
 			continue
 		}
-		noopApproved, err := noopApproved(ghclient, conf, gr.Resources, commit, issue)
+		noopApproved, _, err := noopApproved(ghclient, conf, gr.Resources, commit, issue)
 		if err != nil {
 			return false, fmt.Errorf("Unable to determine if issue(%s) is approved: %w", issue.GetHTMLURL(), err)
 		}
@@ -4603,7 +4677,7 @@ func main() {
 		if conf.LoopApprovalSleepSeconds == 0 {
 			logger.Println("approvalLoop disabled")
 		} else {
-			go approvalLoop(conf, repo)
+			go approvalLoop(conf, repo, templates)
 		}
 		if conf.LoopDirtySleepSeconds == 0 {
 			logger.Println("cleanLoop disabled")

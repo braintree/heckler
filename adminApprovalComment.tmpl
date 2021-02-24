@@ -1,0 +1,1 @@
+- Admins: {{ (index .GroupedResources 0).AdminApprovals | join ", " | replace "@" "" }}

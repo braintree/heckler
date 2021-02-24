@@ -214,9 +214,9 @@ func TestResourcesApproved(t *testing.T) {
 							"nodes/waldorf.pp": {"@braintree/muppets"},
 						},
 					},
+					Approved: "Source File Approved",
 					Approvals: groupedResourceApprovals{
-						File:      []string{"@misspiggy"},
-						NodeFiles: map[string][]string{},
+						File: []string{"@misspiggy"},
 					},
 				},
 			},
@@ -266,8 +266,8 @@ func TestResourcesApproved(t *testing.T) {
 							"nodes/waldorf.pp": {"@braintree/muppets"},
 						},
 					},
+					Approved: "Nodes Approved",
 					Approvals: groupedResourceApprovals{
-						File: []string{},
 						NodeFiles: map[string][]string{
 							"nodes/fozzie.pp":  {"@kermit"},
 							"nodes/waldorf.pp": {"@kermit"},
@@ -331,13 +331,9 @@ func TestResourcesApproved(t *testing.T) {
 							"nodes/waldorf.pp": {"@misspiggy"},
 						},
 					},
+					Approved: "Module Approved",
 					Approvals: groupedResourceApprovals{
-						File:   []string{},
 						Module: []string{"@kermit"},
-						NodeFiles: map[string][]string{
-							"nodes/fozzie.pp":  {},
-							"nodes/waldorf.pp": {},
-						},
 					},
 				},
 			},
