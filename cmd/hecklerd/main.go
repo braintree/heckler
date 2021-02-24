@@ -1789,14 +1789,17 @@ func updateIssueMilestone(ghclient *github.Client, conf *HecklerdConf, issue *gi
 }
 
 func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, reason string) error {
-	comment := &github.IssueComment{
-		Body: github.String(reason),
-	}
+	var err error
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	_, _, err := ghclient.Issues.CreateComment(ctx, conf.RepoOwner, conf.Repo, *issue.Number, comment)
-	if err != nil {
-		return err
+	if reason != "" {
+		comment := &github.IssueComment{
+			Body: github.String(reason),
+		}
+		_, _, err := ghclient.Issues.CreateComment(ctx, conf.RepoOwner, conf.Repo, *issue.Number, comment)
+		if err != nil {
+			return err
+		}
 	}
 	issuePatch := &github.IssueRequest{
 		State: github.String("closed"),
