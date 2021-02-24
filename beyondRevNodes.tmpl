@@ -1,7 +1,6 @@
 ### Already Applied Nodes
 
-The following nodes have already applied this commit, so the noop output does
-reflect any changes already made to these nodes by this commit.
+The following nodes have already applied this commit, so the noop output does reflect any changes already made to these nodes by this commit.
 {{ range $gbr := .GroupedBeyondRevs }}
 - *Hosts:* `{{ $gbr.Hosts }}`
   -  *Last Applied Commit:* {{ $gbr.LastApply }}
