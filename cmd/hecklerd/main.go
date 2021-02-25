@@ -473,47 +473,46 @@ func loadNoop(commit git.Oid, node *Node, noopDir string, repo *git.Repository, 
 	reportPath := noopDir + "/" + node.host + "/" + commit.String() + ".json"
 	if _, err := os.Stat(reportPath); err != nil {
 		return nil, err
-	} else {
-		file, err := os.Open(reportPath)
-		if err != nil {
-			return nil, err
-		}
-		defer file.Close()
+	}
+	file, err := os.Open(reportPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
 
-		data, err := ioutil.ReadAll(file)
-		if err != nil {
-			return nil, err
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+	rprt := new(rizzopb.PuppetReport)
+	err = json.Unmarshal([]byte(data), rprt)
+	if err != nil {
+		return nil, err
+	}
+	if node.host != rprt.Host {
+		return nil, fmt.Errorf("Host mismatch %s != %s", node.host, rprt.Host)
+	}
+	// To accurately create delta noops the last applied version which the noop
+	// is taken against must match between all the noops. If it does not some
+	// diffs might not match.  For example if a file is edited before and after
+	// an apply, a noop taken after the apply will only reflect the second
+	// edit, whereas a noop taken before the apply will contain both edits. So
+	// if the serialized noops lastApply does not match the host's current
+	// lastApply we consider the noop invalid.
+	applyStatus, oidPtr, err := parseLastApply(rprt.LastApplyVersion, repo)
+	switch applyStatus {
+	case lastApplyClean:
+		if node.lastApply == *oidPtr {
+			return rprt, nil
+		} else {
+			return nil, &noopInvalidError{node.host, node.lastApply, *oidPtr}
 		}
-		rprt := new(rizzopb.PuppetReport)
-		err = json.Unmarshal([]byte(data), rprt)
-		if err != nil {
-			return nil, err
-		}
-		if node.host != rprt.Host {
-			return nil, fmt.Errorf("Host mismatch %s != %s", node.host, rprt.Host)
-		}
-		// To accurately create delta noops the last applied version which the noop
-		// is taken against must match between all the noops. If it does not some
-		// diffs might not match.  For example if a file is edited before and after
-		// an apply, a noop taken after the apply will only reflect the second
-		// edit, whereas a noop taken before the apply will contain both edits. So
-		// if the serialized noops lastApply does not match the host's current
-		// lastApply we consider the noop invalid.
-		applyStatus, oidPtr, err := parseLastApply(rprt.LastApplyVersion, repo)
-		switch applyStatus {
-		case lastApplyClean:
-			if node.lastApply == *oidPtr {
-				return rprt, nil
-			} else {
-				return nil, &noopInvalidError{node.host, node.lastApply, *oidPtr}
-			}
-		case lastApplyDirty:
-			return nil, fmt.Errorf("Noop last apply was dirty!, %s", rprt.LastApplyVersion)
-		case lastApplyErrored:
-			return nil, fmt.Errorf("Noop last apply was unparseable!, %s", rprt.LastApplyVersion)
-		default:
-			return rprt, errors.New("Unknown lastApplyStatus!")
-		}
+	case lastApplyDirty:
+		return nil, fmt.Errorf("Noop last apply for %s@%s was dirty!, '%s'", node.host, commit.String(), rprt.LastApplyVersion)
+	case lastApplyErrored:
+		return nil, fmt.Errorf("Noop last apply for %s@%s was unparseable!, '%s'", node.host, commit.String(), rprt.LastApplyVersion)
+	default:
+		return rprt, errors.New("Unknown lastApplyStatus!")
 	}
 }
 
