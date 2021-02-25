@@ -327,7 +327,7 @@ func ResetRepo(repoDir string, logger *log.Logger) error {
 	logger.Printf("Running git reset: %v", gitReset.Args)
 	resetOut, err := gitReset.Output()
 	if err != nil {
-		logger.Printf("Error: git clean failed, %v, '%s'", err, resetOut)
+		logger.Printf("Error: git reset failed, %v, '%s'", err, resetOut)
 		return err
 	}
 	return nil
