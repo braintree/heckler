@@ -3925,6 +3925,14 @@ func githubCreateApplyFailureIssue(ghclient *github.Client, nodeErrors []error, 
 	if err != nil {
 		return nil, err
 	}
+	authors, err := nodeOwners(ghclient, nodeFile, conf)
+	if err != nil {
+		return nil, err
+	}
+	return githubCreateIssue(ghclient, conf, title, body, authors)
+}
+
+func nodeOwners(ghclient *github.Client, nodeFile string, conf *HecklerdConf) ([]string, error) {
 	co, err := codeowners.NewCodeowners(conf.WorkRepo)
 	if err != nil {
 		return nil, err
@@ -3939,7 +3947,7 @@ func githubCreateApplyFailureIssue(ghclient *github.Client, nodeErrors []error, 
 	if len(authors) == 0 {
 		authors = append(authors, conf.AdminOwners...)
 	}
-	return githubCreateIssue(ghclient, conf, title, body, authors)
+	return authors, nil
 }
 
 func githubIssueForApplyFailure(ghclient *github.Client, nodeFile string, conf *HecklerdConf) (*github.Issue, error) {
@@ -3971,19 +3979,9 @@ func githubCreateCleanFailureIssue(ghclient *github.Client, nodeErrors []error, 
 	if err != nil {
 		return nil, err
 	}
-	co, err := codeowners.NewCodeowners(conf.WorkRepo)
+	authors, err := nodeOwners(ghclient, nodeFile, conf)
 	if err != nil {
 		return nil, err
-	}
-	nodeFileOwners := co.Owners(nodeFile)
-	authors, err := githubExpandGroups(ghclient, nodeFileOwners)
-	if err != nil {
-		return nil, err
-	}
-	// If we can't determine the node owners, assign the issue to the admins
-	// as a fallback
-	if len(authors) == 0 {
-		authors = append(authors, conf.AdminOwners...)
 	}
 	return githubCreateIssue(ghclient, conf, title, body, authors)
 }
