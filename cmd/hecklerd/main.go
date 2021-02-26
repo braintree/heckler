@@ -492,27 +492,35 @@ func loadNoop(commit git.Oid, node *Node, noopDir string, repo *git.Repository, 
 	if node.host != rprt.Host {
 		return nil, fmt.Errorf("Host mismatch %s != %s", node.host, rprt.Host)
 	}
-	// To accurately create delta noops the last applied version which the noop
-	// is taken against must match between all the noops. If it does not some
-	// diffs might not match.  For example if a file is edited before and after
-	// an apply, a noop taken after the apply will only reflect the second
-	// edit, whereas a noop taken before the apply will contain both edits. So
-	// if the serialized noops lastApply does not match the host's current
-	// lastApply we consider the noop invalid.
-	applyStatus, oidPtr, err := parseLastApply(rprt.LastApplyVersion, repo)
-	switch applyStatus {
-	case lastApplyClean:
-		if node.lastApply == *oidPtr {
-			return rprt, nil
-		} else {
-			return nil, &noopInvalidError{node.host, node.lastApply, *oidPtr}
+	// If the report status is failed, we may not have a LastApplyVersion field
+	if rprt.Status == "failed" {
+		return rprt, nil
+	} else {
+		// To accurately create delta noops the last applied version which the noop
+		// is taken against must match between all the noops. If it does not some
+		// diffs might not match.  For example if a file is edited before and after
+		// an apply, a noop taken after the apply will only reflect the second
+		// edit, whereas a noop taken before the apply will contain both edits. So
+		// if the serialized noops lastApply does not match the host's current
+		// lastApply we consider the noop invalid.
+		applyStatus, oidPtr, err := parseLastApply(rprt.LastApplyVersion, repo)
+		if err != nil {
+			return nil, err
 		}
-	case lastApplyDirty:
-		return nil, fmt.Errorf("Noop last apply for %s@%s was dirty!, '%s'", node.host, commit.String(), rprt.LastApplyVersion)
-	case lastApplyErrored:
-		return nil, fmt.Errorf("Noop last apply for %s@%s was unparseable!, '%s'", node.host, commit.String(), rprt.LastApplyVersion)
-	default:
-		return rprt, errors.New("Unknown lastApplyStatus!")
+		switch applyStatus {
+		case lastApplyClean:
+			if node.lastApply == *oidPtr {
+				return rprt, nil
+			} else {
+				return nil, &noopInvalidError{node.host, node.lastApply, *oidPtr}
+			}
+		case lastApplyDirty:
+			return nil, fmt.Errorf("Noop last apply for %s@%s was dirty!, '%s'", node.host, commit.String(), rprt.LastApplyVersion)
+		case lastApplyErrored:
+			return nil, fmt.Errorf("Noop last apply for %s@%s was unparseable!, '%s'", node.host, commit.String(), rprt.LastApplyVersion)
+		default:
+			return rprt, errors.New("Unknown lastApplyStatus!")
+		}
 	}
 }
 
