@@ -12,7 +12,8 @@ require (
 	github.com/google/go-cmp v0.4.1
 	github.com/google/go-github/v29 v29.0.3
 	github.com/google/uuid v1.1.1 // indirect
-	github.com/hairyhenderson/go-codeowners v0.2.2
+	github.com/hairyhenderson/go-codeowners v0.2.2 // indirect
+	github.com/hmarr/codeowners v0.2.0
 	github.com/huandu/xstrings v1.3.0 // indirect
 	github.com/imdario/mergo v0.3.8 // indirect
 	github.com/libgit2/git2go/v31 v31.0.0
@@ -27,5 +28,5 @@ require (
 	golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5 // indirect
 	google.golang.org/genproto v0.0.0-20200205142000-a86caf926a67 // indirect
 	google.golang.org/grpc v1.28.1
-	gopkg.in/yaml.v3 v3.0.0-20190709130402-674ba3eaed22
+	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 )

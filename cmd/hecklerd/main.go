@@ -33,7 +33,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/go-github/v29/github"
-	codeowners "github.com/hairyhenderson/go-codeowners"
+	"github.com/hmarr/codeowners"
 	git "github.com/libgit2/git2go/v31"
 	gitcgiserver "github.com/lollipopman/git-cgi-server"
 	"github.com/lollipopman/heckler/internal/gitutil"
@@ -2972,25 +2972,52 @@ func groupedResourcesNodeFiles(groupedResources []*groupedResource, puppetCodePa
 // who are assigned to the Puppet node files, source code files and modules of
 // the grouped resource. Return the populated groupedResource slice.
 func groupedResourcesOwners(groupedResources []*groupedResource, puppetCodePath string) ([]*groupedResource, error) {
-	co, err := codeowners.NewCodeowners(puppetCodePath)
+	file, err := os.Open(puppetCodePath + "/" + "CODEOWNERS")
 	if err != nil {
 		return nil, err
 	}
+
+	ruleset, err := codeowners.ParseFile(file)
+	if err != nil {
+		return nil, err
+	}
+
 	// Add node file & file approvers
 	for _, gr := range groupedResources {
 		nodeFilesOwners := make(map[string][]string)
 		for _, nodeFile := range gr.NodeFiles {
-			nodeFilesOwners[nodeFile] = co.Owners(nodeFile)
+			nodeFilesOwners[nodeFile] = owners(ruleset, nodeFile)
 		}
 		gr.Owners = groupedResourceOwners{
 			NodeFiles: nodeFilesOwners,
 		}
 		if gr.File != "" {
-			gr.Owners.File = co.Owners(gr.File)
+			gr.Owners.File = owners(ruleset, gr.File)
 		}
-		gr.Owners.Module = co.Owners(gr.Module.Path)
+		// HACK: the codeowners library does not actually stat a file and determine
+		// if it is a directory, so we add a slash, the proper fix is to find a
+		// codeowners library with a more robust implementation, perhaps?:
+		// https://github.com/denormal/go-gitignore/issues/6
+		// If we do not do this `module/foo` from the CODEOWNERS would not match
+		gr.Owners.Module = owners(ruleset, gr.Module.Path+"/")
 	}
 	return groupedResources, nil
+}
+
+// Obtain a slice of owners as strings from the codeowners rulset
+func owners(ruleset codeowners.Ruleset, path string) []string {
+	rule, err := ruleset.Match(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if rule == nil {
+		return nil
+	}
+	var owners []string
+	for _, owner := range rule.Owners {
+		owners = append(owners, owner.String())
+	}
+	return owners
 }
 
 // Given a slice of groupedResources return a noopOwners struct with a unique
@@ -3933,11 +3960,15 @@ func githubCreateApplyFailureIssue(ghclient *github.Client, nodeErrors []error, 
 }
 
 func nodeOwners(ghclient *github.Client, nodeFile string, conf *HecklerdConf) ([]string, error) {
-	co, err := codeowners.NewCodeowners(conf.WorkRepo)
+	file, err := os.Open(conf.WorkRepo + "/" + "CODEOWNERS")
 	if err != nil {
 		return nil, err
 	}
-	nodeFileOwners := co.Owners(nodeFile)
+	ruleset, err := codeowners.ParseFile(file)
+	if err != nil {
+		return nil, err
+	}
+	nodeFileOwners := owners(ruleset, nodeFile)
 	authors, err := githubExpandGroups(ghclient, nodeFileOwners)
 	if err != nil {
 		return nil, err

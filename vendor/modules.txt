@@ -37,8 +37,8 @@ github.com/google/go-querystring/query
 github.com/google/uuid
 # github.com/gorilla/websocket v1.4.2
 github.com/gorilla/websocket
-# github.com/hairyhenderson/go-codeowners v0.2.2
-github.com/hairyhenderson/go-codeowners
+# github.com/hmarr/codeowners v0.2.0
+github.com/hmarr/codeowners
 # github.com/huandu/xstrings v1.3.0
 github.com/huandu/xstrings
 # github.com/imdario/mergo v0.3.8
@@ -71,9 +71,6 @@ github.com/slack-go/slack/internal/errorsx
 github.com/slack-go/slack/internal/misc
 github.com/slack-go/slack/internal/timex
 github.com/slack-go/slack/slackutilsx
-# github.com/spf13/afero v1.2.2
-github.com/spf13/afero
-github.com/spf13/afero/mem
 # github.com/square/grange v0.0.0-20200108221412-2a4cb7b5b334
 github.com/square/grange
 # golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de
@@ -147,7 +144,7 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
-# gopkg.in/yaml.v3 v3.0.0-20190709130402-674ba3eaed22
+# gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 gopkg.in/yaml.v3
 # vbom.ml/util v0.0.0-20150502001426-d600ec780753
 vbom.ml/util/sortorder
