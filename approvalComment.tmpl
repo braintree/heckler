@@ -3,17 +3,21 @@
 - **{{ $resource.Title }}:** Not Approved
     {{- if $resource.File }}
       {{- if gt (len $resource.Owners.File) 0 }}
-  - File: {{ $resource.Owners.File | join ", " | replace "@" "" }}
+  - File Owners
+    - {{ $resource.File }}: {{ $resource.Owners.File | join ", " | replace "@" "" }}
       {{- else }}
-  - File: Unowned
+  - File Owners
+    - {{ $resource.File }}: Unowned
       {{- end }}
     {{- end }}
     {{- if gt (len $resource.Owners.Module) 0 }}
-  - Module: {{ $resource.Owners.Module | join ", " | replace "@" "" }}
+  - Module Owners
+    - {{ $resource.Module.Name }}: {{ $resource.Owners.Module | join ", " | replace "@" "" }}
     {{- else }}
-  - Module: Unowned
+  - Module Owners
+    - {{ $resource.Module.Name }}: Unowned
     {{- end }}
-  - Nodes:
+  - Nodes Owners
     {{- range $file, $owners := $resource.Owners.NodeFiles }}
       {{- if gt (len $owners) 0 }}
     - {{ $file }}: {{ $owners | join ", " | replace "@" "" }}
@@ -24,16 +28,18 @@
   {{- else }}
 - **{{ $resource.Title }}:** Approved
     {{- if eq $resource.Approved "Source File Approved" }}
-  - File: {{ $resource.Approvals.File | join ", " | replace "@" "" }}
+  - File Approvers
+    - {{ $resource.File }}: {{ $resource.Approvals.File | join ", " | replace "@" "" }}
     {{- else if eq $resource.Approved "Module Approved" }}
-  - Module: {{ $resource.Approvals.Module | join ", " | replace "@" "" }}
+  - Module Approvers
+    - {{ $resource.Module.Name }}: {{ $resource.Approvals.Module | join ", " | replace "@" "" }}
     {{- else if eq $resource.Approved "Nodes Approved" }}
-  - Nodes:
+  - Nodes Approvers
       {{- range $file, $approvers := $resource.Approvals.NodeFiles }}
       - {{ $file }}: {{ $approvers | join ", " | replace "@" "" }}
       {{- end }}
     {{- else }}
-  - "Error unknown approval method"
+  - "Error unknown approval method!"
     {{- end }}
   {{- end }}
 {{- end }}
