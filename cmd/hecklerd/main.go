@@ -1867,15 +1867,21 @@ func noopToMarkdown(conf *HecklerdConf, commit *git.Commit, gr groupedReport, te
 }
 
 func githubCreateCommitIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.Commit, gr groupedReport, templates *template.Template) (*github.Issue, error) {
-	authors, err := commitAuthorsLogins(ghclient, commit)
-	if err != nil {
-		return nil, err
-	}
-
-	// If we can't determine the commmit authors, assign the issue to the admins
-	// as a fallback
-	if len(authors) == 0 {
-		authors = append(authors, conf.AdminOwners...)
+	// Only assign commit issues to their authors if the noop generated changes,
+	// i.e. don't assign authors to empty noops so we avoid notifying authors for
+	// commits which have no effect or have already been applied.
+	var err error
+	var authors []string
+	if len(gr.Resources) != 0 {
+		authors, err = commitAuthorsLogins(ghclient, commit)
+		if err != nil {
+			return nil, err
+		}
+		// If we can't determine the commit authors, assign the issue to the
+		// admins as a fallback
+		if len(authors) == 0 {
+			authors = append(authors, conf.AdminOwners...)
+		}
 	}
 
 	title, body, err := noopToMarkdown(conf, commit, gr, templates)
