@@ -696,7 +696,13 @@ func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *g
 
 	parentCount := commit.ParentCount()
 	for i := uint(0); i < parentCount; i++ {
-		if deltaNoop {
+		// There are two cases where we do not want a noop:
+		// 1. `deltaNoop == false`, we substitute empty noops so that we subtract
+		//     nothing
+		// 1. `commitInAllNodeLineages(*commit.ParentId(i), ...) == false` we can't
+		//     noop a commit that is not in the lineage of all nodes for the reason
+		//     noted above, so we substitute an empty noop
+		if deltaNoop && commitInAllNodeLineages(*commit.ParentId(i), ns.nodes.active, repo, logger) {
 			commitIdsToNoop = append(commitIdsToNoop, *commit.ParentId(i))
 		} else {
 			for _, node := range ns.nodes.active {
