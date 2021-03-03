@@ -157,7 +157,7 @@ type HecklerdConf struct {
 	LockMessage                string                `yaml:"lock_message"`
 	LoopApplySleepSeconds      int                   `yaml:"loop_apply_sleep_seconds"`
 	LoopApprovalSleepSeconds   int                   `yaml:"loop_approval_sleep_seconds"`
-	LoopDirtySleepSeconds      int                   `yaml:"loop_dirty_sleep_seconds"`
+	LoopCleanSleepSeconds      int                   `yaml:"loop_clean_sleep_seconds"`
 	LoopMilestoneSleepSeconds  int                   `yaml:"loop_milestone_sleep_seconds"`
 	LoopNoopSleepSeconds       int                   `yaml:"loop_noop_sleep_seconds"`
 	ManualMode                 bool                  `yaml:"manual_mode"`
@@ -3825,7 +3825,7 @@ func clean(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, nodeD
 
 func cleanLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	logger := log.New(os.Stdout, "[cleanLoop] ", log.Lshortfile)
-	loopSleep := time.Duration(conf.LoopDirtySleepSeconds) * time.Second
+	loopSleep := time.Duration(conf.LoopCleanSleepSeconds) * time.Second
 	nodeDirtyNoops := make(map[string]dirtyNoops)
 	logger.Printf("Started, looping every %v", loopSleep)
 	for {
@@ -4576,7 +4576,7 @@ func main() {
 	conf.LoopMilestoneSleepSeconds = 10
 	conf.LoopApplySleepSeconds = 10
 	conf.LoopApprovalSleepSeconds = 10
-	conf.LoopDirtySleepSeconds = 10
+	conf.LoopCleanSleepSeconds = 10
 	conf.ApplySetOrder = []string{"all"}
 	conf.ModulesPaths = []string{"modules", "vendor/modules"}
 	err = yaml.Unmarshal([]byte(data), conf)
@@ -4727,7 +4727,7 @@ func main() {
 		} else {
 			go approvalLoop(conf, repo, templates)
 		}
-		if conf.LoopDirtySleepSeconds == 0 {
+		if conf.LoopCleanSleepSeconds == 0 {
 			logger.Println("cleanLoop disabled")
 		} else {
 			go cleanLoop(noopLock, conf, repo, templates)
