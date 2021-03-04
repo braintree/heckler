@@ -3680,7 +3680,7 @@ func reconcileMilestone(priorTag string, nextTag string, repo *git.Repository, c
 			continue
 		}
 		issueMilestone := issue.GetMilestone()
-		if issueMilestone == nil || *issueMilestone != *nextTagMilestone {
+		if issueMilestone == nil || issueMilestone.GetNumber() != nextTagMilestone.GetNumber() {
 			err = updateIssueMilestone(ghclient, conf, issue, nextTagMilestone)
 			if err != nil {
 				logger.Printf("Error: unable to update issue milestone: %v", err)
