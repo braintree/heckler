@@ -168,6 +168,7 @@ type HecklerdConf struct {
 	NodeSets                   map[string]NodeSetCfg `yaml:"node_sets"`
 	NagTimezone                string                `yaml:"nag_timezone"`
 	NagWait                    string                `yaml:"nag_wait"`
+	NagCronSchedule            string                `yaml:"nag_cron_schedule"`
 	NoopDir                    string                `yaml:"noop_dir"`
 	Repo                       string                `yaml:"repo"`
 	RepoBranch                 string                `yaml:"repo_branch"`
@@ -4672,6 +4673,7 @@ func main() {
 	conf.LoopCleanSleepSeconds = 10
 	conf.NagTimezone = "America/Chicago"
 	conf.NagWait = "8h"
+	conf.NagCronSchedule = "0 13-22 * * *"
 	conf.ApplySetOrder = []string{"all"}
 	conf.ModulesPaths = []string{"modules", "vendor/modules"}
 	err = yaml.Unmarshal([]byte(data), conf)
@@ -4839,12 +4841,17 @@ func main() {
 				},
 			)
 		}
-		hecklerdCron.AddFunc(
-			"0 13-22 * * *",
-			func() {
-				nagOpenIssues(conf, repo)
-			},
-		)
+		if conf.NagCronSchedule == "" {
+			logger.Println("nag cron schedule disabled")
+		} else {
+			logger.Printf("nag enabled with cron schedule of '%s'", conf.NagCronSchedule)
+			hecklerdCron.AddFunc(
+				conf.NagCronSchedule,
+				func() {
+					nagOpenIssues(conf, repo)
+				},
+			)
+		}
 		hecklerdCron.AddFunc(
 			"0 12 * * *",
 			func() {
