@@ -62,6 +62,10 @@ github.com/mitchellh/reflectwalk
 github.com/orcaman/concurrent-map
 # github.com/pkg/errors v0.8.0
 github.com/pkg/errors
+# github.com/rickar/cal/v2 v2.0.0
+github.com/rickar/cal/v2
+github.com/rickar/cal/v2/aa
+github.com/rickar/cal/v2/us
 # github.com/robfig/cron/v3 v3.0.1
 github.com/robfig/cron/v3
 # github.com/slack-go/slack v0.8.0

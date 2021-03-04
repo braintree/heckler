@@ -22,6 +22,7 @@ require (
 	github.com/lyraproj/puppet-parser v0.0.0-20190606112603-21687f912799
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.1 // indirect
+	github.com/rickar/cal/v2 v2.0.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/slack-go/slack v0.8.0
 	github.com/square/grange v0.0.0-20200108221412-2a4cb7b5b334

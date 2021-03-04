@@ -87,6 +87,9 @@ github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
+github.com/rickar/cal v1.0.5 h1:ccTH7okdpqbT+X7hlWgQM4Hv3rTvpV8Stu7enQx7ywY=
+github.com/rickar/cal/v2 v2.0.0 h1:jOm9HcGx9OvADukjBc4Fe7Qefdsv6sxCL2UM31jBg1Q=
+github.com/rickar/cal/v2 v2.0.0/go.mod h1:/fdlMcx7GjPlIBibMzOM9gMvDBsrK+mOtRXdTzUqV/A=
 github.com/robfig/cron/v3 v3.0.1 h1:WdRxkvbJztn8LMz/QEvLN5sBU+xKpSqwwUO1Pjr4qDs=
 github.com/robfig/cron/v3 v3.0.1/go.mod h1:eQICP3HwyT7UooqI/z+Ov+PtYAWygg1TEWWzGIFLtro=
 github.com/slack-go/slack v0.8.0 h1:ANyLY5KHLV+MxLJDQum2IuHTLwbCbDtaWY405X1EU9U=

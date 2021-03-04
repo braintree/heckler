@@ -41,6 +41,8 @@ import (
 	"github.com/lollipopman/heckler/internal/hecklerpb"
 	"github.com/lollipopman/heckler/internal/puppetutil"
 	"github.com/lollipopman/heckler/internal/rizzopb"
+	"github.com/rickar/cal/v2"
+	"github.com/rickar/cal/v2/us"
 	"github.com/robfig/cron/v3"
 	"github.com/slack-go/slack"
 	"github.com/square/grange"
@@ -164,6 +166,8 @@ type HecklerdConf struct {
 	MaxNodeThresholds          NodeThresholds        `yaml:"max_node_thresholds"`
 	ModulesPaths               []string              `yaml:"module_paths"`
 	NodeSets                   map[string]NodeSetCfg `yaml:"node_sets"`
+	NagTimezone                string                `yaml:"nag_timezone"`
+	NagWait                    string                `yaml:"nag_wait"`
 	NoopDir                    string                `yaml:"noop_dir"`
 	Repo                       string                `yaml:"repo"`
 	RepoBranch                 string                `yaml:"repo_branch"`
@@ -1715,14 +1719,18 @@ func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, conf *HecklerdC
 	}
 }
 
-func githubOpenIssues(ghclient *github.Client, conf *HecklerdConf) ([]github.Issue, error) {
+func githubOpenIssues(ghclient *github.Client, conf *HecklerdConf, searchTerm string) ([]github.Issue, error) {
+	if searchTerm == "" {
+		return nil, fmt.Errorf("Empty searchTerm provided")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	prefix := conf.EnvPrefix
-	query := "is:issue is:open"
+	query := "state:open"
 	if prefix != "" {
 		query += fmt.Sprintf(" %sin:title", issuePrefix(prefix))
 	}
+	query += fmt.Sprintf(" %s in:title", searchTerm)
 	query += fmt.Sprintf(" author:app/%s", conf.GitHubAppSlug)
 	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
 	if err != nil {
@@ -3468,6 +3476,91 @@ func autoTag(conf *HecklerdConf, repo *git.Repository) {
 	}
 }
 
+// Find issues that are open and have not been updated for move than
+// conf.NagWait. For each issue add a nagging comment, with an apology!
+func nagOpenIssues(conf *HecklerdConf, repo *git.Repository) {
+	logger := log.New(os.Stdout, "[nagOpenIssues] ", log.Lshortfile)
+	var err error
+	configLoc, err := time.LoadLocation(conf.NagTimezone)
+	if err != nil {
+		logger.Fatalf("Unable to load location: %v", err)
+		return
+	}
+	nagWait, err := time.ParseDuration(conf.NagWait)
+	if err != nil {
+		logger.Fatalf("Unable to parse duration: %v", err)
+	}
+	ghclient, _, err := githubConn(conf)
+	if err != nil {
+		logger.Printf("Error: unable to connect to GitHub: %v", err)
+		return
+	}
+	cal.DefaultLoc = configLoc
+	c := cal.NewBusinessCalendar()
+	c.AddHoliday(us.Holidays...)
+
+	type issueNag struct {
+		issueType  string
+		msg        string
+		searchTerm string
+	}
+
+	issueNags := []issueNag{
+		{
+			issueType:  "ApplyFailed",
+			msg:        "please fix this Puppet apply error and close this issue.",
+			searchTerm: "PuppetApplyFailed",
+		},
+		{
+			issueType:  "CleanFailed",
+			msg:        "please Puppet these boxes clean with a known commit and close this issue.",
+			searchTerm: "PuppetCleanFailed",
+		},
+		{
+			issueType:  "Noop",
+			msg:        "please have an owner, other than the authors, approve this noop.",
+			searchTerm: "noop",
+		},
+	}
+
+	localNowish := time.Now().In(configLoc)
+	nagCount := 0
+	for _, issueNag := range issueNags {
+		issues, err := githubOpenIssues(ghclient, conf, issueNag.searchTerm)
+		if err != nil {
+			logger.Printf("Error: unable to obtain issues: %v", err)
+			break
+		}
+		for _, issue := range issues {
+			localIssueUpdateTime := issue.GetUpdatedAt().In(configLoc)
+			workHoursSinceUpdate := c.WorkHoursInRange(localIssueUpdateTime, localNowish)
+			if workHoursSinceUpdate < nagWait {
+				continue
+			}
+			logger.Printf("Nagging %s issue(%d), work duration since update: '%v'", issueNag.issueType, issue.GetNumber(), workHoursSinceUpdate)
+			err = nagIssue(ghclient, conf, &issue, issueNag.msg)
+			if err != nil {
+				logger.Printf("Error: unable to create nag comment on GitHub: %v", err)
+				break
+			}
+			nagCount++
+		}
+	}
+	logger.Printf("Nagging complete, nagged (%d) issues which had not been updated in %v", nagCount, nagWait)
+	return
+}
+
+func nagIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, msg string) error {
+	var err error
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	comment := &github.IssueComment{
+		Body: github.String("Sorry to nag, but " + msg),
+	}
+	_, _, err = ghclient.Issues.CreateComment(ctx, conf.RepoOwner, conf.Repo, issue.GetNumber(), comment)
+	return err
+}
+
 func createTag(newTag string, conf *HecklerdConf, ghclient *github.Client, repo *git.Repository) error {
 	timeNow := time.Now()
 	tagger := &github.CommitAuthor{
@@ -4577,6 +4670,8 @@ func main() {
 	conf.LoopApplySleepSeconds = 10
 	conf.LoopApprovalSleepSeconds = 10
 	conf.LoopCleanSleepSeconds = 10
+	conf.NagTimezone = "America/Chicago"
+	conf.NagWait = "8h"
 	conf.ApplySetOrder = []string{"all"}
 	conf.ModulesPaths = []string{"modules", "vendor/modules"}
 	err = yaml.Unmarshal([]byte(data), conf)
@@ -4744,6 +4839,12 @@ func main() {
 				},
 			)
 		}
+		hecklerdCron.AddFunc(
+			"0 13-22 * * *",
+			func() {
+				nagOpenIssues(conf, repo)
+			},
+		)
 		hecklerdCron.AddFunc(
 			"0 12 * * *",
 			func() {
