@@ -1711,6 +1711,9 @@ func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, conf *HecklerdC
 	if err != nil {
 		return nil, fmt.Errorf("Unable to search GitHub Issues: %w", err)
 	}
+	if searchResults.GetIncompleteResults() == true {
+		return nil, fmt.Errorf("Incomplete results returned from GitHub")
+	}
 	if searchResults.GetTotal() == 0 {
 		return nil, nil
 	} else if searchResults.GetTotal() == 1 {
@@ -1736,6 +1739,9 @@ func githubOpenIssues(ghclient *github.Client, conf *HecklerdConf, searchTerm st
 	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
 	if err != nil {
 		return nil, err
+	}
+	if searchResults.GetIncompleteResults() == true {
+		return nil, fmt.Errorf("Incomplete results returned from GitHub")
 	}
 	return searchResults.Issues, nil
 }
@@ -1803,6 +1809,9 @@ func clearIssues(ghclient *github.Client, conf *HecklerdConf) error {
 	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if searchResults.GetIncompleteResults() == true {
+		return fmt.Errorf("Incomplete results returned from GitHub")
 	}
 	// The rest API does not support deletion,
 	// https://github.community/t5/GitHub-API-Development-and/Delete-Issues-programmatically/td-p/29524,
@@ -4102,6 +4111,9 @@ func githubIssueForApplyFailure(ghclient *github.Client, nodeFile string, conf *
 	if err != nil {
 		return nil, fmt.Errorf("Unable to search GitHub Issues: %w", err)
 	}
+	if searchResults.GetIncompleteResults() == true {
+		return nil, fmt.Errorf("Incomplete results returned from GitHub")
+	}
 	if searchResults.GetTotal() == 0 {
 		return nil, nil
 	} else if searchResults.GetTotal() == 1 {
@@ -4137,6 +4149,9 @@ func githubIssueForCleanFailure(ghclient *github.Client, nodeFile string, conf *
 	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to search GitHub Issues: %w", err)
+	}
+	if searchResults.GetIncompleteResults() == true {
+		return nil, fmt.Errorf("Incomplete results returned from GitHub")
 	}
 	if searchResults.GetTotal() == 0 {
 		return nil, nil
