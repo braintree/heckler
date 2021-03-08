@@ -1901,10 +1901,18 @@ func githubCreateCommitIssue(ghclient *github.Client, conf *HecklerdConf, commit
 		if err != nil {
 			return nil, err
 		}
+		authors, err = filterSuspendedUsers(ghclient, authors)
+		if err != nil {
+			return nil, err
+		}
 		// If we can't determine the commit authors, assign the issue to the
 		// admins as a fallback
 		if len(authors) == 0 {
 			authors = append(authors, conf.AdminOwners...)
+			authors, err = filterSuspendedUsers(ghclient, authors)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -3278,6 +3286,26 @@ func githubGroupMembersUsernames(ghclient *github.Client, group string) ([]strin
 	return usernames, nil
 }
 
+// Given a slice of usernames remove any usernames for which the GitHub user is
+// suspended
+func filterSuspendedUsers(ghclient *github.Client, usernames []string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	var activeUsernames []string
+	for _, username := range usernames {
+		user, _, err := ghclient.Users.Get(ctx, strings.TrimPrefix(username, "@"))
+		if err != nil {
+			return nil, err
+		}
+		if (!user.GetSuspendedAt().Equal(github.Timestamp{})) && user.GetSuspendedAt().Before(time.Now()) {
+			// User is suspended skip
+			continue
+		}
+		activeUsernames = append(activeUsernames, username)
+	}
+	return activeUsernames, nil
+}
+
 // Given a slice of GitHub user & groups return a slice with all groups
 // expanded to their members and any dups removed.
 func githubExpandGroups(ghclient *github.Client, usersOrGroups []string) ([]string, error) {
@@ -4075,6 +4103,7 @@ func githubCreateApplyFailureIssue(ghclient *github.Client, nodeErrors []error, 
 }
 
 func nodeOwners(ghclient *github.Client, nodeFile string, conf *HecklerdConf) ([]string, error) {
+	var err error
 	file, err := os.Open(conf.WorkRepo + "/" + "CODEOWNERS")
 	if err != nil {
 		return nil, err
@@ -4084,16 +4113,25 @@ func nodeOwners(ghclient *github.Client, nodeFile string, conf *HecklerdConf) ([
 		return nil, err
 	}
 	nodeFileOwners := owners(ruleset, nodeFile)
-	authors, err := githubExpandGroups(ghclient, nodeFileOwners)
+	var usernames []string
+	usernames, err = githubExpandGroups(ghclient, nodeFileOwners)
+	if err != nil {
+		return nil, err
+	}
+	usernames, err = filterSuspendedUsers(ghclient, usernames)
 	if err != nil {
 		return nil, err
 	}
 	// If we can't determine the node owners, assign the issue to the admins
 	// as a fallback
-	if len(authors) == 0 {
-		authors = append(authors, conf.AdminOwners...)
+	if len(usernames) == 0 {
+		usernames = append(usernames, conf.AdminOwners...)
+		usernames, err = filterSuspendedUsers(ghclient, usernames)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return authors, nil
+	return usernames, nil
 }
 
 func githubIssueForApplyFailure(ghclient *github.Client, nodeFile string, conf *HecklerdConf) (*github.Issue, error) {
