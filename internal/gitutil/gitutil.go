@@ -322,21 +322,23 @@ func ResetRepo(repoDir string, logger *log.Logger) error {
 			return err
 		}
 	}
-	// Remove untracked files from interrupted checkout
-	gitClean := exec.Command("git", "-C", repoDir, "clean", "-f", "-d", "-q")
-	logger.Printf("Running git clean: %v", gitClean.Args)
-	cleanOut, err := gitClean.Output()
-	if err != nil {
-		logger.Printf("Error: git clean failed, %v, '%s'", err, cleanOut)
-		return err
+	gitChecks := map[string][]string{
+		// Remove untracked files from interrupted checkout
+		"clean": []string{"-C", repoDir, "clean", "-f", "-d", "-q"},
+		// Reset any modified files from an interrupted checkout
+		"reset": []string{"-C", repoDir, "reset", "--hard", "-q"},
+		// Run a full fsck to ensure data integrity
+		"fsck": []string{"-C", repoDir, "fsck"},
 	}
-	// Reset any modified files from an interrupted checkout
-	gitReset := exec.Command("git", "-C", repoDir, "reset", "--hard", "-q")
-	logger.Printf("Running git reset: %v", gitReset.Args)
-	resetOut, err := gitReset.Output()
-	if err != nil {
-		logger.Printf("Error: git reset failed, %v, '%s'", err, resetOut)
-		return err
+	for gitCheck, args := range gitChecks {
+		cmd := exec.Command("git", args...)
+		logger.Printf("Running git %s: %v", gitCheck, cmd.Args)
+		output, err := cmd.Output()
+		if err != nil {
+			logger.Printf("Error: git %s failed, %v, '%s'", gitCheck, err, output)
+			logger.Printf("Removing broken git repo, %v", repoDir)
+			return os.RemoveAll(repoDir)
+		}
 	}
 	return nil
 }
