@@ -322,20 +322,32 @@ func ResetRepo(repoDir string, logger *log.Logger) error {
 			return err
 		}
 	}
-	gitChecks := map[string][]string{
-		// Remove untracked files from interrupted checkout
-		"clean": []string{"-C", repoDir, "clean", "-f", "-d", "-q"},
-		// Reset any modified files from an interrupted checkout
-		"reset": []string{"-C", repoDir, "reset", "--hard", "-q"},
-		// Run a full fsck to ensure data integrity
-		"fsck": []string{"-C", repoDir, "fsck"},
+	gitChecks := []struct {
+		name string
+		args []string
+	}{
+		{
+			// Remove untracked files from interrupted checkout
+			"clean",
+			[]string{"-C", repoDir, "clean", "-f", "-d", "-q"},
+		},
+		{
+			// Reset any modified files from an interrupted checkout
+			"reset",
+			[]string{"-C", repoDir, "reset", "--hard", "-q"},
+		},
+		{
+			// Run a full fsck to ensure data integrity
+			"fsck",
+			[]string{"-C", repoDir, "fsck"},
+		},
 	}
-	for gitCheck, args := range gitChecks {
-		cmd := exec.Command("git", args...)
-		logger.Printf("Running git %s: %v", gitCheck, cmd.Args)
+	for _, gitCheck := range gitChecks {
+		cmd := exec.Command("git", gitCheck.args...)
+		logger.Printf("Running git %s: %v", gitCheck.name, cmd.Args)
 		stdoutStderr, err := cmd.CombinedOutput()
 		if err != nil {
-			logger.Printf("Error: git %s failed, %v, '%s'", gitCheck, err, stdoutStderr)
+			logger.Printf("Error: git %s failed, %v, '%s'", gitCheck.name, err, stdoutStderr)
 			logger.Printf("Removing broken git repo, %v", repoDir)
 			return os.RemoveAll(repoDir)
 		}
