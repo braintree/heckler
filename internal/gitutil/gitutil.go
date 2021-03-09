@@ -24,7 +24,10 @@ func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptio
 			// A failed initial clone sometimes leaves the respository in a state
 			// that is difficult to recover from, so rather then solving those corner
 			// cases, just remove the failed clone directory
-			os.RemoveAll(cloneDir)
+			rmErr := os.RemoveAll(cloneDir)
+			if err != nil {
+				return nil, rmErr
+			}
 			return nil, fmt.Errorf("Clone failed: %w", err)
 		}
 	} else {
@@ -37,12 +40,18 @@ func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptio
 	// so delete the cloned directory.
 	empty, err := repo.IsEmpty()
 	if err != nil {
-		os.RemoveAll(cloneDir)
+		rmErr := os.RemoveAll(cloneDir)
+		if err != nil {
+			return nil, rmErr
+		}
 		return nil, err
 	}
 	if empty {
-		os.RemoveAll(cloneDir)
-		return nil, errors.New("Repo is empty, removing repo dir!")
+		rmErr := os.RemoveAll(cloneDir)
+		if err != nil {
+			return nil, rmErr
+		}
+		return nil, errors.New("Repo is empty, repo dir removed!")
 	}
 	err = repo.Remotes.SetUrl("origin", remoteUrl)
 	if err != nil {
@@ -301,8 +310,7 @@ func ResetRepo(repoDir string, logger *log.Logger) error {
 	}
 	// If we don't have a git directory, delete our repo
 	if _, err := os.Stat(repoDir + "/.git"); os.IsNotExist(err) {
-		os.RemoveAll(repoDir)
-		return nil
+		return os.RemoveAll(repoDir)
 	} else if err != nil {
 		return err
 	}
