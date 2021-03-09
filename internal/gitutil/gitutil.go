@@ -291,9 +291,9 @@ func Gc(repoDir string, logger *log.Logger) error {
 	time.Sleep(time.Duration(sleepSpread.Int64()) * time.Minute)
 	cmd := exec.Command("git", "-C", repoDir, "gc", "--auto")
 	logger.Printf("Running git gc: %v", cmd.Args)
-	out, err := cmd.Output()
+	stdoutStderr, err := cmd.CombinedOutput()
 	if err != nil {
-		logger.Printf("Error: git gc failed, %v, '%s'", err, out)
+		logger.Printf("Error: git gc failed, %v, '%s'", err, stdoutStderr)
 		return err
 	}
 	logger.Printf("Completed git gc of: '%s'", repoDir)
@@ -333,9 +333,9 @@ func ResetRepo(repoDir string, logger *log.Logger) error {
 	for gitCheck, args := range gitChecks {
 		cmd := exec.Command("git", args...)
 		logger.Printf("Running git %s: %v", gitCheck, cmd.Args)
-		output, err := cmd.Output()
+		stdoutStderr, err := cmd.CombinedOutput()
 		if err != nil {
-			logger.Printf("Error: git %s failed, %v, '%s'", gitCheck, err, output)
+			logger.Printf("Error: git %s failed, %v, '%s'", gitCheck, err, stdoutStderr)
 			logger.Printf("Removing broken git repo, %v", repoDir)
 			return os.RemoveAll(repoDir)
 		}
