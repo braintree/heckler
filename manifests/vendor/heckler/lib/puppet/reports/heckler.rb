@@ -122,6 +122,15 @@ Puppet::Reports.register_report(:heckler) do
       end
     end
 
+    # If an apply failed the state of the box is unknown, since some
+    # resources may have applied fully or partially, consequently mark the
+    # configuration version as dirty, if it is not already.
+    if report["noop"] == false && report["status"] == "failed"
+      if report["configuration_version"] !~ /-dirty$/
+        report["configuration_version"] = "#{report["configuration_version"]}-dirty"
+      end
+    end
+
     name = "heckler_" + report["configuration_version"] + ".json"
     file = File.join(dir, name)
 
@@ -133,7 +142,7 @@ Puppet::Reports.register_report(:heckler) do
       Puppet.log_exception(detail, "Could not write report for #{host} at #{file}: #{detail}")
     end
 
-    if report["noop"] == false && report["status"] != "failed"
+    if report["noop"] == false
       begin
         Puppet::Util.replace_file(last_apply_path, 0644) do |fh|
           fh.print report.to_json
