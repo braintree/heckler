@@ -413,3 +413,79 @@ func TestNextSemVerTags(t *testing.T) {
 		}
 	}
 }
+
+func TestResourceIgnored(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input    string
+		expected bool
+	}{
+		{
+			input:    "Exec[sl]",
+			expected: true,
+		},
+		{
+			input:    "Exec[ls]",
+			expected: false,
+		},
+		{
+			input:    "File[sl]",
+			expected: false,
+		},
+		{
+			input:    "File[/etc/hosts]",
+			expected: true,
+		},
+		{
+			input:    "Pg_user[butter_ro]",
+			expected: true,
+		},
+		{
+			input:    "Pg_user[bubbles]",
+			expected: false,
+		},
+	}
+	roDbUser, _ := SerializedRegexpCompile("^.*_ro$")
+	ignoredResources := []IgnoredResources{
+		IgnoredResources{
+			Purpose:   "Humor",
+			Rationale: "Ride that train!",
+			Resources: []Resource{
+				Resource{
+					Type:  "Exec",
+					Title: "sl",
+				},
+			},
+		},
+		IgnoredResources{
+			Purpose:   "IP mapping",
+			Rationale: "DNS is the dream",
+			Resources: []Resource{
+				Resource{
+					Type:  "File",
+					Title: "/etc/hosts",
+				},
+			},
+		},
+		IgnoredResources{
+			Purpose:   "Readonly DB user",
+			Rationale: "Love that SQL!",
+			Resources: []Resource{
+				Resource{
+					Type:       "Pg_user",
+					TitleRegex: roDbUser,
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		actual, err := resourceIgnored(test.input, ignoredResources)
+		if err != nil {
+			t.Fatalf("resourceIgnored returned an unexpected error: %v", err)
+			return
+		}
+		if diff := cmp.Diff(test.expected, actual); diff != "" {
+			t.Errorf("resourceIgnored() mismatch (-expected +actual):\n%s", diff)
+		}
+	}
+}

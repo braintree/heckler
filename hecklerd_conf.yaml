@@ -26,7 +26,11 @@ apply_set_order:
   - canaries
   - all
 ignored_resources:
-- 'File[/data/puppet_apply/statler/fit]'
+  - purpose: 'Statler has great wit'
+    rationale: 'Keep it quiet!'
+    resources:
+      - type: 'File'
+        title: '/data/puppet_apply/statler/wit'
 node_sets:
   all:
     cmd:

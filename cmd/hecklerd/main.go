@@ -137,6 +137,52 @@ var Debug = false
 // robust way to match for define types?
 var RegexDefineType = regexp.MustCompile(`^[A-Z][a-zA-Z0-9_:]*\[[^\]]+\]$`)
 var RegexGithubGroup = regexp.MustCompile(`^@.*/.*$`)
+var regexPuppetResourceCapture = regexp.MustCompile(`^([^\[].*)\[(.*)\]$`)
+
+// SerializedRegexp embeds a regexp.Regexp, and adds Text/JSON
+// (un)marshaling, https://stackoverflow.com/a/62558450
+type SerializedRegexp struct {
+	regexp.Regexp
+}
+
+// Compile wraps the result of the standard library's
+// regexp.Compile, for easy (un)marshaling.
+func SerializedRegexpCompile(expr string) (*SerializedRegexp, error) {
+	re, err := regexp.Compile(expr)
+	if err != nil {
+		return nil, err
+	}
+	return &SerializedRegexp{*re}, nil
+}
+
+// UnmarshalText satisfies the encoding.TextMarshaler interface,
+// also used by json.Unmarshal.
+func (r *SerializedRegexp) UnmarshalText(text []byte) error {
+	rr, err := SerializedRegexpCompile(string(text))
+	if err != nil {
+		return err
+	}
+	*r = *rr
+	return nil
+}
+
+// MarshalText satisfies the encoding.TextMarshaler interface,
+// also used by json.Marshal.
+func (r *SerializedRegexp) MarshalText() ([]byte, error) {
+	return []byte(r.String()), nil
+}
+
+type Resource struct {
+	Type       string            `yaml:"type"`
+	Title      string            `yaml:"title,omitempty"`
+	TitleRegex *SerializedRegexp `yaml:"title_regex,omitempty"`
+}
+
+type IgnoredResources struct {
+	Purpose   string     `yaml:"purpose"`
+	Rationale string     `yaml:"rationale"`
+	Resources []Resource `yaml:"resources"`
+}
 
 type HecklerdConf struct {
 	AdminOwners                []string              `yaml:"admin_owners"`
@@ -155,7 +201,7 @@ type HecklerdConf struct {
 	GitHubPrivateKeyPath       string                `yaml:"github_private_key_path"`
 	GitServerMaxClients        int                   `yaml:"git_server_max_clients"`
 	GroupedNoopDir             string                `yaml:"grouped_noop_dir"`
-	IgnoredResources           []string              `yaml:"ignored_resources"`
+	IgnoredResources           []IgnoredResources    `yaml:"ignored_resources"`
 	LockMessage                string                `yaml:"lock_message"`
 	LoopApplySleepSeconds      int                   `yaml:"loop_apply_sleep_seconds"`
 	LoopApprovalSleepSeconds   int                   `yaml:"loop_approval_sleep_seconds"`
@@ -672,10 +718,10 @@ func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir st
 	return nil
 }
 
-func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, ignoredResources []string, noopDir string, conf *HecklerdConf, logger *log.Logger) (groupedReport, error) {
+func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, conf *HecklerdConf, logger *log.Logger) (groupedReport, error) {
 	var err error
 	for host, _ := range ns.nodes.active {
-		os.Mkdir(noopDir+"/"+host, 0755)
+		os.Mkdir(conf.NoopDir+"/"+host, 0755)
 	}
 
 	// If the commit is not part of every nodes lineage we are unable to create a
@@ -718,7 +764,7 @@ func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *g
 	}
 
 	for _, commitId := range commitIdsToNoop {
-		err = noopNodeSet(ns, commitId, repo, noopDir, conf, logger)
+		err = noopNodeSet(ns, commitId, repo, conf.NoopDir, conf, logger)
 		if err != nil {
 			return groupedReport{}, err
 		}
@@ -743,7 +789,11 @@ func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *g
 			continue
 		}
 		logger.Printf("Creating delta resource for commit %s@%s", node.host, commit.Id().String())
-		node.commitDeltaResources[*commit.Id()] = subtractNoops(node.commitReports[*commit.Id()], parentReports, ignoredResources)
+		delta, err := subtractNoops(node.commitReports[*commit.Id()], parentReports, conf.IgnoredResources)
+		if err != nil {
+			return groupedReport{}, err
+		}
+		node.commitDeltaResources[*commit.Id()] = delta
 	}
 	if len(groupedParentEvalErrors.Hosts) > 0 {
 		ge = append(ge, groupedParentEvalErrors)
@@ -828,24 +878,24 @@ func initDeltaResource(resourceTitle ResourceTitle, r *rizzopb.ResourceStatus, d
 	return deltaRes
 }
 
-func subtractNoops(commitNoop *rizzopb.PuppetReport, priorCommitNoops []*rizzopb.PuppetReport, ignoredResources []string) map[ResourceTitle]*deltaResource {
+func subtractNoops(commitNoop *rizzopb.PuppetReport, priorCommitNoops []*rizzopb.PuppetReport, ignoredResources []IgnoredResources) (map[ResourceTitle]*deltaResource, error) {
 	var deltaEvents []*rizzopb.Event
 	var deltaLogs []*rizzopb.Log
 	var deltaResources map[ResourceTitle]*deltaResource
 	var resourceTitle ResourceTitle
 
 	deltaResources = make(map[ResourceTitle]*deltaResource)
-	ignoredResourcesMap := make(map[string]bool)
-	for _, resource := range ignoredResources {
-		ignoredResourcesMap[resource] = true
-	}
 
 	if commitNoop.ResourceStatuses == nil {
-		return deltaResources
+		return deltaResources, nil
 	}
 
 	for resourceTitleStr, r := range commitNoop.ResourceStatuses {
-		if _, ok := ignoredResourcesMap[resourceTitleStr]; ok {
+		ignored, err := resourceIgnored(resourceTitleStr, ignoredResources)
+		if err != nil {
+			return nil, err
+		}
+		if ignored {
 			continue
 		}
 		deltaEvents = nil
@@ -871,7 +921,7 @@ func subtractNoops(commitNoop *rizzopb.PuppetReport, priorCommitNoops []*rizzopb
 		}
 	}
 
-	return deltaResources
+	return deltaResources, nil
 }
 
 // Determine if a commit is already applied based on the last appliedCommit.
@@ -1393,7 +1443,7 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 		}
-		groupedReport, err := groupReportNodeSet(ns, commit, req.DeltaNoop, hs.repo, hs.conf.IgnoredResources, hs.conf.NoopDir, hs.conf, logger)
+		groupedReport, err := groupReportNodeSet(ns, commit, req.DeltaNoop, hs.repo, hs.conf, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -1503,7 +1553,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	rprt := new(hecklerpb.HecklerNoopRangeReport)
 	var md string
 	for _, gi := range commitLogIds {
-		groupedReport, err := groupReportNodeSet(ns, commits[gi], true, hs.repo, hs.conf.IgnoredResources, hs.conf.NoopDir, hs.conf, logger)
+		groupedReport, err := groupReportNodeSet(ns, commits[gi], true, hs.repo, hs.conf, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -4396,7 +4446,7 @@ func noop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templa
 				node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
 				node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
 			}
-			gr, err = groupReportNodeSet(perNoop, commit, true, repo, conf.IgnoredResources, conf.NoopDir, conf, logger)
+			gr, err = groupReportNodeSet(perNoop, commit, true, repo, conf, logger)
 			if err != nil {
 				logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
 				closeNodeSet(perNoop, logger)
@@ -4658,6 +4708,56 @@ func clearGithub(conf *HecklerdConf) error {
 	return nil
 }
 
+func ignoredResourcesValid(ignoredResources []IgnoredResources) (bool, string) {
+	for _, ir := range ignoredResources {
+		if ir.Purpose == "" {
+			return false, fmt.Sprintf("IgnoredResources Purpose not supplied: %v", ir)
+		}
+		if ir.Rationale == "" {
+			return false, fmt.Sprintf("IgnoredResources Rationale not supplied: %v", ir)
+		}
+		for _, r := range ir.Resources {
+			if r.Type == "" {
+				return false, fmt.Sprintf("Resource Type not supplied: %v", r)
+			}
+			if r.Title == "" && r.TitleRegex == nil {
+				return false, fmt.Sprintf("Resource does not have a Title or TitleRegex: %v", r)
+			}
+			if r.Title != "" && r.TitleRegex != nil {
+				return false, fmt.Sprintf("Resource has both a Title and TitleRegex: %v", r)
+			}
+		}
+	}
+	return true, ""
+}
+
+func resourceIgnored(title string, ignoredResources []IgnoredResources) (bool, error) {
+	resourceComponents := regexPuppetResourceCapture.FindStringSubmatch(title)
+	if len(resourceComponents) != 3 {
+		return false, fmt.Errorf("Unable to parse title: '%s'", title)
+	}
+	puppetType := resourceComponents[1]
+	resourceTitle := resourceComponents[2]
+	ok, msg := ignoredResourcesValid(ignoredResources)
+	if !ok {
+		return false, fmt.Errorf("IgnoredResources invalid, %v", msg)
+	}
+	for _, ir := range ignoredResources {
+		for _, r := range ir.Resources {
+			if r.Type != puppetType {
+				continue
+			}
+			if r.Title != "" && r.Title == resourceTitle {
+				return true, nil
+			}
+			if r.TitleRegex != nil && r.TitleRegex.MatchString(resourceTitle) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 func main() {
 	// add filename and line number to log output
 	log.SetFlags(log.Lshortfile)
@@ -4742,6 +4842,12 @@ func main() {
 
 	if len(conf.AdminOwners) == 0 {
 		logger.Println("You must supply at least one GitHub AdminOwner")
+		os.Exit(1)
+	}
+
+	ok, msg := ignoredResourcesValid(conf.IgnoredResources)
+	if !ok {
+		logger.Printf("IgnoredResources invalid, %v", msg)
 		os.Exit(1)
 	}
 
