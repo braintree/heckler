@@ -23,8 +23,6 @@
 
 ## Nice to Have
 
-- [ ] IgnoredResources should be a map with the value and a reason for the ignore
-  rule
 - [ ] Heckler cli should respect sudoers, i.e. if you don't have root, you
   can't apply, otherwise heckler cli should only be accessible by root.
   How do prove who you are? Use HTTP Signatures via ssh keys?
