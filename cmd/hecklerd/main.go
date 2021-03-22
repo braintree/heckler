@@ -203,7 +203,6 @@ type HecklerdConf struct {
 	GroupedNoopDir             string                `yaml:"grouped_noop_dir"`
 	IgnoredResources           []IgnoredResources    `yaml:"ignored_resources"`
 	LockMessage                string                `yaml:"lock_message"`
-	LoopApplySleepSeconds      int                   `yaml:"loop_apply_sleep_seconds"`
 	LoopApprovalSleepSeconds   int                   `yaml:"loop_approval_sleep_seconds"`
 	LoopCleanSleepSeconds      int                   `yaml:"loop_clean_sleep_seconds"`
 	LoopMilestoneSleepSeconds  int                   `yaml:"loop_milestone_sleep_seconds"`
@@ -215,6 +214,7 @@ type HecklerdConf struct {
 	NagTimezone                string                `yaml:"nag_timezone"`
 	NagWait                    string                `yaml:"nag_wait"`
 	NagCronSchedule            string                `yaml:"nag_cron_schedule"`
+	ApplyCronSchedule          string                `yaml:"apply_cron_schedule"`
 	NoopDir                    string                `yaml:"noop_dir"`
 	Repo                       string                `yaml:"repo"`
 	RepoBranch                 string                `yaml:"repo_branch"`
@@ -2685,17 +2685,6 @@ func greatestApprovedTag(nextTags []string, priorTag string, conf *HecklerdConf,
 	return approvedTag, approvedMilestone, nil
 }
 
-func applyLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
-	logger := log.New(os.Stdout, "[applyLoop] ", log.Lshortfile)
-	loopSleep := (time.Duration(conf.LoopApplySleepSeconds) * time.Second)
-	logger.Printf("Started, looping every %v", loopSleep)
-	for {
-		apply(noopLock, conf, repo, templates, logger)
-		logger.Println("Apply complete, sleeping")
-		time.Sleep(loopSleep)
-	}
-}
-
 // Are there newer release tags than our common lastApply tag across "all"
 // nodes?
 //   If yes
@@ -2704,10 +2693,19 @@ func applyLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, t
 //       If yes
 //         Apply new tag across all nodes
 //   If no, do nothing
-func apply(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template, logger *log.Logger) {
+func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	var err error
 	var ns *NodeSet
 	var perApply *NodeSet
+	logger := log.New(os.Stdout, "[apply] ", log.Lshortfile)
+	select {
+	case applySem <- 1:
+		defer func() { <-applySem }()
+		logger.Printf("apply run started")
+	default:
+		logger.Printf("apply run already in progress, skipping")
+		return
+	}
 	applySetSleep := (time.Duration(conf.ApplySetSleepSeconds) * time.Second)
 	noopLock.Lock()
 	defer noopLock.Unlock()
@@ -2730,23 +2728,23 @@ func apply(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templ
 	priorTag := ns.commonTag
 	nextTags, err := nextTagsInRepo(priorTag, conf.EnvPrefix, repo)
 	if err != nil {
-		logger.Printf("Error: unable to query for nextTags after '%s', sleeping: %v", priorTag, err)
+		logger.Printf("Error: unable to query for nextTags after '%s', returning: %v", priorTag, err)
 		closeNodeSet(ns, logger)
 		return
 	}
 	if len(nextTags) == 0 {
-		logger.Printf("No nextTags found after tag '%s', sleeping", priorTag)
+		logger.Printf("No nextTags found after tag '%s', returning", priorTag)
 		closeNodeSet(ns, logger)
 		return
 	}
 	nextTag, nextTagMilestone, err := greatestApprovedTag(nextTags, priorTag, conf, repo, logger)
 	if err != nil {
-		logger.Printf("Error: unable to find greatestApprovedTag in set %v: %v, sleeping", nextTags, err)
+		logger.Printf("Error: unable to find greatestApprovedTag in set %v: %v, returning", nextTags, err)
 		closeNodeSet(ns, logger)
 		return
 	}
 	if nextTag == "" {
-		logger.Printf("No approved nextTag found after tag '%s', sleeping", priorTag)
+		logger.Printf("No approved nextTag found after tag '%s', returning", priorTag)
 		closeNodeSet(ns, logger)
 		return
 	}
@@ -2774,7 +2772,7 @@ func apply(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templ
 		}
 		appliedNodes, beyondRevNodes, err := applyNodeSet(perApply, false, false, nextTag, repo, conf.LockMessage, logger)
 		if err != nil {
-			logger.Printf("Error: unable to apply nodes, sleeping: %v", err)
+			logger.Printf("Error: unable to apply nodes, returning: %v", err)
 			closeNodeSet(perApply, logger)
 			break
 		}
@@ -2800,6 +2798,7 @@ func apply(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templ
 	if err != nil {
 		logger.Printf("Error: unable to report apply errors, '%v'", err)
 	}
+	logger.Println("Apply complete")
 	return
 }
 
@@ -4821,12 +4820,12 @@ func main() {
 	conf.GroupedNoopDir = conf.NoopDir + "/grouped"
 	conf.LoopNoopSleepSeconds = 10
 	conf.LoopMilestoneSleepSeconds = 10
-	conf.LoopApplySleepSeconds = 10
 	conf.LoopApprovalSleepSeconds = 10
 	conf.LoopCleanSleepSeconds = 10
 	conf.NagTimezone = "America/Chicago"
 	conf.NagWait = "8h"
 	conf.NagCronSchedule = "0 13-22 * * mon-fri"
+	conf.ApplyCronSchedule = "* 16-21 * * mon-fri"
 	conf.ApplySetOrder = []string{"all"}
 	conf.ModulesPaths = []string{"modules", "vendor/modules"}
 	err = yaml.Unmarshal([]byte(data), conf)
@@ -4955,7 +4954,7 @@ func main() {
 	logger.Println("Unlocking 'all' in case they are locked, from a segfault")
 	unlockAll(conf, logger)
 	if conf.ManualMode {
-		logger.Println("Manual mode, not starting loops")
+		logger.Println("Manual mode, not starting loops or cron schedules")
 	} else {
 		// Use a mutex to prevent loops which noop hosts from running concurrently.
 		// Though having them run concurrently has been mostly harmless in
@@ -4972,11 +4971,6 @@ func main() {
 			logger.Println("milestoneLoop disabled")
 		} else {
 			go milestoneLoop(conf, repo)
-		}
-		if conf.LoopApplySleepSeconds == 0 {
-			logger.Println("applyLoop disabled")
-		} else {
-			go applyLoop(noopLock, conf, repo, templates)
 		}
 		if conf.LoopApprovalSleepSeconds == 0 {
 			logger.Println("approvalLoop disabled")
@@ -5008,6 +5002,20 @@ func main() {
 				conf.NagCronSchedule,
 				func() {
 					nagOpenIssues(conf, repo)
+				},
+			)
+		}
+
+		// Ensure only one apply is running
+		applySem := make(chan int, 1)
+		if conf.ApplyCronSchedule == "" {
+			logger.Println("apply cron schedule disabled")
+		} else {
+			logger.Printf("apply enabled with cron schedule of '%s'", conf.ApplyCronSchedule)
+			hecklerdCron.AddFunc(
+				conf.ApplyCronSchedule,
+				func() {
+					apply(noopLock, applySem, conf, repo, templates)
 				},
 			)
 		}
