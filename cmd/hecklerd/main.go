@@ -211,7 +211,7 @@ type HecklerdConf struct {
 	MaxNodeThresholds          NodeThresholds        `yaml:"max_node_thresholds"`
 	ModulesPaths               []string              `yaml:"module_paths"`
 	NodeSets                   map[string]NodeSetCfg `yaml:"node_sets"`
-	NagTimezone                string                `yaml:"nag_timezone"`
+	Timezone                   string                `yaml:"timezone"`
 	NagWait                    string                `yaml:"nag_wait"`
 	NagCronSchedule            string                `yaml:"nag_cron_schedule"`
 	ApplyCronSchedule          string                `yaml:"apply_cron_schedule"`
@@ -3568,7 +3568,7 @@ func autoTag(conf *HecklerdConf, repo *git.Repository) {
 func nagOpenIssues(conf *HecklerdConf, repo *git.Repository) {
 	logger := log.New(os.Stdout, "[nagOpenIssues] ", log.Lshortfile)
 	var err error
-	configLoc, err := time.LoadLocation(conf.NagTimezone)
+	configLoc, err := time.LoadLocation(conf.Timezone)
 	if err != nil {
 		logger.Fatalf("Unable to load location: %v", err)
 		return
@@ -4822,7 +4822,7 @@ func main() {
 	conf.LoopMilestoneSleepSeconds = 10
 	conf.LoopApprovalSleepSeconds = 10
 	conf.LoopCleanSleepSeconds = 10
-	conf.NagTimezone = "America/Chicago"
+	conf.Timezone = "America/Chicago"
 	conf.NagWait = "8h"
 	conf.NagCronSchedule = "0 13-22 * * mon-fri"
 	conf.ApplyCronSchedule = "* 16-21 * * mon-fri"
@@ -4843,6 +4843,16 @@ func main() {
 		logger.Println("You must supply at least one GitHub AdminOwner")
 		os.Exit(1)
 	}
+
+	// Ensure we have a valid timezone
+	_, err = time.LoadLocation(conf.Timezone)
+	if err != nil {
+		logger.Fatalf("Unable to load timezone, '%s': %v", conf.Timezone, err)
+	}
+	// Set the timezone for the entire program
+	os.Setenv("TZ", conf.Timezone)
+	t := time.Now()
+	abbrevZone, _ := t.Zone()
 
 	ok, msg := ignoredResourcesValid(conf.IgnoredResources)
 	if !ok {
@@ -4986,7 +4996,7 @@ func main() {
 		if conf.AutoTagCronSchedule == "" {
 			logger.Println("autoTag cron schedule disabled")
 		} else {
-			logger.Printf("autoTag enabled with cron schedule of '%s'", conf.AutoTagCronSchedule)
+			logger.Printf("autoTag enabled with cron schedule of '%s' (Timezone %s)", conf.AutoTagCronSchedule, abbrevZone)
 			hecklerdCron.AddFunc(
 				conf.AutoTagCronSchedule,
 				func() {
@@ -4997,7 +5007,7 @@ func main() {
 		if conf.NagCronSchedule == "" {
 			logger.Println("nag cron schedule disabled")
 		} else {
-			logger.Printf("nag enabled with cron schedule of '%s'", conf.NagCronSchedule)
+			logger.Printf("nag enabled with cron schedule of '%s' (Timezone %s)", conf.NagCronSchedule, abbrevZone)
 			hecklerdCron.AddFunc(
 				conf.NagCronSchedule,
 				func() {
@@ -5011,7 +5021,7 @@ func main() {
 		if conf.ApplyCronSchedule == "" {
 			logger.Println("apply cron schedule disabled")
 		} else {
-			logger.Printf("apply enabled with cron schedule of '%s'", conf.ApplyCronSchedule)
+			logger.Printf("apply enabled with cron schedule of '%s' (Timezone %s)", conf.ApplyCronSchedule, abbrevZone)
 			hecklerdCron.AddFunc(
 				conf.ApplyCronSchedule,
 				func() {
