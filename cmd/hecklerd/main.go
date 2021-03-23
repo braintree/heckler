@@ -4824,8 +4824,8 @@ func main() {
 	conf.LoopCleanSleepSeconds = 10
 	conf.Timezone = "America/Chicago"
 	conf.NagWait = "8h"
-	conf.NagCronSchedule = "0 13-22 * * mon-fri"
-	conf.ApplyCronSchedule = "* 16-21 * * mon-fri"
+	conf.NagCronSchedule = "0 9-16 * * mon-fri"
+	conf.ApplyCronSchedule = "* 9-15 * * mon-fri"
 	conf.ApplySetOrder = []string{"all"}
 	conf.ModulesPaths = []string{"modules", "vendor/modules"}
 	err = yaml.Unmarshal([]byte(data), conf)
