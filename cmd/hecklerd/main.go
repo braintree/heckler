@@ -4824,6 +4824,7 @@ func main() {
 	conf.LoopCleanSleepSeconds = 10
 	conf.Timezone = "America/Chicago"
 	conf.NagWait = "8h"
+	conf.AutoTagCronSchedule = "*/10 13-15 * * mon-fri"
 	conf.NagCronSchedule = "0 9-16 * * mon-fri"
 	conf.ApplyCronSchedule = "* 9-15 * * mon-fri"
 	conf.ApplySetOrder = []string{"all"}
