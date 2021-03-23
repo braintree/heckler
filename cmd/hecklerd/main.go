@@ -3221,7 +3221,7 @@ func githubNoopApprovals(ghclient *github.Client, conf *HecklerdConf, issue *git
 	if err != nil {
 		return nil, err
 	}
-	regexApproved := regexp.MustCompile(`^[aA]pproved`)
+	regexApproved := regexp.MustCompile(`^[aA]pproved?`)
 	for _, comment := range comments {
 		commentAuthor := comment.GetUser().GetLogin()
 		if commentAuthor == conf.GitHubAppSlug+"[bot]" {
