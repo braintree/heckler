@@ -1,9 +1,15 @@
 ARG DEBIAN_CODENAME=buster
 FROM debian:${DEBIAN_CODENAME}
 ARG DEBIAN_CODENAME=buster
+ARG MUSL_VERSION=1.2.2
+ARG LIBRESSL_VERSION=3.2.5
+ARG GO_VERSION=1.16.2
 ARG USER=builder
 
 ENV DEBIAN_FRONTEND noninteractive
+
+ENV PATH ${PATH}:/usr/local/go/bin
+RUN echo "PATH=$PATH" > /etc/profile
 
 RUN echo "deb http://deb.debian.org/debian ${DEBIAN_CODENAME}-backports main" > /etc/apt/sources.list.d/backports.list
 RUN apt-get update \
@@ -17,7 +23,6 @@ RUN apt-get update \
    dh-golang \
    fakeroot \
    git \
-   golang \
    less \
    libssl-dev \
    pkg-config \
@@ -26,21 +31,24 @@ RUN apt-get update \
    vim-tiny \
    2>&1
 
+WORKDIR /usr/local
+RUN curl -Ls https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz | tar -xz
+
 # libgit2 depends on libc & OpenSSL, glibc does not support static linking so
 # build against musl and LibreSSL. LibreSSL is used because it builds without
 # any issue against musl, whereas Openssl does not.
 
 WORKDIR /usr/local
-RUN curl -Ls http://musl.libc.org/releases/musl-1.1.24.tar.gz | tar -xz
-WORKDIR musl-1.1.24
+RUN curl -Ls http://musl.libc.org/releases/musl-${MUSL_VERSION}.tar.gz | tar -xz
+WORKDIR musl-${MUSL_VERSION}
 RUN ./configure
 RUN make install
 
 ENV CC=/usr/local/musl/bin/musl-gcc
 
 WORKDIR /usr/local
-RUN curl -Ls https://mirror.planetunix.net/pub/OpenBSD/LibreSSL/libressl-3.0.2.tar.gz | tar -xz
-WORKDIR libressl-3.0.2
+RUN curl -Ls https://mirror.planetunix.net/pub/OpenBSD/LibreSSL/libressl-${LIBRESSL_VERSION}.tar.gz | tar -xz
+WORKDIR libressl-${LIBRESSL_VERSION}
 RUN ./configure --with-openssldir=/etc/ssl
 RUN make install
 
