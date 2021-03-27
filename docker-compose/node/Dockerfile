@@ -25,6 +25,7 @@ RUN apt-get update -q && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       puppet-agent \
       2>&1
+RUN adduser --disabled-password --gecos "heckler" "heckler"
 RUN echo 'root:heckler' | chpasswd
 COPY setup_ssh_exec_systemd /setup_ssh_exec_systemd
 COPY heckler.sh /etc/profile.d/

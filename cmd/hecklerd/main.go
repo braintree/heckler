@@ -2794,7 +2794,7 @@ func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *gi
 			}
 		}
 	}
-	err = reportErrors(applyErrors, conf, templates, logger)
+	err = reportErrors(applyErrors, true, conf, templates, logger)
 	if err != nil {
 		logger.Printf("Error: unable to report apply errors, '%v'", err)
 	}
@@ -3997,7 +3997,7 @@ func clean(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, nodeD
 		}
 	}
 	closeNodeSet(ns, logger)
-	err = reportErrors(cleanErrors, conf, templates, logger)
+	err = reportErrors(cleanErrors, false, conf, templates, logger)
 	if err != nil {
 		logger.Printf("Error: unable to report clean errors, '%v'", err)
 	}
@@ -4015,7 +4015,34 @@ func cleanLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, t
 	}
 }
 
-func reportErrors(errors []error, conf *HecklerdConf, templates *template.Template, logger *log.Logger) error {
+func lockErroredNodes(errors []error, msg string, conf *HecklerdConf, logger *log.Logger) error {
+	var host string
+	var erroredHosts []string
+	for _, err := range errors {
+		switch err.(type) {
+		case *applyError:
+			host = err.(*applyError).Host
+		case *cleanError:
+			host = err.(*cleanError).Host
+		default:
+			return fmt.Errorf("Unknown error type: %w", err)
+		}
+		erroredHosts = append(erroredHosts, host)
+	}
+	ns, err := dialReqNodes(conf, erroredHosts, "", logger)
+	if err != nil {
+		return err
+	}
+	defer closeNodeSet(ns, logger)
+	err = lockNodeSet("heckler", msg, false, ns, logger)
+	if err != nil {
+		return err
+	}
+	logger.Printf("Locked errored nodes: '%s', msg: '%s'", compressNodesMap(ns.nodes.active), msg)
+	return nil
+}
+
+func reportErrors(errors []error, lockNodes bool, conf *HecklerdConf, templates *template.Template, logger *log.Logger) error {
 	ghclient, _, err := githubConn(conf)
 	if err != nil {
 		return err
@@ -4063,18 +4090,24 @@ func reportErrors(errors []error, conf *HecklerdConf, templates *template.Templa
 		}
 		if issue != nil {
 			logger.Printf("Skipping Creation, issue already exists for %T for '%s'", perNodeFileErrors[0], nodeFile)
-			continue
+		} else {
+			switch perNodeFileErrors[0].(type) {
+			case *applyError:
+				issue, err = githubCreateApplyFailureIssue(ghclient, perNodeFileErrors, nodeFile, conf, templates)
+			case *cleanError:
+				issue, err = githubCreateCleanFailureIssue(ghclient, perNodeFileErrors, nodeFile, conf, templates)
+			}
+			if err != nil {
+				return err
+			}
+			logger.Printf("Created %T issue for '%s'", perNodeFileErrors[0], nodeFile)
 		}
-		switch perNodeFileErrors[0].(type) {
-		case *applyError:
-			_, err = githubCreateApplyFailureIssue(ghclient, perNodeFileErrors, nodeFile, conf, templates)
-		case *cleanError:
-			_, err = githubCreateCleanFailureIssue(ghclient, perNodeFileErrors, nodeFile, conf, templates)
+		if lockNodes {
+			err = lockErroredNodes(perNodeFileErrors, issue.GetHTMLURL(), conf, logger)
+			if err != nil {
+				return err
+			}
 		}
-		if err != nil {
-			return err
-		}
-		logger.Printf("Created %T issue for '%s'", perNodeFileErrors[0], nodeFile)
 	}
 	return nil
 }
