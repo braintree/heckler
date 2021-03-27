@@ -3605,7 +3605,7 @@ func nagOpenIssues(conf *HecklerdConf, repo *git.Repository) {
 		},
 		{
 			issueType:  "Noop",
-			msg:        "please have an owner, other than the authors, approve this noop.",
+			msg:        "your unapproved commit is **blocking this release**, please have an owner, other than the authors, approve this noop!",
 			searchTerm: "noop",
 		},
 	}
