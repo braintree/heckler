@@ -3481,11 +3481,12 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 }
 
 // Does our common tag across "all" nodes equal our latest tag?
-//   no, do nothing, the latest tag has not been applied, yet
-//   yes,
+//   If no
+//     Do nothing, the latest tag has not been applied, yet
+//   If yes
 //     Are there new commits beyond are common tag?
-//       yes, create a new version
-//       no, do nothing
+//       If no, do nothing
+//       If yes, create a new tag
 func autoTag(conf *HecklerdConf, repo *git.Repository) {
 	logger := log.New(os.Stdout, "[autoTag] ", log.Lshortfile)
 	var err error
