@@ -26,9 +26,9 @@
         nodes are beyond the current rev, skip to next set without
         waiting. This would save time on reapplying an interrupted
         apply.
--   [ ] Improve ParentEvalErrors: We currently surpress the noop since
+-   [ ] Improve ParentEvalErrors: We currently suppress the noop since
     we can't create a delta noop, but this is confusing for commits
-    which fixe the eval error
+    which fix the eval error
     -   [ ] Link to full diff?
 -   [ ] tagging tool, ruminate on the best solution, is autotagging
     sufficient?
@@ -40,7 +40,7 @@
 -   [ ] Escape codes are still present in console error logs with
     `--color=false`. There is a trailing `^[[0m` still present, is this
     due to our custom color patch for Puppet?
--   [ ] Diffs are cummlative when multiple commits change a single file,
+-   [ ] Diffs are cumulative when multiple commits change a single file,
     since Heckler does not know how to separate out the changes from
     each commit.
 -   [ ] Output is trimmed when the issue body exceeds the length limit
@@ -59,14 +59,14 @@
 -   [ ] Upstream git cgi commits
 -   [ ] GitHub clear should handle pagination, and clear all the issues
 -   [ ] Break up into libraries
--   [ ] Move libgit2 build into the docker image? we already build musl
-    and LibreSSL in the container, this would speed up build times
+-   [ ] Move libgit2 build into the docker image? We already build musl
+    and LibreSSL in the container, this would speed up build times.
 
 ## Application Sugar
 
 -   [ ] Heckler status command should include lock status?
 -   [ ] Change heckler arg parsing to use github.com/spf13/cobra?
 -   [ ] Graceful shutdown
-    -   [ ] Cancel all contexes
+    -   [ ] Cancel all contexts
     -   [x] Unlock all nodes
 -   [ ] Send permadiffs to server owners??
