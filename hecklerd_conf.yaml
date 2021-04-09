@@ -7,6 +7,7 @@ github_app_id: 7
 github_app_email: "hathaway@paypal.com"
 github_app_install_id: 14
 auto_tag_cron_schedule: "* * * * *"
+apply_cron_schedule: "* * * * *"
 auto_close_issues: true
 # This is the number of nodes that can be missing when creating a noop for an
 # environment
