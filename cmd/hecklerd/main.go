@@ -2660,7 +2660,7 @@ func tagReadyAndApproved(nextTag string, priorTag string, ghclient *github.Clien
 	return true, nextTagMilestone, nil
 }
 
-func greatestApprovedTag(nextTags []string, priorTag string, conf *HecklerdConf, repo *git.Repository, logger *log.Logger) (string, *github.Milestone, error) {
+func greatestTagApproved(nextTags []string, priorTag string, conf *HecklerdConf, repo *git.Repository, logger *log.Logger) (string, *github.Milestone, error) {
 	ghclient, _, err := githubConn(conf)
 	if err != nil {
 		return "", nil, err
@@ -2674,8 +2674,6 @@ func greatestApprovedTag(nextTags []string, priorTag string, conf *HecklerdConf,
 		if err != nil {
 			return "", nil, err
 		}
-		// If the tag is not approved, break and return the last approved tag if
-		// any
 		if !nextTagApproved {
 			break
 		}
@@ -2683,7 +2681,11 @@ func greatestApprovedTag(nextTags []string, priorTag string, conf *HecklerdConf,
 		approvedMilestone = nextTagMilestone
 		priorTag = nextTag
 	}
-	return approvedTag, approvedMilestone, nil
+	if approvedTag == nextTags[len(nextTags)-1] {
+		return approvedTag, approvedMilestone, nil
+	} else {
+		return "", nil, nil
+	}
 }
 
 // Are there newer release tags than our common lastApply tag across "all"
@@ -2738,14 +2740,14 @@ func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *gi
 		closeNodeSet(ns, logger)
 		return
 	}
-	nextTag, nextTagMilestone, err := greatestApprovedTag(nextTags, priorTag, conf, repo, logger)
+	nextTag, nextTagMilestone, err := greatestTagApproved(nextTags, priorTag, conf, repo, logger)
 	if err != nil {
-		logger.Printf("Error: unable to find greatestApprovedTag in set %v: %v, returning", nextTags, err)
+		logger.Printf("Error: unable to find greatestTagApproved in set %v: %v, returning", nextTags, err)
 		closeNodeSet(ns, logger)
 		return
 	}
 	if nextTag == "" {
-		logger.Printf("No approved nextTag found after tag '%s', returning", priorTag)
+		logger.Printf("nextTags (%v) found after tag '%s' not all approved, returning", nextTags, priorTag)
 		closeNodeSet(ns, logger)
 		return
 	}
