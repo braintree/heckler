@@ -2,6 +2,11 @@
 
 set -ex
 
+if ! [ -x "$(command -v cmake)" ] ; then
+  echo "cmake not found, please install!" >&2
+  exit
+fi
+
 ROOT="$(cd "$0/../.." && echo "${PWD}")"
 BUILD_PATH="${ROOT}/static-build"
 VENDORED_PATH="${ROOT}/vendor/libgit2"
