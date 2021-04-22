@@ -2243,11 +2243,17 @@ func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.Heckl
 	}
 	hsr := new(hecklerpb.HecklerStatusReport)
 	hsr.NodeStatuses = make(map[string]string)
+	tagCache := make(map[git.Oid]string)
 	var tagStr string
 	for _, node := range ns.nodes.active {
-		tagStr, err = describeCommit(node.lastApply, hs.conf.EnvPrefix, hs.repo)
-		if err != nil {
-			tagStr = "NONE"
+		if cachedTag, ok := tagCache[node.lastApply]; ok {
+			tagStr = cachedTag
+		} else {
+			tagStr, err = describeCommit(node.lastApply, hs.conf.EnvPrefix, hs.repo)
+			if err != nil {
+				tagStr = "NONE"
+			}
+			tagCache[node.lastApply] = tagStr
 		}
 		hsr.NodeStatuses[node.host] = "commit: " + node.lastApply.String() + ", last-tag: " + tagStr
 	}
@@ -4533,6 +4539,10 @@ func noopLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, te
 	}
 }
 
+// Given a git oid, tag prefix, and a git repo return the most recent version
+// tag associated with the commit and tag prefix
+// *NOTE:* git.commit.Describe is slow as the number of commits from the most
+// recent tag increases, so the caller should cache this function call.
 func describeCommit(gi git.Oid, prefix string, repo *git.Repository) (string, error) {
 	describeOpts, err := git.DefaultDescribeOptions()
 	if err != nil {
@@ -4612,12 +4622,20 @@ func commitInNodeLineage(commit git.Oid, node *Node, repo *git.Repository, logge
 // environment prefix, and a git repository. Determine if there is a common git
 // tag among the Nodes. If there is a common tag return the most recent one.
 func commonAncestorTag(nodes map[string]*Node, prefix string, repo *git.Repository, logger *log.Logger) (string, error) {
+	var err error
 	// Calculate the set of tags to Node slice
 	tagNodes := make(map[string][]string)
+	tagCache := make(map[git.Oid]string)
+	var tagStr string
 	for _, node := range nodes {
-		tagStr, err := describeCommit(node.lastApply, prefix, repo)
-		if err != nil {
-			return "", fmt.Errorf("Unable to describe %s@%s with tag prefix '%s', %w", node.host, node.lastApply.String(), prefix, err)
+		if cachedTag, ok := tagCache[node.lastApply]; ok {
+			tagStr = cachedTag
+		} else {
+			tagStr, err = describeCommit(node.lastApply, prefix, repo)
+			if err != nil {
+				return "", fmt.Errorf("Unable to describe %s@%s with tag prefix '%s', %w", node.host, node.lastApply.String(), prefix, err)
+			}
+			tagCache[node.lastApply] = tagStr
 		}
 		if _, ok := tagNodes[tagStr]; ok {
 			tagNodes[tagStr] = append(tagNodes[tagStr], node.host)
