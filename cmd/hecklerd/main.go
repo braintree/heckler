@@ -212,8 +212,8 @@ type HecklerdConf struct {
 	ModulesPaths               []string              `yaml:"module_paths"`
 	NodeSets                   map[string]NodeSetCfg `yaml:"node_sets"`
 	Timezone                   string                `yaml:"timezone"`
-	NagWait                    string                `yaml:"nag_wait"`
-	NagCronSchedule            string                `yaml:"nag_cron_schedule"`
+	HoundWait                  string                `yaml:"hound_wait"`
+	HoundCronSchedule          string                `yaml:"hound_cron_schedule"`
 	ApplyCronSchedule          string                `yaml:"apply_cron_schedule"`
 	NoopDir                    string                `yaml:"noop_dir"`
 	Repo                       string                `yaml:"repo"`
@@ -3580,16 +3580,16 @@ func autoTag(conf *HecklerdConf, repo *git.Repository) {
 }
 
 // Find issues that are open and have not been updated for move than
-// conf.NagWait. For each issue add a nagging comment, with an apology!
-func nagOpenIssues(conf *HecklerdConf, repo *git.Repository) {
-	logger := log.New(os.Stdout, "[nagOpenIssues] ", log.Lshortfile)
+// conf.HoundWait. For each issue add a hounding comment, with an apology!
+func houndOpenIssues(conf *HecklerdConf, repo *git.Repository) {
+	logger := log.New(os.Stdout, "[houndOpenIssues] ", log.Lshortfile)
 	var err error
 	configLoc, err := time.LoadLocation(conf.Timezone)
 	if err != nil {
 		logger.Fatalf("Unable to load location: %v", err)
 		return
 	}
-	nagWait, err := time.ParseDuration(conf.NagWait)
+	houndWait, err := time.ParseDuration(conf.HoundWait)
 	if err != nil {
 		logger.Fatalf("Unable to parse duration: %v", err)
 	}
@@ -3602,13 +3602,13 @@ func nagOpenIssues(conf *HecklerdConf, repo *git.Repository) {
 	c := cal.NewBusinessCalendar()
 	c.AddHoliday(us.Holidays...)
 
-	type issueNag struct {
+	type issueHound struct {
 		issueType  string
 		msg        string
 		searchTerm string
 	}
 
-	issueNags := []issueNag{
+	issueHounds := []issueHound{
 		{
 			issueType:  "ApplyFailed",
 			msg:        "please fix this Puppet apply error and close this issue.",
@@ -3627,9 +3627,9 @@ func nagOpenIssues(conf *HecklerdConf, repo *git.Repository) {
 	}
 
 	localNowish := time.Now().In(configLoc)
-	nagCount := 0
-	for _, issueNag := range issueNags {
-		issues, err := githubOpenIssues(ghclient, conf, issueNag.searchTerm)
+	houndCount := 0
+	for _, issueHound := range issueHounds {
+		issues, err := githubOpenIssues(ghclient, conf, issueHound.searchTerm)
 		if err != nil {
 			logger.Printf("Error: unable to obtain issues: %v", err)
 			break
@@ -3637,28 +3637,28 @@ func nagOpenIssues(conf *HecklerdConf, repo *git.Repository) {
 		for _, issue := range issues {
 			localIssueUpdateTime := issue.GetUpdatedAt().In(configLoc)
 			workHoursSinceUpdate := c.WorkHoursInRange(localIssueUpdateTime, localNowish)
-			if workHoursSinceUpdate < nagWait {
+			if workHoursSinceUpdate < houndWait {
 				continue
 			}
-			logger.Printf("Nagging %s issue(%d), work duration since update: '%v'", issueNag.issueType, issue.GetNumber(), workHoursSinceUpdate)
-			err = nagIssue(ghclient, conf, &issue, issueNag.msg)
+			logger.Printf("Hounding %s issue(%d), work duration since update: '%v'", issueHound.issueType, issue.GetNumber(), workHoursSinceUpdate)
+			err = houndIssue(ghclient, conf, &issue, issueHound.msg)
 			if err != nil {
-				logger.Printf("Error: unable to create nag comment on GitHub: %v", err)
+				logger.Printf("Error: unable to create hound comment on GitHub: %v", err)
 				break
 			}
-			nagCount++
+			houndCount++
 		}
 	}
-	logger.Printf("Nagging complete, nagged (%d) issues which had not been updated in %v", nagCount, nagWait)
+	logger.Printf("Hounding complete, hounded (%d) issues which had not been updated in %v", houndCount, houndWait)
 	return
 }
 
-func nagIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, msg string) error {
+func houndIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, msg string) error {
 	var err error
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	comment := &github.IssueComment{
-		Body: github.String("Sorry to bother, but " + msg),
+		Body: github.String("Sorry to hound, but " + msg),
 	}
 	_, _, err = ghclient.Issues.CreateComment(ctx, conf.RepoOwner, conf.Repo, issue.GetNumber(), comment)
 	return err
@@ -4882,9 +4882,9 @@ func main() {
 	conf.LoopApprovalSleepSeconds = 10
 	conf.LoopCleanSleepSeconds = 10
 	conf.Timezone = "America/Chicago"
-	conf.NagWait = "8h"
+	conf.HoundWait = "8h"
 	conf.AutoTagCronSchedule = "*/10 13-15 * * mon-fri"
-	conf.NagCronSchedule = "0 9-16 * * mon-fri"
+	conf.HoundCronSchedule = "0 9-16 * * mon-fri"
 	conf.ApplyCronSchedule = "* 9-15 * * mon-fri"
 	conf.ApplySetOrder = []string{"all"}
 	conf.ModulesPaths = []string{"modules", "vendor/modules"}
@@ -5064,14 +5064,14 @@ func main() {
 				},
 			)
 		}
-		if conf.NagCronSchedule == "" {
-			logger.Println("nag cron schedule disabled")
+		if conf.HoundCronSchedule == "" {
+			logger.Println("hound cron schedule disabled")
 		} else {
-			logger.Printf("nag enabled with cron schedule of '%s' (Timezone %s)", conf.NagCronSchedule, abbrevZone)
+			logger.Printf("hound enabled with cron schedule of '%s' (Timezone %s)", conf.HoundCronSchedule, abbrevZone)
 			hecklerdCron.AddFunc(
-				conf.NagCronSchedule,
+				conf.HoundCronSchedule,
 				func() {
-					nagOpenIssues(conf, repo)
+					houndOpenIssues(conf, repo)
 				},
 			)
 		}
