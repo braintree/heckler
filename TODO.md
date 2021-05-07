@@ -9,6 +9,10 @@
 -   [ ] Heckler should lock as itself as the heckler user
     -   [ ] ApplyFailures, should lock as root
 -   [ ] Rename AutoClose to AutoApprove
+-   [ ] Ignored resources **should** be present in the GitHub issue noop.
+        Its confusing to the user as to why their commit didn't generate a
+        diff, when in reality it did, but their diff does not need to be
+        approved, so Heckler has hid it.
 -   [ ] Highlight Service Refreshes in GitHub issue
 -   [ ] Add labels to GitHub Issues
     -   [ ] Refactor issue searches to use labels
