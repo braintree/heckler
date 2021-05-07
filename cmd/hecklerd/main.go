@@ -3722,7 +3722,7 @@ func houndIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	comment := &github.IssueComment{
-		Body: github.String("Sorry to hound, but " + msg),
+		Body: github.String("Sorry to hound you all, but " + msg),
 	}
 	_, _, err = ghclient.Issues.CreateComment(ctx, conf.RepoOwner, conf.Repo, issue.GetNumber(), comment)
 	return err
