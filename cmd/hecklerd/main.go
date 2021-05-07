@@ -1773,6 +1773,44 @@ func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, conf *HecklerdC
 	}
 }
 
+// Given a git oid this function returns the associated github issue, if it
+// exists
+func githubIssueDeleteDups(ghclient *github.Client, oid git.Oid, conf *HecklerdConf) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	prefix := conf.EnvPrefix
+	query := fmt.Sprintf("%s in:title", oid.String())
+	if prefix != "" {
+		query += fmt.Sprintf(" %sin:title", issuePrefix(prefix))
+	}
+	query += fmt.Sprintf(" author:app/%s", conf.GitHubAppSlug)
+	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
+	if err != nil {
+		return fmt.Errorf("Unable to search GitHub Issues: %w", err)
+	}
+	if searchResults.GetIncompleteResults() == true {
+		return fmt.Errorf("Incomplete results returned from GitHub")
+	}
+	if searchResults.GetTotal() > 1 {
+		earliest := &searchResults.Issues[0]
+		for _, issue := range searchResults.Issues {
+			if issue.GetCreatedAt().Before(earliest.GetCreatedAt()) {
+				earliest = &issue
+			}
+		}
+		for _, issue := range searchResults.Issues {
+			if issue.GetNumber() == earliest.GetNumber() {
+				continue
+			}
+			err = deleteIssue(ghclient, conf, &issue)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func githubOpenIssues(ghclient *github.Client, conf *HecklerdConf, searchTerm string) ([]github.Issue, error) {
 	if searchTerm == "" {
 		return nil, fmt.Errorf("Empty searchTerm provided")
@@ -1863,23 +1901,49 @@ func clearIssues(ghclient *github.Client, conf *HecklerdConf) error {
 	if searchResults.GetIncompleteResults() == true {
 		return fmt.Errorf("Incomplete results returned from GitHub")
 	}
-	// The rest API does not support deletion,
-	// https://github.community/t5/GitHub-API-Development-and/Delete-Issues-programmatically/td-p/29524,
-	// so for now just close the issue and change the title to deleted & remove the milestone
-	issuePatch := &github.IssueRequest{
-		Title:     github.String("SoftDeleted"),
-		Milestone: nil,
-		State:     github.String("closed"),
-	}
 	for _, issue := range searchResults.Issues {
 		if *issue.Title != "SoftDeleted" {
-			_, _, err := ghclient.Issues.Edit(ctx, conf.RepoOwner, conf.Repo, *issue.Number, issuePatch)
+			err = deleteIssue(ghclient, conf, &issue)
 			if err != nil {
 				log.Fatal(err)
 			}
-			log.Printf("Soft deleted issue: '%s'", *issue.Title)
 		}
 	}
+	return nil
+}
+
+// The rest API does not support deletion,
+// https://github.community/t5/GitHub-API-Development-and/Delete-Issues-programmatically/td-p/29524,
+// so for now just close the issue and change the title to deleted & remove the milestone
+func deleteIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	// We need to craft our own request, due to the inability to delete the milestone:
+	// https://github.com/google/go-github/issues/236
+	u := fmt.Sprintf("repos/%v/%v/issues/%d", conf.RepoOwner, conf.Repo, issue.GetNumber())
+	req, err := ghclient.NewRequest("PATCH", u, &struct {
+		Title     *string   `json:"title"`
+		Body      *string   `json:"body"`
+		Labels    *[]string `json:"labels"`
+		State     *string   `json:"state"`
+		Milestone *int      `json:"milestone"`
+		Assignees *[]string `json:"assignees"`
+	}{
+		Title:     github.String("SoftDeleted"),
+		Milestone: nil,
+		Body:      github.String(""),
+		Labels:    &[]string{},
+		Assignees: &[]string{},
+		State:     github.String("closed"),
+	})
+	if err != nil {
+		return err
+	}
+	_, err = ghclient.Do(ctx, req, nil)
+	if err != nil {
+		return err
+	}
+	log.Printf("Soft deleted issue: '%s'", issue.GetTitle())
 	return nil
 }
 
@@ -4528,6 +4592,50 @@ func noop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templa
 	return
 }
 
+func deleteDupIssues(conf *HecklerdConf, repo *git.Repository, logger *log.Logger) {
+	var err error
+	var ns *NodeSet
+	ns = &NodeSet{
+		name:           "all",
+		nodeThresholds: conf.MaxNodeThresholds,
+	}
+	err = dialNodeSet(conf, ns, logger)
+	if err != nil {
+		logger.Printf("Unable to dial node set: %v", err)
+		return
+	}
+	err = commonTagNodeSet(conf, ns, repo, logger)
+	if err != nil {
+		logger.Printf("Unable to query for commonTag: %v", err)
+		closeNodeSet(ns, logger)
+		return
+	}
+	logger.Printf("Found common tag: %s", ns.commonTag)
+	_, commits, err := commitLogIdList(repo, ns.commonTag, conf.RepoBranch)
+	if err != nil {
+		logger.Fatalf("Unable to obtain commit log ids: %v", err)
+	}
+	if len(commits) == 0 {
+		logger.Println("No new commits, sleeping")
+		closeNodeSet(ns, logger)
+		return
+	}
+	closeNodeSet(ns, logger)
+	ghclient, _, err := githubConn(conf)
+	if err != nil {
+		logger.Printf("Error: unable to connect to GitHub, sleeping: %v", err)
+		return
+	}
+	for gi, _ := range commits {
+		logger.Printf("Searching for dups of commit: %s", gi.String())
+		githubIssueDeleteDups(ghclient, gi, conf)
+		if err != nil {
+			logger.Printf("Unable to delete dups of commit: %s, %v", gi.String(), err)
+			return
+		}
+	}
+}
+
 func noopLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	logger := log.New(os.Stdout, "[noopLoop] ", log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopNoopSleepSeconds) * time.Second
@@ -4825,6 +4933,7 @@ func main() {
 	var file *os.File
 	var data []byte
 	var clearState bool
+	var delDup bool
 	var clearGitHub bool
 	var printVersion bool
 	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
@@ -4835,6 +4944,7 @@ func main() {
 
 	flag.BoolVar(&clearState, "clear", false, "Clear local state, e.g. puppet code repo")
 	flag.BoolVar(&clearGitHub, "ghclear", false, "Clear remote github state, e.g. issues & milestones")
+	flag.BoolVar(&delDup, "deldups", false, "Clear dups")
 	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.Parse()
 
@@ -4945,6 +5055,11 @@ func main() {
 	repo, err := fetchRepo(conf)
 	if err != nil {
 		logger.Fatalf("Unable to fetch repo to serve: %v", err)
+	}
+
+	if delDup {
+		deleteDupIssues(conf, repo, logger)
+		os.Exit(0)
 	}
 
 	gitServer := &gitcgiserver.GitCGIServer{}
