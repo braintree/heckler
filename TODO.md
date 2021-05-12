@@ -2,10 +2,9 @@
 
 ## Next Up
 
+-   [ ] Stale Lock notifications, including reminders
 -   [ ] Should rizzod unlock on startup?
 -   [ ] Enforce GitHubAppEmail if autoTag enabled
--   [ ] Closed issues should be reopened if no longer approved
--   [ ] Stale Lock notifications, including reminders
 -   [ ] Heckler should lock as itself as the heckler user
     -   [ ] ApplyFailures, should lock as root
 -   [ ] Rename AutoClose to AutoApprove
