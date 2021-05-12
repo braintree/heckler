@@ -106,9 +106,9 @@ func (noopApproved noopApproverType) String() string {
 	case notApproved:
 		msg = "Unapproved"
 	case codeownersApproved:
-		msg = "Approved"
+		msg = "Owner Approved"
 	case adminApproved:
-		msg = "Approved by an admin"
+		msg = "Admin Approved"
 	}
 	return msg
 }
