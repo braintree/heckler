@@ -113,6 +113,13 @@ func (noopApproved noopApproverType) String() string {
 	return msg
 }
 
+type noopStatus struct {
+	approved     noopApproverType
+	approvers    []string
+	authors      []string
+	ownersNeeded []string
+}
+
 type lastApplyStatus int
 
 const (
@@ -2998,17 +3005,17 @@ func updateIssueApproval(ghclient *github.Client, conf *HecklerdConf, commit *gi
 			return nil
 		}
 	}
-	noopApproved, noopApprovers, commitAuthors, err := noopApproved(ghclient, conf, gr.Resources, commit, issue)
+	ns, err := noopApproved(ghclient, conf, gr.Resources, commit, issue)
 	if err != nil {
 		return fmt.Errorf("Unable to determine if issue(%d) is approved: %w", issue.Number, err)
 	}
-	if len(noopApprovers) > 0 {
-		err = updateApprovalComment(ghclient, conf, issue, noopApproved, gr.Resources, commitAuthors, templates)
+	if len(ns.approvers) > 0 {
+		err = updateApprovalComment(ghclient, conf, issue, gr.Resources, ns, templates)
 		if err != nil {
 			return fmt.Errorf("Unable to update approval comment for issue(%d): %w", issue.Number, err)
 		}
 	}
-	if noopApproved == codeownersApproved || noopApproved == adminApproved {
+	if ns.approved == codeownersApproved || ns.approved == adminApproved {
 		if issue.GetState() == "closed" {
 			return nil
 		} else {
@@ -3028,51 +3035,53 @@ func updateIssueApproval(ghclient *github.Client, conf *HecklerdConf, commit *gi
 
 // Given a commit, its associated github issue, and its groupedResources; check
 // if each grouped resource has been approved by a valid approver, exclude
-// authors of the commit in the approvers set.
-func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources []*groupedResource, commit *git.Commit, issue *github.Issue) (noopApproverType, []string, []string, error) {
+// authors of the commit in the approvers set. Return a noopStatus struct
+// detailing the state of the approval.
+func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources []*groupedResource, commit *git.Commit, issue *github.Issue) (noopStatus, error) {
 	var err error
+	ns := noopStatus{approved: notApproved}
 	groupedResources, err = groupedResourcesNodeFiles(groupedResources, conf.WorkRepo)
 	if err != nil {
-		return notApproved, nil, nil, err
+		return ns, err
 	}
 	groupedResources, err = groupedResourcesOwners(groupedResources, conf.WorkRepo)
 	if err != nil {
-		return notApproved, nil, nil, err
+		return ns, err
 	}
 	groups, err := githubGroupsForGroupedResources(ghclient, groupedResources)
 	if err != nil {
-		return notApproved, nil, nil, err
+		return ns, err
 	}
-	noopApprovers, err := githubNoopApprovals(ghclient, conf, issue)
+	ns.approvers, err = githubNoopApprovals(ghclient, conf, issue)
 	if err != nil {
-		return notApproved, nil, nil, err
+		return ns, err
 	}
-	commitAuthors, err := commitAuthorsLogins(ghclient, commit)
+	ns.authors, err = commitAuthorsLogins(ghclient, commit)
 	if err != nil {
-		return notApproved, nil, nil, err
+		return ns, err
 	}
 	codeownersHaveApproved := false
-	if len(commitAuthors) > 0 {
+	if len(ns.authors) > 0 {
 		// Remove commit authors if they approved the noop, since we do not want
 		// authors approving their own noops.
 		// TODO make this configurable
-		approvers := setDifferenceStrSlice(noopApprovers, commitAuthors)
+		validApprovers := setDifferenceStrSlice(ns.approvers, ns.authors)
 		// TODO Use the populated groupedResources to provide helpful debug messages
 		// on what a noop still needs for approval, need to determine the best way to
 		// present the information.
-		codeownersHaveApproved = resourcesApproved(groupedResources, groups, approvers)
+		codeownersHaveApproved = resourcesApproved(groupedResources, groups, validApprovers)
+		ns.ownersNeeded = ownersNeeded(groupedResources, conf.AdminOwners)
 	}
 	adminHasApproved := false
 	if !codeownersHaveApproved {
-		adminHasApproved = adminOwnerApproved(groupedResources, conf.AdminOwners, noopApprovers)
+		adminHasApproved = adminOwnerApproved(groupedResources, conf.AdminOwners, ns.approvers)
 	}
 	if codeownersHaveApproved {
-		return codeownersApproved, noopApprovers, commitAuthors, nil
+		ns.approved = codeownersApproved
 	} else if adminHasApproved {
-		return adminApproved, noopApprovers, commitAuthors, nil
-	} else {
-		return notApproved, noopApprovers, commitAuthors, nil
+		ns.approved = adminApproved
 	}
+	return ns, nil
 }
 
 func adminOwnerApproved(groupedResources []*groupedResource, adminOwnersList []string, approversList []string) bool {
@@ -3087,13 +3096,13 @@ func adminOwnerApproved(groupedResources []*groupedResource, adminOwnersList []s
 	}
 }
 
-func approvedComment(noopApproved noopApproverType, groupedResources []*groupedResource, commitAuthors []string, conf *HecklerdConf, templates *template.Template) (string, *regexp.Regexp, error) {
-	if noopApproved == adminApproved && (len(groupedResources) == 0 || len(groupedResources[0].AdminApprovals) == 0) {
+func approvedComment(groupedResources []*groupedResource, ns noopStatus, conf *HecklerdConf, templates *template.Template) (string, *regexp.Regexp, error) {
+	if ns.approved == adminApproved && (len(groupedResources) == 0 || len(groupedResources[0].AdminApprovals) == 0) {
 		return "", nil, fmt.Errorf("Unexpected groupedResources!")
 	}
 	regexApprovalMsg := regexp.MustCompile(`^Approval Status:`)
-	msg := fmt.Sprintf("Approval Status: **%s**\n", noopApproved)
-	if len(commitAuthors) == 0 {
+	msg := fmt.Sprintf("Approval Status: **%s**\n", ns.approved)
+	if len(ns.authors) == 0 {
 		msg += fmt.Sprintf("\n**Admin Approval Required:** Unable to determine the GitHub user accounts of the commit authors.\n")
 		msg += fmt.Sprintf("\n- Admins: %s\n", strings.Join(conf.AdminOwners, ", "))
 		return msg, regexApprovalMsg, nil
@@ -3105,7 +3114,7 @@ func approvedComment(noopApproved noopApproverType, groupedResources []*groupedR
 	}{
 		groupedResources,
 	}
-	if noopApproved == adminApproved {
+	if ns.approved == adminApproved {
 		err = templates.ExecuteTemplate(&body, "adminApprovalComment.tmpl", data)
 	} else {
 		err = templates.ExecuteTemplate(&body, "approvalComment.tmpl", data)
@@ -3362,14 +3371,14 @@ func githubNoopApprovals(ghclient *github.Client, conf *HecklerdConf, issue *git
 // Given a GitHub issue, the approval status, groupedResources, and
 // commitAuthors generate an approval status comment and update the GitHub
 // comment if it is different
-func updateApprovalComment(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, noopApproved noopApproverType, groupedResources []*groupedResource, commitAuthors []string, templates *template.Template) error {
+func updateApprovalComment(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, groupedResources []*groupedResource, ns noopStatus, templates *template.Template) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	comments, _, err := ghclient.Issues.ListComments(ctx, conf.RepoOwner, conf.Repo, issue.GetNumber(), nil)
 	if err != nil {
 		return err
 	}
-	approvalMsg, regexApprovalMsg, err := approvedComment(noopApproved, groupedResources, commitAuthors, conf, templates)
+	approvalMsg, regexApprovalMsg, err := approvedComment(groupedResources, ns, conf, templates)
 	if err != nil {
 		return err
 	}
@@ -3577,6 +3586,32 @@ func intersectionOwnersApprovers(owners []string, approvers []string, groups map
 	return setIntersectionStrSlice(expandedOwners, approvers)
 }
 
+// Given a groupedResources, populated with owner and approval information,
+// return the owners which still need to approve a resource.
+func ownersNeeded(groupedResources []*groupedResource, admins []string) []string {
+	var owners []string
+	for _, gr := range groupedResources {
+		if gr.Approved != resourceNotApproved {
+			continue
+		}
+		if len(gr.Owners.File) > 0 {
+			owners = append(owners, gr.Owners.File...)
+		} else if len(gr.Owners.Module) > 0 {
+			owners = append(owners, gr.Owners.Module...)
+		} else {
+			for _, nodeFile := range gr.NodeFiles {
+				if len(gr.Owners.NodeFiles[nodeFile]) > 0 {
+					owners = append(owners, gr.Owners.NodeFiles[nodeFile]...)
+				} else {
+					// If we don't have any node owners add the adminOwners
+					owners = append(owners, admins...)
+				}
+			}
+		}
+	}
+	return uniqueStrSlice(owners)
+}
+
 func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 	var err error
 	ns := &NodeSet{
@@ -3716,25 +3751,25 @@ func houndOpenIssues(conf *HecklerdConf, repo *git.Repository) {
 
 	type issueHound struct {
 		issueType  string
-		msg        string
 		searchTerm string
+		msgFunc    func(*github.Client, *github.Issue, *git.Repository, *HecklerdConf) string
 	}
 
 	issueHounds := []issueHound{
 		{
 			issueType:  "ApplyFailed",
-			msg:        "please fix this Puppet apply error and close this issue.",
 			searchTerm: "PuppetApplyFailed",
+			msgFunc:    applyFailedHound,
 		},
 		{
 			issueType:  "CleanFailed",
-			msg:        "please Puppet these boxes clean with a known commit and close this issue.",
 			searchTerm: "PuppetCleanFailed",
+			msgFunc:    cleanFailedHound,
 		},
 		{
 			issueType:  "Noop",
-			msg:        "your unapproved commit is **blocking this release**, please have an owner, other than the authors, approve this noop!",
 			searchTerm: "noop",
+			msgFunc:    noopHound,
 		},
 	}
 
@@ -3753,7 +3788,7 @@ func houndOpenIssues(conf *HecklerdConf, repo *git.Repository) {
 				continue
 			}
 			logger.Printf("Hounding %s issue(%d), work duration since update: '%v'", issueHound.issueType, issue.GetNumber(), workHoursSinceUpdate)
-			err = houndIssue(ghclient, conf, &issue, issueHound.msg)
+			err = githubIssueComment(ghclient, conf, &issue, issueHound.msgFunc(ghclient, &issue, repo, conf))
 			if err != nil {
 				logger.Printf("Error: unable to create hound comment on GitHub: %v", err)
 				break
@@ -3765,12 +3800,47 @@ func houndOpenIssues(conf *HecklerdConf, repo *git.Repository) {
 	return
 }
 
-func houndIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, msg string) error {
+func applyFailedHound(ghclient *github.Client, issue *github.Issue, repo *git.Repository, conf *HecklerdConf) string {
+	return "Sorry to hound you all, but please fix this Puppet apply error and close this issue."
+}
+
+func cleanFailedHound(ghclient *github.Client, issue *github.Issue, repo *git.Repository, conf *HecklerdConf) string {
+	return "Sorry to hound you all, but please Puppet these boxes clean with a known commit and close this issue."
+}
+
+// Return a msg indicating which owners still need to approve an isssue
+func noopHound(ghclient *github.Client, issue *github.Issue, repo *git.Repository, conf *HecklerdConf) string {
+	var err error
+	fallbackMsg := "Sorry to hound you all, but your unapproved commit is **blocking this release**, please have an owner, other than the authors, approve this noop!"
+	regexIssueCommitCapture := regexp.MustCompile(` commit: ([^ ]*) - `)
+	titleMatches := regexIssueCommitCapture.FindStringSubmatch(issue.GetTitle())
+	if len(titleMatches) < 2 || titleMatches[1] == "" {
+		return fallbackMsg
+	}
+	commit, err := gitutil.RevparseToCommit(titleMatches[1], repo)
+	if err != nil {
+		return fallbackMsg
+	}
+	gr, err := unmarshalGroupedReport(commit.Id(), conf.GroupedNoopDir)
+	if err != nil {
+		return fallbackMsg
+	}
+	ns, err := noopApproved(ghclient, conf, gr.Resources, commit, issue)
+	if err != nil {
+		return fallbackMsg
+	}
+	if len(ns.ownersNeeded) == 0 {
+		return fallbackMsg
+	}
+	return fmt.Sprintf("Sorry to hound you: %s, but your unapproved commit is **blocking this release**, please have an owner, other than the authors, approve this noop!", strings.Join(ns.ownersNeeded, ", "))
+}
+
+func githubIssueComment(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, msg string) error {
 	var err error
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	comment := &github.IssueComment{
-		Body: github.String("Sorry to hound you all, but " + msg),
+		Body: github.String(msg),
 	}
 	_, _, err = ghclient.Issues.CreateComment(ctx, conf.RepoOwner, conf.Repo, issue.GetNumber(), comment)
 	return err
@@ -3858,11 +3928,11 @@ func tagApproved(repo *git.Repository, ghclient *github.Client, conf *HecklerdCo
 			approved[gi] = "Approved, AutoClose enabled"
 			continue
 		}
-		noopApproved, _, _, err := noopApproved(ghclient, conf, gr.Resources, commit, issue)
+		ns, err := noopApproved(ghclient, conf, gr.Resources, commit, issue)
 		if err != nil {
 			return false, fmt.Errorf("Unable to determine if issue(%s) is approved: %w", issue.GetHTMLURL(), err)
 		}
-		switch noopApproved {
+		switch ns.approved {
 		case notApproved:
 			unapproved[gi] = fmt.Sprintf("Unapproved, noop issue(%d) awaiting approval from CODEOWNERS", issue.GetNumber())
 		case codeownersApproved:

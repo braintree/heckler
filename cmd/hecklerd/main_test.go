@@ -489,3 +489,157 @@ func TestResourceIgnored(t *testing.T) {
 		}
 	}
 }
+
+func TestOwnersNeeded(t *testing.T) {
+	t.Parallel()
+	type ownersNeededInput struct {
+		gr     []*groupedResource
+		admins []string
+	}
+	type ownersNeededTest struct {
+		input    ownersNeededInput
+		expected []string
+	}
+	tests := make([]ownersNeededTest, 0)
+	testOwners := ownersNeededTest{
+		ownersNeededInput{
+			[]*groupedResource{
+				&groupedResource{
+					Title: "File[/data/puppet_apply/laughtrack]",
+					File:  "modules/muppetshow/manifests/episode.pp",
+					Module: Module{
+						Name: "muppetshow",
+						Path: "modules/muppetshow",
+					},
+					Hosts: []string{"fozzie.example.com", "waldorf.example.com"},
+					NodeFiles: []string{
+						"nodes/fozzie.pp",
+						"nodes/waldorf.pp",
+					},
+					Owners: groupedResourceOwners{
+						File: []string{"@fozzie"},
+						NodeFiles: map[string][]string{
+							"nodes/fozzie.pp":  {"@braintree/muppets"},
+							"nodes/waldorf.pp": {"@braintree/muppets"},
+						},
+					},
+					Approved: resourceSourceFileApproved,
+				},
+				&groupedResource{
+					Title: "Exec[/bin/sl]",
+					File:  "modules/fozzie/manifests/init.pp",
+					Module: Module{
+						Name: "fozzie",
+						Path: "modules/fozzie",
+					},
+					Hosts: []string{"fozzie.example.com", "waldorf.example.com"},
+					NodeFiles: []string{
+						"nodes/fozzie.pp",
+						"nodes/waldorf.pp",
+					},
+					Owners: groupedResourceOwners{
+						Module: []string{"@braintree/muppets"},
+						NodeFiles: map[string][]string{
+							"nodes/fozzie.pp":  {"@misspiggy"},
+							"nodes/waldorf.pp": {"@misspiggy"},
+						},
+					},
+					Approved: resourceNotApproved,
+				},
+			},
+			[]string{"@ralph"},
+		},
+		[]string{"@braintree/muppets"},
+	}
+	tests = append(tests, testOwners)
+	testAdminOwners := ownersNeededTest{
+		ownersNeededInput{
+			[]*groupedResource{
+				&groupedResource{
+					Title: "File[/data/puppet_apply/laughtrack]",
+					File:  "modules/muppetshow/manifests/episode.pp",
+					Module: Module{
+						Name: "muppetshow",
+						Path: "modules/muppetshow",
+					},
+					Hosts: []string{"fozzie.example.com", "waldorf.example.com"},
+					NodeFiles: []string{
+						"nodes/fozzie.pp",
+						"nodes/waldorf.pp",
+					},
+					Owners:   groupedResourceOwners{},
+					Approved: resourceNotApproved,
+				},
+			},
+			[]string{"@ralph"},
+		},
+		[]string{"@ralph"},
+	}
+	tests = append(tests, testAdminOwners)
+	testNodeOwners := ownersNeededTest{
+		ownersNeededInput{
+			[]*groupedResource{
+				&groupedResource{
+					Title: "Exec[/bin/sl]",
+					File:  "modules/fozzie/manifests/init.pp",
+					Module: Module{
+						Name: "fozzie",
+						Path: "modules/fozzie",
+					},
+					Hosts: []string{"fozzie.example.com", "waldorf.example.com"},
+					NodeFiles: []string{
+						"nodes/fozzie.pp",
+						"nodes/waldorf.pp",
+					},
+					Owners: groupedResourceOwners{
+						NodeFiles: map[string][]string{
+							"nodes/fozzie.pp":  {"@misspiggy"},
+							"nodes/waldorf.pp": {"@misspiggy"},
+						},
+					},
+					Approved: resourceNotApproved,
+				},
+			},
+			[]string{"@ralph"},
+		},
+		[]string{"@misspiggy"},
+	}
+	tests = append(tests, testNodeOwners)
+	testFileOwners := ownersNeededTest{
+		ownersNeededInput{
+			[]*groupedResource{
+				&groupedResource{
+					Title: "Exec[/bin/sl]",
+					File:  "modules/fozzie/manifests/init.pp",
+					Module: Module{
+						Name: "fozzie",
+						Path: "modules/fozzie",
+					},
+					Hosts: []string{"fozzie.example.com", "waldorf.example.com"},
+					NodeFiles: []string{
+						"nodes/fozzie.pp",
+						"nodes/waldorf.pp",
+					},
+					Owners: groupedResourceOwners{
+						File:   []string{"@fozzie"},
+						Module: []string{"@braintree/muppets"},
+						NodeFiles: map[string][]string{
+							"nodes/fozzie.pp":  {"@misspiggy"},
+							"nodes/waldorf.pp": {"@misspiggy"},
+						},
+					},
+					Approved: resourceNotApproved,
+				},
+			},
+			[]string{"@ralph"},
+		},
+		[]string{"@fozzie"},
+	}
+	tests = append(tests, testFileOwners)
+	for _, test := range tests {
+		actual := ownersNeeded(test.input.gr, test.input.admins)
+		if diff := cmp.Diff(test.expected, actual); diff != "" {
+			t.Errorf("nextSemVerTag() mismatch (-expected +actual):\n%s", diff)
+		}
+	}
+}
