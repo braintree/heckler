@@ -174,12 +174,12 @@ func TestResourcesApproved(t *testing.T) {
 		approved bool
 		gr       []*groupedResource
 	}
-	type resorcesApprovedTest struct {
+	type resourcesApprovedTest struct {
 		input    resourcesApprovedInput
 		expected resourcesApprovedExpected
 	}
-	tests := make([]resorcesApprovedTest, 0)
-	testFileOwner := resorcesApprovedTest{
+	tests := make([]resourcesApprovedTest, 0)
+	testFileOwner := resourcesApprovedTest{
 		resourcesApprovedInput{
 			[]*groupedResource{
 				&groupedResource{
@@ -223,7 +223,7 @@ func TestResourcesApproved(t *testing.T) {
 		},
 	}
 	tests = append(tests, testFileOwner)
-	testNodeOwners := resorcesApprovedTest{
+	testNodeOwners := resourcesApprovedTest{
 		resourcesApprovedInput{
 			[]*groupedResource{
 				&groupedResource{
@@ -278,7 +278,7 @@ func TestResourcesApproved(t *testing.T) {
 		},
 	}
 	tests = append(tests, testNodeOwners)
-	testModuleOwners := resorcesApprovedTest{
+	testModuleOwners := resourcesApprovedTest{
 		resourcesApprovedInput{
 			[]*groupedResource{
 				&groupedResource{
@@ -377,7 +377,7 @@ func TestIntersectionOwnersApprovers(t *testing.T) {
 	for _, test := range tests {
 		actual := intersectionOwnersApprovers(test.inputOwners, test.inputApprovers, test.inputGroups)
 		if diff := cmp.Diff(test.expected, actual, cmpopts.SortSlices(lessStr)); diff != "" {
-			t.Errorf("resourcesApproved() mismatch (-expected +actual):\n%s", diff)
+			t.Errorf("intersectionOwnersApprovers() mismatch (-expected +actual):\n%s", diff)
 		}
 	}
 }
