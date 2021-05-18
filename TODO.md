@@ -12,7 +12,7 @@
         Its confusing to the user as to why their commit didn't generate a
         diff, when in reality it did, but their diff does not need to be
         approved, so Heckler has hid it.
--   [ ] Highlight Service Refreshes in GitHub issue
+-   [ ] Highlight Service Refreshes in GitHub issues
 -   [ ] Add labels to GitHub Issues
     -   [ ] Refactor issue searches to use labels
     -   [ ] Remove string labels in titles, e.g. production\_env
