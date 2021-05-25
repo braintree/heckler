@@ -4206,7 +4206,7 @@ func cleanLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, t
 	logger.Printf("Started, looping every %v", loopSleep)
 	for {
 		clean(noopLock, conf, repo, nodeDirtyNoops, templates, logger)
-		logger.Println("Dirty Loop complete, sleeping")
+		logger.Println("Clean Loop complete, sleeping")
 		time.Sleep(loopSleep)
 	}
 }
