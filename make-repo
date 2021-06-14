@@ -133,7 +133,7 @@ modify the input to the sail game
 	mkdir "${REPO}"
 	pushd "${REPO}"
 
-	git init
+	git init -b main
 	git config advice.detachedHead false
 
 	mkdir -p nodes
@@ -158,7 +158,7 @@ modify the input to the sail game
 			git checkout -b manhattan
 		fi
 		if ((commit == 6)); then
-			git checkout master
+			git checkout main
 		fi
 		for module in "${MODULES[@]}"; do
 			printf -v src '../manifests/modules/%s/manifests' "${module}"
@@ -200,7 +200,7 @@ modify the input to the sail game
 	done
 
 	git remote add origin "${REPO_URL}"
-	git push -fu origin master
+	git push -fu origin main
 	git push -f --tags
 
 	popd
