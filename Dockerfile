@@ -2,8 +2,8 @@ ARG DEBIAN_CODENAME=buster
 FROM debian:${DEBIAN_CODENAME}
 ARG DEBIAN_CODENAME=buster
 ARG MUSL_VERSION=1.2.2
-ARG LIBRESSL_VERSION=3.2.5
-ARG GO_VERSION=1.16.2
+ARG LIBRESSL_VERSION=3.3.3
+ARG GO_VERSION=1.16.5
 ARG USER=builder
 
 ENV DEBIAN_FRONTEND noninteractive
@@ -11,9 +11,8 @@ ENV DEBIAN_FRONTEND noninteractive
 ENV PATH ${PATH}:/usr/local/go/bin
 RUN echo "PATH=$PATH" > /etc/profile
 
-RUN echo "deb http://deb.debian.org/debian ${DEBIAN_CODENAME}-backports main" > /etc/apt/sources.list.d/backports.list
 RUN apt-get update \
- && apt-get install -y --no-install-recommends -t ${DEBIAN_CODENAME}-backports \
+ && apt-get install -y --no-install-recommends \
    build-essential \
    ca-certificates \
    cmake \
