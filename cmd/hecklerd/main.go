@@ -3215,12 +3215,14 @@ func groupedResourcesOwners(groupedResources []*groupedResource, puppetCodePath 
 		if gr.File != "" {
 			gr.Owners.File = owners(ruleset, gr.File)
 		}
-		// HACK: the codeowners library does not actually stat a file and determine
-		// if it is a directory, so we add a slash, the proper fix is to find a
-		// codeowners library with a more robust implementation, perhaps?:
-		// https://github.com/denormal/go-gitignore/issues/6
-		// If we do not do this `module/foo` from the CODEOWNERS would not match
-		gr.Owners.Module = owners(ruleset, gr.Module.Path+"/")
+		if gr.Module != (Module{}) {
+			// HACK: the codeowners library does not actually stat a file and determine
+			// if it is a directory, so we add a slash, the proper fix is to find a
+			// codeowners library with a more robust implementation, perhaps?:
+			// https://github.com/denormal/go-gitignore/issues/6
+			// If we do not do this `module/foo` from the CODEOWNERS would not match
+			gr.Owners.Module = owners(ruleset, gr.Module.Path+"/")
+		}
 	}
 	return groupedResources, nil
 }
@@ -3262,12 +3264,14 @@ func groupedResourcesUniqueOwners(groupedResources []*groupedResource, githubDis
 				unownedSourceFiles[gr.File] = true
 			}
 		}
-		if len(gr.Owners.Module) > 0 {
-			if _, ok := no.OwnedModules[gr.Module]; !ok {
-				no.OwnedModules[gr.Module] = gr.Owners.Module
+		if gr.Module != (Module{}) {
+			if len(gr.Owners.Module) > 0 {
+				if _, ok := no.OwnedModules[gr.Module]; !ok {
+					no.OwnedModules[gr.Module] = gr.Owners.Module
+				}
+			} else {
+				unownedModules[gr.Module] = true
 			}
-		} else {
-			unownedModules[gr.Module] = true
 		}
 		for nodeFile, owners := range gr.Owners.NodeFiles {
 			if len(owners) > 0 {
@@ -3324,6 +3328,11 @@ func containmentPathModule(containmentPath []string, puppetCodePath string, modu
 	if module.Name == "" {
 		return Module{}, fmt.Errorf("Unable to find module in containmenPath: %v", containmentPath)
 	}
+	// Puppet assigns resources at the node level to module "Main" this is
+	// equivalent to not being contained in a module.
+	if module.Name == "main" {
+		return Module{}, nil
+	}
 	for _, modulesPath := range modulesPaths {
 		modulePath := fmt.Sprintf("%s/%s", modulesPath, module.Name)
 		fullPath := fmt.Sprintf("%s/%s", puppetCodePath, modulePath)
@@ -3333,7 +3342,7 @@ func containmentPathModule(containmentPath []string, puppetCodePath string, modu
 		}
 	}
 	if module.Path == "" {
-		return Module{}, fmt.Errorf("Unable to find module %s's path in modulesPaths: %v", module.Name, modulesPaths)
+		return Module{}, fmt.Errorf("Module '%s', containmentPath %v, modulesPaths: %v", module.Name, containmentPath, modulesPaths)
 	}
 	return module, nil
 }
