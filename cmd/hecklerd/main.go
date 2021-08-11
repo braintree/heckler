@@ -1780,8 +1780,8 @@ func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, conf *HecklerdC
 	}
 }
 
-// Given a git oid this function returns the associated github issue, if it
-// exists
+// Given a git oid, search for the associated GitHub issues, then delete any
+// duplicates, keeping the earliest issue by creation date.
 func githubIssueDeleteDups(ghclient *github.Client, oid git.Oid, conf *HecklerdConf) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -1791,25 +1791,36 @@ func githubIssueDeleteDups(ghclient *github.Client, oid git.Oid, conf *HecklerdC
 		query += fmt.Sprintf(" %sin:title", issuePrefix(prefix))
 	}
 	query += fmt.Sprintf(" author:app/%s", conf.GitHubAppSlug)
-	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
-	if err != nil {
-		return fmt.Errorf("Unable to search GitHub Issues: %w", err)
+	searchOpts := &github.SearchOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
 	}
-	if searchResults.GetIncompleteResults() == true {
-		return fmt.Errorf("Incomplete results returned from GitHub")
+	var allIssues []github.Issue
+	for {
+		searchResults, resp, err := ghclient.Search.Issues(ctx, query, searchOpts)
+		if err != nil {
+			return fmt.Errorf("Unable to search GitHub Issues: %w", err)
+		}
+		if searchResults.GetIncompleteResults() == true {
+			return fmt.Errorf("Incomplete results returned from GitHub")
+		}
+		allIssues = append(allIssues, searchResults.Issues...)
+		if resp.NextPage == 0 {
+			break
+		}
+		searchOpts.Page = resp.NextPage
 	}
-	if searchResults.GetTotal() > 1 {
-		earliest := &searchResults.Issues[0]
-		for _, issue := range searchResults.Issues {
+	if len(allIssues) > 1 {
+		earliest := allIssues[0]
+		for _, issue := range allIssues {
 			if issue.GetCreatedAt().Before(earliest.GetCreatedAt()) {
-				earliest = &issue
+				earliest = issue
 			}
 		}
-		for _, issue := range searchResults.Issues {
+		for _, issue := range allIssues {
 			if issue.GetNumber() == earliest.GetNumber() {
 				continue
 			}
-			err = deleteIssue(ghclient, conf, &issue)
+			err := deleteIssue(ghclient, conf, &issue)
 			if err != nil {
 				return err
 			}
@@ -1901,16 +1912,27 @@ func clearIssues(ghclient *github.Client, conf *HecklerdConf) error {
 	if conf.EnvPrefix != "" {
 		query += fmt.Sprintf(" %sin:title", issuePrefix(conf.EnvPrefix))
 	}
-	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
-	if err != nil {
-		log.Fatal(err)
+	searchOpts := &github.SearchOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
 	}
-	if searchResults.GetIncompleteResults() == true {
-		return fmt.Errorf("Incomplete results returned from GitHub")
+	var allIssues []github.Issue
+	for {
+		searchResults, resp, err := ghclient.Search.Issues(ctx, query, searchOpts)
+		if err != nil {
+			return fmt.Errorf("Unable to search GitHub Issues: %w", err)
+		}
+		if searchResults.GetIncompleteResults() == true {
+			return fmt.Errorf("Incomplete results returned from GitHub")
+		}
+		allIssues = append(allIssues, searchResults.Issues...)
+		if resp.NextPage == 0 {
+			break
+		}
+		searchOpts.Page = resp.NextPage
 	}
-	for _, issue := range searchResults.Issues {
-		if *issue.Title != "SoftDeleted" {
-			err = deleteIssue(ghclient, conf, &issue)
+	for _, issue := range allIssues {
+		if issue.GetTitle() != "SoftDeleted" {
+			err := deleteIssue(ghclient, conf, &issue)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -1950,7 +1972,7 @@ func deleteIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issu
 	if err != nil {
 		return err
 	}
-	log.Printf("Soft deleted issue: '%s'", issue.GetTitle())
+	log.Printf("Soft deleted issue #%d: '%s'", issue.GetNumber(), issue.GetTitle())
 	return nil
 }
 
@@ -4719,6 +4741,8 @@ func noop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templa
 	return
 }
 
+// Grabs the latest common tag, then searches for and deletes all duplicate
+// issues since that tag.
 func deleteDupIssues(conf *HecklerdConf, repo *git.Repository, logger *log.Logger) {
 	var err error
 	var ns *NodeSet
@@ -5060,7 +5084,7 @@ func main() {
 	var file *os.File
 	var data []byte
 	var clearState bool
-	var delDup bool
+	var delDups bool
 	var clearGitHub bool
 	var printVersion bool
 	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
@@ -5071,7 +5095,7 @@ func main() {
 
 	flag.BoolVar(&clearState, "clear", false, "Clear local state, e.g. puppet code repo")
 	flag.BoolVar(&clearGitHub, "ghclear", false, "Clear remote github state, e.g. issues & milestones")
-	flag.BoolVar(&delDup, "deldups", false, "Clear dups")
+	flag.BoolVar(&delDups, "deldups", false, "Soft delete duplicate issues for commits, retaining the oldest")
 	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.Parse()
 
@@ -5184,7 +5208,7 @@ func main() {
 		logger.Fatalf("Unable to fetch repo to serve: %v", err)
 	}
 
-	if delDup {
+	if delDups {
 		deleteDupIssues(conf, repo, logger)
 		os.Exit(0)
 	}
