@@ -3,6 +3,7 @@
 ## Next Up
 
 -   [ ] Stale Lock notifications, including reminders
+-   [ ] Auto close issues for cleaned boxes
 -   [ ] Should rizzod unlock on startup?
 -   [ ] Enforce GitHubAppEmail if autoTag enabled
 -   [ ] Heckler should lock as itself as the heckler user
