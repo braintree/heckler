@@ -3007,12 +3007,12 @@ func updateIssueApproval(ghclient *github.Client, conf *HecklerdConf, commit *gi
 	}
 	ns, err := noopApproved(ghclient, conf, gr.Resources, commit, issue)
 	if err != nil {
-		return fmt.Errorf("Unable to determine if issue(%d) is approved: %w", issue.Number, err)
+		return fmt.Errorf("Unable to determine if issue(%d) is approved: %w", issue.GetNumber(), err)
 	}
 	if len(ns.approvers) > 0 {
 		err = updateApprovalComment(ghclient, conf, issue, gr.Resources, ns, templates)
 		if err != nil {
-			return fmt.Errorf("Unable to update approval comment for issue(%d): %w", issue.Number, err)
+			return fmt.Errorf("Unable to update approval comment for issue(%d): %w", issue.GetNumber(), err)
 		}
 	}
 	if ns.approved == codeownersApproved || ns.approved == adminApproved {
