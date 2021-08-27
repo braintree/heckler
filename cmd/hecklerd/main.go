@@ -3032,7 +3032,7 @@ func updateIssueApproval(ghclient *github.Client, conf *HecklerdConf, commit *gi
 		return fmt.Errorf("Unable to determine if issue(%d) is approved: %w", issue.GetNumber(), err)
 	}
 	if len(ns.approvers) > 0 {
-		err = updateApprovalComment(ghclient, conf, issue, gr.Resources, ns, templates)
+		err = updateApprovalComment(ghclient, conf, issue, gr, ns, templates)
 		if err != nil {
 			return fmt.Errorf("Unable to update approval comment for issue(%d): %w", issue.GetNumber(), err)
 		}
@@ -3118,9 +3118,11 @@ func adminOwnerApproved(groupedResources []*groupedResource, adminOwnersList []s
 	}
 }
 
-func approvedComment(groupedResources []*groupedResource, ns noopStatus, conf *HecklerdConf, templates *template.Template) (string, *regexp.Regexp, error) {
-	if ns.approved == adminApproved && (len(groupedResources) == 0 || len(groupedResources[0].AdminApprovals) == 0) {
-		return "", nil, fmt.Errorf("Unexpected groupedResources!")
+func approvedComment(gr groupedReport, ns noopStatus, conf *HecklerdConf, templates *template.Template) (string, *regexp.Regexp, error) {
+	if ns.approved == adminApproved &&
+		!hasEvalErrors(gr.Errors) &&
+		(len(gr.Resources) == 0 || len(gr.Resources[0].AdminApprovals) == 0) {
+		return "", nil, fmt.Errorf("Unexpected groupedReport!")
 	}
 	regexApprovalMsg := regexp.MustCompile(`^Approval Status:`)
 	msg := fmt.Sprintf("Approval Status: **%s**\n", ns.approved)
@@ -3134,7 +3136,7 @@ func approvedComment(groupedResources []*groupedResource, ns noopStatus, conf *H
 	data := struct {
 		GroupedResources []*groupedResource
 	}{
-		groupedResources,
+		gr.Resources,
 	}
 	if ns.approved == adminApproved {
 		err = templates.ExecuteTemplate(&body, "adminApprovalComment.tmpl", data)
@@ -3402,14 +3404,14 @@ func githubNoopApprovals(ghclient *github.Client, conf *HecklerdConf, issue *git
 // Given a GitHub issue, the approval status, groupedResources, and
 // commitAuthors generate an approval status comment and update the GitHub
 // comment if it is different
-func updateApprovalComment(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, groupedResources []*groupedResource, ns noopStatus, templates *template.Template) error {
+func updateApprovalComment(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, gr groupedReport, ns noopStatus, templates *template.Template) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	comments, _, err := ghclient.Issues.ListComments(ctx, conf.RepoOwner, conf.Repo, issue.GetNumber(), nil)
 	if err != nil {
 		return err
 	}
-	approvalMsg, regexApprovalMsg, err := approvedComment(groupedResources, ns, conf, templates)
+	approvalMsg, regexApprovalMsg, err := approvedComment(gr, ns, conf, templates)
 	if err != nil {
 		return err
 	}
