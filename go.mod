@@ -12,7 +12,6 @@ require (
 	github.com/google/go-cmp v0.4.1
 	github.com/google/go-github/v29 v29.0.3
 	github.com/google/uuid v1.1.1 // indirect
-	github.com/hairyhenderson/go-codeowners v0.2.2 // indirect
 	github.com/hmarr/codeowners v0.2.0
 	github.com/huandu/xstrings v1.3.0 // indirect
 	github.com/imdario/mergo v0.3.8 // indirect
@@ -27,6 +26,7 @@ require (
 	github.com/slack-go/slack v0.8.0
 	github.com/square/grange v0.0.0-20200108221412-2a4cb7b5b334
 	golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5 // indirect
+	golang.org/x/text v0.3.2 // indirect
 	google.golang.org/genproto v0.0.0-20200205142000-a86caf926a67 // indirect
 	google.golang.org/grpc v1.28.1
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
