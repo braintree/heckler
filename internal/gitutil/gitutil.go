@@ -63,6 +63,9 @@ func CloneOrOpen(remoteUrl string, cloneDir string, cloneOptions *git.CloneOptio
 func FastForward(repo *git.Repository, fetchOptions *git.FetchOptions) error {
 	var err error
 
+	if repo == nil {
+		return fmt.Errorf("Invalid git repository")
+	}
 	headRef, err := repo.Head()
 	if err != nil {
 		return err
