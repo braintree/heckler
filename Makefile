@@ -56,7 +56,6 @@ clean: ## Remove all state
 	rm -rf vendor/github.com/libgit2/git2go/v31/static-build
 	rm -rf vendor/github.com/libgit2/git2go/v31/script
 	rm -rf vendor/github.com/libgit2/git2go/v31/vendor
-	./debian/rules clean
 	go clean -cache
 
 
