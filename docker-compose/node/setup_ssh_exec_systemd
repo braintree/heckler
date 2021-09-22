@@ -15,5 +15,5 @@ cp authorized_keys /root/.ssh/
 popd >/dev/null
 
 # Avoids breakage when security releases update pkg revs
-apt-get update -q
+apt-get update --allow-releaseinfo-change -q
 exec /lib/systemd/systemd
