@@ -45,7 +45,7 @@ run `make docker-build` to kick off the build.
 
 ## License
 
-The gem is available as open source under the terms of the [MIT
+Heckler is available as open source under the terms of the [MIT
 License](http://opensource.org/licenses/MIT).
 
 ## Process
