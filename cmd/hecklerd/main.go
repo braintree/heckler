@@ -322,6 +322,7 @@ type deltaResource struct {
 }
 
 type groupedReport struct {
+	GithubIssueId              int64
 	CommitNotInAllNodeLineages bool
 	Resources                  []*groupedResource
 	Errors                     []*groupedError
@@ -4650,8 +4651,11 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 //  node set?
 //    If No, do nothing
 //    If Yes,
-//      - noop each commit or load serialized copy
-//      - create github issue, if it does not exist
+//      - Check if we have serialized copy of the grouped report
+//        If Yes, do nothing
+//        If No,
+//          - Noop commit to create grouped report
+//          - Create a Github issue, if it does not exist
 func noop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template, logger *log.Logger) {
 	var err error
 	var ns *NodeSet
@@ -4687,57 +4691,51 @@ func noop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templa
 	var perNoop *NodeSet
 	for gi, commit := range commits {
 		gr, err = unmarshalGroupedReport(commit.Id(), conf.GroupedNoopDir)
-		if os.IsNotExist(err) {
-			perNoop = &NodeSet{
-				name:           "all",
-				nodeThresholds: conf.MaxNodeThresholds,
-			}
-			err = dialNodeSet(conf, perNoop, logger)
-			if err != nil {
-				logger.Printf("Unable to dial node set: %v", err)
-				break
-			}
-			err = lastApplyNodeSet(perNoop, repo, logger)
-			if err != nil {
-				logger.Printf("Unable to get last apply for node set: %v", err)
-				closeNodeSet(perNoop, logger)
-				break
-			}
-			for _, node := range perNoop.nodes.active {
-				node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
-				node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
-			}
-			gr, err = groupReportNodeSet(perNoop, commit, true, repo, conf, logger)
-			if err != nil {
-				logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
-				closeNodeSet(perNoop, logger)
-				continue
-			}
-			closeNodeSet(perNoop, logger)
-			err = marshalGroupedReport(commit.Id(), gr, conf.GroupedNoopDir)
-			if err != nil {
-				logger.Fatalf("Error: unable to marshal groupedCommit: %v", err)
-			}
-		} else if err != nil {
+		if err == nil {
+			// We already have a serialized grouped report
+			continue
+		}
+		if !os.IsNotExist(err) {
 			logger.Fatalf("Error: unable to unmarshal groupedCommit: %v", err)
 		}
+		// No serialized copy, so run a noop to obtain the grouped report
+		perNoop = &NodeSet{
+			name:           "all",
+			nodeThresholds: conf.MaxNodeThresholds,
+		}
+		err = dialNodeSet(conf, perNoop, logger)
+		if err != nil {
+			logger.Printf("Unable to dial node set: %v", err)
+			break
+		}
+		err = lastApplyNodeSet(perNoop, repo, logger)
+		if err != nil {
+			logger.Printf("Unable to get last apply for node set: %v", err)
+			closeNodeSet(perNoop, logger)
+			break
+		}
+		for _, node := range perNoop.nodes.active {
+			node.commitReports = make(map[git.Oid]*rizzopb.PuppetReport)
+			node.commitDeltaResources = make(map[git.Oid]map[ResourceTitle]*deltaResource)
+		}
+		gr, err = groupReportNodeSet(perNoop, commit, true, repo, conf, logger)
+		if err != nil {
+			logger.Printf("Unable to noop commit: %s, sleeping, %v", gi.String(), err)
+			closeNodeSet(perNoop, logger)
+			continue
+		}
+		closeNodeSet(perNoop, logger)
 		ghclient, _, err := githubConn(conf)
+		issue, err := githubCreateCommitIssue(ghclient, conf, commit, gr, templates)
 		if err != nil {
-			logger.Printf("Error: unable to connect to GitHub, sleeping: %v", err)
+			logger.Printf("Error: unable to create github issue: %v", err)
 			continue
 		}
-		issue, err := githubIssueFromCommit(ghclient, gi, conf)
+		logger.Printf("Successfully created new issue: '%v'", issue.GetTitle())
+		gr.GithubIssueId = issue.GetID()
+		err = marshalGroupedReport(commit.Id(), gr, conf.GroupedNoopDir)
 		if err != nil {
-			logger.Printf("Error: unable to determine if issue for commit %s exists: %v", gi.String(), err)
-			continue
-		}
-		if issue == nil {
-			issue, err = githubCreateCommitIssue(ghclient, conf, commit, gr, templates)
-			if err != nil {
-				logger.Printf("Error: unable to create github issue: %v", err)
-				continue
-			}
-			logger.Printf("Successfully created new issue: '%v'", issue.GetTitle())
+			logger.Fatalf("Error: unable to marshal groupedCommit: %v", err)
 		}
 	}
 	return
