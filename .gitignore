@@ -1,6 +1,7 @@
 *.deb
 *.pem
 *.tar
+*.yaml
 # deb build dir
 /_build
 /.go-build
