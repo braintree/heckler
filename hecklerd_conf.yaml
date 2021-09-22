@@ -1,6 +1,6 @@
 repo: "muppetshow"
 repo_owner: "braintree"
-repo_branch: "master"
+repo_branch: "main"
 github_domain: "github.com"
 github_app_slug: "heckler-dev"
 github_app_id: 7
