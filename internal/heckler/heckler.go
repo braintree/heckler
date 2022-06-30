@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/lollipopman/heckler/internal/rizzopb"
+	"github.com/braintree/heckler/internal/rizzopb"
 )
 
 type LockStatus int

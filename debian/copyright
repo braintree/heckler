@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: heckler
-Source: https://github.com/lollipopman/heckler
+Source: https://github.com/braintree/heckler
 
 Files: *
 Copyright: 2020 Jesse Hathaway <jesse@mbuki-mvuki.org>
