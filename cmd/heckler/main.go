@@ -11,7 +11,7 @@ import (
 
 	"time"
 
-	"github.com/lollipopman/heckler/internal/hecklerpb"
+	"github.com/braintree/heckler/internal/hecklerpb"
 	"github.com/lollipopman/luser"
 	"google.golang.org/grpc"
 )
