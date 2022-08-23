@@ -22,7 +22,7 @@ Below are the components that make up the Heckler system.
     or applies as directed by `hecklerd`.
 
   - `heckler`: cli client used to make ad hoc requests against
-    `hecklerd`, at present it is not a central part of the automated
+    `hecklerd`; at present it is not a central part of the automated
     workflow, but serves primarily as a debugging tool.
 
 ## Deployment
@@ -38,7 +38,7 @@ rizzod to initiate the noops and applies.
 Development is primarily driven through the `Makefile`, simply run
 `make` to see the available targets after cloning the repo. All
 dependencies are vendored, except the CGO dependencies because that is
-not possible with Go's built it tooling.
+not possible with Go's built-in tooling.
 
 Compilation is done in a docker container to ease dependency management,
 run `make docker-build` to kick off the build.
@@ -52,7 +52,7 @@ License](http://opensource.org/licenses/MIT).
 
 ### Overview
 
-1.  Runs a puppet apply with the *--noop* option on every host for every
+1.  Runs a puppet apply with the `--noop` option on every host for every
     new commit in a git repository.
 2.  Correlates a commit with a noop change by creating a delta noop
 3.  Aggregates noops changes which are identical
@@ -67,21 +67,23 @@ License](http://opensource.org/licenses/MIT).
 
 Use the Puppet Report from a noop to determine changes.
 
-    logs:
-      - level: notice
-        message: <DIFF_OUTPUT>
-        source: "/Stage[main]/Haproxy/File[/etc/haproxy/haproxy.cfg]/content"
-    resource_statuses:
-      File[/etc/haproxy/haproxy.cfg]:
-        title: "/etc/haproxy/haproxy.cfg"
-        file: "modules/haproxy/manifests/init.pp"
-        resource: File[/etc/haproxy/haproxy.cfg]
-        changed: true
-      Service[haproxy]:
-        title: haproxy
-        file: "modules/haproxy/manifests/init.pp"
-        resource: Service[haproxy]
-        changed: true
+```yml
+logs:
+  - level: notice
+    message: <DIFF_OUTPUT>
+    source: "/Stage[main]/Haproxy/File[/etc/haproxy/haproxy.cfg]/content"
+resource_statuses:
+  File[/etc/haproxy/haproxy.cfg]:
+    title: "/etc/haproxy/haproxy.cfg"
+    file: "modules/haproxy/manifests/init.pp"
+    resource: File[/etc/haproxy/haproxy.cfg]
+    changed: true
+  Service[haproxy]:
+    title: haproxy
+    file: "modules/haproxy/manifests/init.pp"
+    resource: Service[haproxy]
+    changed: true
+```
 
 ### Correlate Commit with Noop Changes
 
