@@ -30,6 +30,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/Masterminds/sprig"
 
+	snowIFC "github.com/braintree/heckler/interfaces/snow"
 	"github.com/braintree/heckler/internal/gitutil"
 	"github.com/braintree/heckler/internal/heckler"
 	"github.com/braintree/heckler/internal/hecklerpb"
@@ -4432,9 +4433,10 @@ type HecklerService struct {
 	delDups      bool
 	clearGitHub  bool
 	printVersion bool
+	snowManager  snowIFC.SNowManager
 }
 
-func NewHecklerdManager(defaultTemplatesPath string) (HecklerService, error) {
+func NewHecklerdManager(defaultTemplatesPath string, snowManager snowIFC.SNowManager) (HecklerService, error) {
 	log.SetFlags(log.Lshortfile)
 	logger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
 	var clearState bool
@@ -4464,6 +4466,7 @@ func NewHecklerdManager(defaultTemplatesPath string) (HecklerService, error) {
 		delDups:      delDups,
 		clearGitHub:  clearGitHub,
 		printVersion: printVersion,
+		snowManager:  snowManager,
 	}
 	return hm, nil
 
@@ -4473,7 +4476,8 @@ func (hm HecklerService) Run() {
 	t := time.Now()
 	abbrevZone, _ := t.Zone()
 	var err error
-
+	changeJson, err := hm.snowManager.GetChangeTicket("testID")
+	fmt.Println("changeJson,err", changeJson, err)
 	// 	var conf *HecklerdConf
 	// 	var file *os.File
 	// 	var data []byte

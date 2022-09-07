@@ -679,4 +679,3 @@ func commitLogIdList(repo *git.Repository, beginRev string, endRev string) ([]gi
 	}
 	return commitLogIds, commits, nil
 }
-
