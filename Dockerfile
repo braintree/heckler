@@ -28,6 +28,7 @@ RUN apt-get update \
    sudo \
    tree \
    vim-tiny \
+   libdistro-info-perl \
    2>&1
 
 WORKDIR /usr/local
@@ -44,6 +45,7 @@ RUN ./configure
 RUN make install
 
 ENV CC=/usr/local/musl/bin/musl-gcc
+ENV GO111MODULE=on
 
 WORKDIR /usr/local
 RUN curl -Ls https://mirror.planetunix.net/pub/OpenBSD/LibreSSL/libressl-${LIBRESSL_VERSION}.tar.gz | tar -xz
