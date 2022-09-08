@@ -49,7 +49,7 @@ func loadConfig(logger *log.Logger) (*HecklerdConf, error) {
 
 }
 
-func validateConfig(logger *log.Logger, conf HecklerdConf, clearState, clearGitHub bool) {
+func validateConfig(logger *log.Logger, conf *HecklerdConf, clearState, clearGitHub bool) {
 
 	if conf.RepoBranch == "" {
 		logger.Println("No branch specified in config, please add RepoBranch")

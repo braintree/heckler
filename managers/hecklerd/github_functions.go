@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-func clearGithub(conf HecklerdConf) error {
+func clearGithub(conf *HecklerdConf) error {
 	ghclient, _, err := githubConn(conf)
 	if err != nil {
 		return err
@@ -41,7 +41,7 @@ func clearGithub(conf HecklerdConf) error {
 	return nil
 }
 
-func githubConn(conf HecklerdConf) (*github.Client, *ghinstallation.Transport, error) {
+func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, error) {
 	var privateKey []byte
 	var file *os.File
 	var err error
@@ -91,7 +91,7 @@ func githubConn(conf HecklerdConf) (*github.Client, *ghinstallation.Transport, e
 	return client, itr, nil
 }
 
-func clearIssues(ghclient *github.Client, conf HecklerdConf) error {
+func clearIssues(ghclient *github.Client, conf *HecklerdConf) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*100)
 	defer cancel()
 	query := fmt.Sprintf("author:app/%s noop in:title", conf.GitHubAppSlug)
@@ -130,7 +130,7 @@ func clearIssues(ghclient *github.Client, conf HecklerdConf) error {
 // The rest API does not support deletion,
 // https://github.community/t5/GitHub-API-Development-and/Delete-Issues-programmatically/td-p/29524,
 // so for now just close the issue and change the title to deleted & remove the milestone
-func deleteIssue(ghclient *github.Client, conf HecklerdConf, issue *github.Issue) error {
+func deleteIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	// We need to craft our own request, due to the inability to delete the milestone:
@@ -162,7 +162,7 @@ func deleteIssue(ghclient *github.Client, conf HecklerdConf, issue *github.Issue
 	return nil
 }
 
-func updateIssueMilestone(ghclient *github.Client, conf HecklerdConf, issue *github.Issue, ms *github.Milestone) error {
+func updateIssueMilestone(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, ms *github.Milestone) error {
 	issuePatch := &github.IssueRequest{
 		Milestone: ms.Number,
 	}
@@ -172,7 +172,7 @@ func updateIssueMilestone(ghclient *github.Client, conf HecklerdConf, issue *git
 	return err
 }
 
-func closeIssue(ghclient *github.Client, conf HecklerdConf, issue *github.Issue, reason string) error {
+func closeIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, reason string) error {
 	var err error
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -194,7 +194,7 @@ func closeIssue(ghclient *github.Client, conf HecklerdConf, issue *github.Issue,
 	return err
 }
 
-func openIssue(ghclient *github.Client, conf HecklerdConf, issue *github.Issue, reason string) error {
+func openIssue(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, reason string) error {
 	var err error
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -216,7 +216,7 @@ func openIssue(ghclient *github.Client, conf HecklerdConf, issue *github.Issue, 
 	return err
 }
 
-func githubCreateApplyFailureIssue(ghclient *github.Client, nodeErrors []error, nodeFile string, conf HecklerdConf, templates *template.Template) (*github.Issue, error) {
+func githubCreateApplyFailureIssue(ghclient *github.Client, nodeErrors []error, nodeFile string, conf *HecklerdConf, templates *template.Template) (*github.Issue, error) {
 	title, body, err := applyFailuresToMarkdown(nodeErrors, nodeFile, conf.EnvPrefix, templates)
 	if err != nil {
 		return nil, err
@@ -228,7 +228,7 @@ func githubCreateApplyFailureIssue(ghclient *github.Client, nodeErrors []error, 
 	return githubCreateIssue(ghclient, conf, title, body, authors)
 }
 
-func githubCreateCleanFailureIssue(ghclient *github.Client, nodeErrors []error, nodeFile string, conf HecklerdConf, templates *template.Template) (*github.Issue, error) {
+func githubCreateCleanFailureIssue(ghclient *github.Client, nodeErrors []error, nodeFile string, conf *HecklerdConf, templates *template.Template) (*github.Issue, error) {
 	title, body, err := cleanFailuresToMarkdown(nodeErrors, nodeFile, conf.EnvPrefix, templates)
 	if err != nil {
 		return nil, err
@@ -240,7 +240,7 @@ func githubCreateCleanFailureIssue(ghclient *github.Client, nodeErrors []error, 
 	return githubCreateIssue(ghclient, conf, title, body, authors)
 }
 
-func githubIssueForCleanFailure(ghclient *github.Client, nodeFile string, conf HecklerdConf) (*github.Issue, error) {
+func githubIssueForCleanFailure(ghclient *github.Client, nodeFile string, conf *HecklerdConf) (*github.Issue, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	prefix := conf.EnvPrefix
@@ -267,7 +267,7 @@ func githubIssueForCleanFailure(ghclient *github.Client, nodeFile string, conf H
 	}
 }
 
-func githubOpenIssues(ghclient *github.Client, conf HecklerdConf, searchTerm string) ([]github.Issue, error) {
+func githubOpenIssues(ghclient *github.Client, conf *HecklerdConf, searchTerm string) ([]github.Issue, error) {
 	if searchTerm == "" {
 		return nil, fmt.Errorf("Empty searchTerm provided")
 	}
@@ -309,7 +309,7 @@ func githubUserFromEmail(ghclient *github.Client, email string) (*github.User, e
 	}
 }
 
-func clearMilestones(ghclient *github.Client, conf HecklerdConf) error {
+func clearMilestones(ghclient *github.Client, conf *HecklerdConf) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*100)
 	defer cancel()
 	milestoneOpts := &github.MilestoneListOptions{
@@ -343,7 +343,7 @@ func issuePrefix(prefix string) string {
 	}
 }
 
-func createMilestone(milestone string, ghclient *github.Client, conf HecklerdConf) (*github.Milestone, error) {
+func createMilestone(milestone string, ghclient *github.Client, conf *HecklerdConf) (*github.Milestone, error) {
 	ms := &github.Milestone{
 		Title: github.String(milestone),
 	}
@@ -356,7 +356,7 @@ func createMilestone(milestone string, ghclient *github.Client, conf HecklerdCon
 	return nms, nil
 }
 
-func closeMilestone(milestone string, ghclient *github.Client, conf HecklerdConf) error {
+func closeMilestone(milestone string, ghclient *github.Client, conf *HecklerdConf) error {
 	ms, err := milestoneFromTag(milestone, ghclient, conf)
 	if err != nil {
 		return err
@@ -371,7 +371,7 @@ func closeMilestone(milestone string, ghclient *github.Client, conf HecklerdConf
 	return nil
 }
 
-func milestoneFromTag(milestone string, ghclient *github.Client, conf HecklerdConf) (*github.Milestone, error) {
+func milestoneFromTag(milestone string, ghclient *github.Client, conf *HecklerdConf) (*github.Milestone, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	milestoneOpts := &github.MilestoneListOptions{
@@ -400,7 +400,7 @@ func milestoneFromTag(milestone string, ghclient *github.Client, conf HecklerdCo
 
 // Given a git oid this function returns the associated github issue, if it
 // exists
-func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, conf HecklerdConf) (*github.Issue, error) {
+func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, conf *HecklerdConf) (*github.Issue, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	prefix := conf.EnvPrefix
@@ -427,7 +427,7 @@ func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, conf HecklerdCo
 
 // Given a git oid, search for the associated GitHub issues, then delete any
 // duplicates, keeping the earliest issue by creation date.
-func githubIssueDeleteDups(ghclient *github.Client, oid git.Oid, conf HecklerdConf) error {
+func githubIssueDeleteDups(ghclient *github.Client, oid git.Oid, conf *HecklerdConf) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	prefix := conf.EnvPrefix
@@ -474,7 +474,7 @@ func githubIssueDeleteDups(ghclient *github.Client, oid git.Oid, conf HecklerdCo
 	return nil
 }
 
-func githubCreateCommitIssue(ghclient *github.Client, conf HecklerdConf, commit *git.Commit, gr groupedReport, templates *template.Template) (*github.Issue, error) {
+func githubCreateCommitIssue(ghclient *github.Client, conf *HecklerdConf, commit *git.Commit, gr groupedReport, templates *template.Template) (*github.Issue, error) {
 	// Only assign commit issues to their authors if the noop generated changes
 	// or eval errors, i.e. don't assign authors to empty noops so we avoid
 	// notifying authors for commits which have no effect or have already been
@@ -508,7 +508,7 @@ func githubCreateCommitIssue(ghclient *github.Client, conf HecklerdConf, commit 
 	return githubCreateIssue(ghclient, conf, title, body, authors)
 }
 
-func githubCreateIssue(ghclient *github.Client, conf HecklerdConf, title, body string, authors []string) (*github.Issue, error) {
+func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, title, body string, authors []string) (*github.Issue, error) {
 	if conf.GitHubDisableNotifications {
 		strippedAuthors := strings.Join(stripAtSignsSlice(authors), ", ")
 		body = fmt.Sprintf("*Notifications Disabled to Assignees:* %s\n\n", strippedAuthors) + body
@@ -581,7 +581,7 @@ func commitAuthorsLogins(ghclient *github.Client, commit *git.Commit) ([]string,
 	return authors, nil
 }
 
-func githubIssueComment(ghclient *github.Client, conf HecklerdConf, issue *github.Issue, msg string) error {
+func githubIssueComment(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, msg string) error {
 	var err error
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -592,7 +592,7 @@ func githubIssueComment(ghclient *github.Client, conf HecklerdConf, issue *githu
 	return err
 }
 
-func createTag(newTag string, conf HecklerdConf, ghclient *github.Client, repo *git.Repository) error {
+func createTag(newTag string, conf *HecklerdConf, ghclient *github.Client, repo *git.Repository) error {
 	timeNow := time.Now()
 	tagger := &github.CommitAuthor{
 		Date:  &timeNow,

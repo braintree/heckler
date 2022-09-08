@@ -29,7 +29,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Masterminds/sprig"
-
 	snowIFC "github.com/braintree/heckler/interfaces/snow"
 	"github.com/braintree/heckler/internal/gitutil"
 	"github.com/braintree/heckler/internal/heckler"
@@ -232,8 +231,18 @@ type HecklerdConf struct {
 	SlackPrivateConfPath       string                `yaml:"slack_private_conf_path"`
 	StateDir                   string                `yaml:"state_dir"`
 	WorkRepo                   string                `yaml:"work_repo"`
+	SNowMGRCfg                 SNowMGRCfg            `yaml:"snow_manager_config"`
 }
 
+type CRCfg struct {
+	Env string `yaml:"env"`
+}
+type SNowMGRCfg struct {
+	Url            string `yaml:"url"`
+	SnowPluginPath string `yaml:"snow_plugin_path"`
+	Token          string `yaml:"token"`
+	crCfg          CRCfg  `yaml:"change_request_config"`
+}
 type SlackConf struct {
 	Token string `yaml:"token"`
 }
@@ -276,7 +285,7 @@ type NodeThresholds struct {
 // hecklerServer is used to implement heckler.HecklerServer
 type hecklerServer struct {
 	hecklerpb.UnimplementedHecklerServer
-	conf      HecklerdConf
+	conf      *HecklerdConf
 	repo      *git.Repository
 	templates *template.Template
 }
@@ -593,7 +602,7 @@ func unmarshalGroupedReport(oid *git.Oid, groupedNoopDir string) (groupedReport,
 	return gr, nil
 }
 
-func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir string, conf HecklerdConf, logger *log.Logger) error {
+func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir string, conf *HecklerdConf, logger *log.Logger) error {
 	var err error
 	var rprt *rizzopb.PuppetReport
 	errNoopNodes := make(map[string]*Node)
@@ -681,7 +690,7 @@ func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir st
 	return nil
 }
 
-func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, conf HecklerdConf, logger *log.Logger) (groupedReport, error) {
+func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, conf *HecklerdConf, logger *log.Logger) (groupedReport, error) {
 	var err error
 	for host, _ := range ns.nodes.active {
 		os.Mkdir(conf.NoopDir+"/"+host, 0755)
@@ -1059,7 +1068,7 @@ func groupEvalErrors(gi git.Oid, targetPuppetLog *rizzopb.Log, nodes map[string]
 	return ge
 }
 
-func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node, conf HecklerdConf) *groupedResource {
+func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nodes map[string]*Node, conf *HecklerdConf) *groupedResource {
 	var nodeList []string
 	var desiredValue string
 	// TODO Remove this hack, only needed for old versions of puppet 4.5?
@@ -1271,7 +1280,7 @@ func parseTemplates(defaultTemplatesPath string) *template.Template {
 	return template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob(templatesPath))
 }
 
-func dialReqNodes(conf HecklerdConf, hosts []string, nodeSetName string, logger *log.Logger) (*NodeSet, error) {
+func dialReqNodes(conf *HecklerdConf, hosts []string, nodeSetName string, logger *log.Logger) (*NodeSet, error) {
 	var hostsToDial []string
 	var err error
 	ns := &NodeSet{
@@ -1297,7 +1306,7 @@ func dialReqNodes(conf HecklerdConf, hosts []string, nodeSetName string, logger 
 	return ns, nil
 }
 
-func setNameToNodes(conf HecklerdConf, nodeSetName string, logger *log.Logger) ([]string, error) {
+func setNameToNodes(conf *HecklerdConf, nodeSetName string, logger *log.Logger) ([]string, error) {
 	if nodeSetName == "" {
 		return nil, errors.New("Empty nodeSetName provided")
 	}
@@ -1380,6 +1389,11 @@ func copyNodeMap(nodeMap map[string]*Node) map[string]*Node {
 func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.HecklerApplyRequest) (*hecklerpb.HecklerApplyReport, error) {
 	var err error
 	logger := log.New(os.Stdout, "[HecklerApply] ", log.Lshortfile)
+	ghclient, _, err := githubConn(hs.conf)
+
+	if err != nil {
+		fmt.Printf("githubConnError %v", err)
+	}
 	commit, err := gitutil.RevparseToCommit(req.Rev, hs.repo)
 	if err != nil {
 		return nil, err
@@ -1415,7 +1429,10 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 			return nil, err
 		}
 	} else {
-		appliedNodes, beyondRevNodes, err := applyNodeSet(ns, req.Force, req.Noop, req.Rev, hs.repo, hs.conf.LockMessage, logger)
+		//TODO RAMAN apply same logic ,work it today
+		changeRequestID := "" //TODO 2nd round
+		var snowManager snowIFC.SNowManagerInterface
+		appliedNodes, beyondRevNodes, err := applyNodeSet(ns, req.Force, req.Noop, req.Rev, hs.repo, hs.conf.LockMessage, hs.conf, ghclient, snowManager, changeRequestID, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -1435,26 +1452,50 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 	return har, nil
 }
 
-func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git.Repository, lockMsg string, logger *log.Logger) (map[string]*Node, map[string]*Node, error) {
+func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git.Repository, lockMsg string, conf *HecklerdConf, ghclient *github.Client, snowManager snowIFC.SNowManagerInterface, changeRequestID string, logger *log.Logger) (map[string]*Node, map[string]*Node, error) {
 	var err error
 	beyondRevNodes := make(map[string]*Node)
 	appliedNodes := make(map[string]*Node)
-
+	var snowComments string
 	// Check node revision if not force applying
 	if !forceApply {
 		err = lastApplyNodeSet(ns, repo, logger)
 		if err != nil {
 			return nil, nil, err
 		}
+		//Raman--> rev could be a Tag or ??
 		obj, err := gitutil.RevparseToCommit(rev, repo)
 		if err != nil {
 			return nil, nil, err
 		}
 		revId := *obj.Id()
+		//TODO RTest2 call gitutil to update commit with comment with change_ticket
+		issue, issueError := githubIssueFromCommit(ghclient, revId, conf)
+		if issueError != nil {
+			logger.Printf("Error: unable to githubIssueFromCommit: %v", issueError)
+		} else {
+			if changeRequestID != "" {
+				comment := "changeRequestID::" + changeRequestID
+				issueCommentError := githubIssueComment(ghclient, conf, issue, comment)
+				if issueCommentError != nil {
+					logger.Printf("Error: unable to githubIssueComment: %v", issueCommentError)
+				}
+			} else {
+				logger.Printf("changeRequestID is empty")
+			}
+		}
+
 		for host, node := range ns.nodes.active {
 			if commitAlreadyApplied(node.lastApply, revId, repo) {
+				//TODO RTest3 put a note in change_request about commitAlreadyApplied skipping
 				beyondRevNodes[host] = node
 				delete(ns.nodes.active, host)
+				if !noop {
+					logger.Printf("revId %s and host %s", revId, host)
+					snowComments = fmt.Sprintf("Commit::%s is already applied on Host::%s", revId.String(), host)
+					logger.Printf("snowComments %s", snowComments)
+					snowManager.CommentChangeRequest(changeRequestID, snowComments)
+				}
 			}
 		}
 	}
@@ -1465,7 +1506,11 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 	}
 	par := rizzopb.PuppetApplyRequest{Rev: rev, Noop: noop}
 	puppetReportChan := make(chan applyResult)
-	for _, node := range ns.nodes.active {
+	for host, node := range ns.nodes.active {
+		if !noop {
+			snowComments = fmt.Sprintf("Heckler is going to apply Tag::%s, puppet on  Host::%s", rev, host)
+			snowManager.CommentChangeRequest(changeRequestID, snowComments)
+		}
 		go hecklerApply(node, puppetReportChan, par)
 	}
 
@@ -1475,17 +1520,24 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 		if r.err != nil {
 			ns.nodes.active[r.host].err = fmt.Errorf("Apply failed: %w", r.err)
 			errApplyNodes[r.host] = ns.nodes.active[r.host]
+			snowComments = fmt.Sprintf("Failed: %s@%s", r.report.Host, "execution of Puppet apply is failed to run")
 		} else if r.report.Status == "failed" {
 			ns.nodes.active[r.host].err = &applyError{r.host, r.report}
 			errApplyNodes[r.host] = ns.nodes.active[r.host]
+			snowComments = fmt.Sprintf("Failed: %s@%s", r.report.Host, "Puppet applied resulted in failed state")
 		} else {
 			if noop {
 				logger.Printf("Nooped: %s@%s", r.report.Host, r.report.ConfigurationVersion)
 			} else {
 				logger.Printf("Applied: %s@%s", r.report.Host, r.report.ConfigurationVersion)
+				snowComments = fmt.Sprintf("Applied: %s@%s", r.report.Host, r.report.ConfigurationVersion)
 			}
 			appliedNodes[r.report.Host] = ns.nodes.active[r.report.Host]
 		}
+		if !noop {
+			snowManager.CommentChangeRequest(changeRequestID, snowComments)
+		}
+
 	}
 	unlockNodeSet("root", false, ns, logger)
 	ns.nodes.active = mergeNodeMaps(appliedNodes, beyondRevNodes)
@@ -1538,7 +1590,7 @@ func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.He
 	return rprt, nil
 }
 
-func slackClient(conf HecklerdConf) (*slack.Client, error) {
+func slackClient(conf *HecklerdConf) (*slack.Client, error) {
 	var file *os.File
 	var data []byte
 	var err error
@@ -1586,7 +1638,7 @@ func slackClient(conf HecklerdConf) (*slack.Client, error) {
 	return slack.New(slackConf.Token, slack.OptionHTTPClient(httpClient)), nil
 }
 
-func slackAnnounce(announceChannels []SlackChannelCfg, msg string, conf HecklerdConf) error {
+func slackAnnounce(announceChannels []SlackChannelCfg, msg string, conf *HecklerdConf) error {
 	sc, err := slackClient(conf)
 	if err != nil {
 		return err
@@ -1604,7 +1656,7 @@ func slackAnnounce(announceChannels []SlackChannelCfg, msg string, conf Hecklerd
 	return nil
 }
 
-func noopToMarkdown(conf HecklerdConf, commit *git.Commit, gr groupedReport, templates *template.Template) (string, string, error) {
+func noopToMarkdown(conf *HecklerdConf, commit *git.Commit, gr groupedReport, templates *template.Template) (string, string, error) {
 	var body string
 	if gr.CommitNotInAllNodeLineages {
 		body += fmt.Sprintf("## Notice: No noop produced for this commit!\n\n")
@@ -1631,7 +1683,7 @@ func noopToMarkdown(conf HecklerdConf, commit *git.Commit, gr groupedReport, tem
 
 // Given a commit and groupedResources returns a markdown string showing the
 // owners of noop
-func noopOwnersToMarkdown(conf HecklerdConf, commit *git.Commit, groupedResources []*groupedResource, templates *template.Template) (string, error) {
+func noopOwnersToMarkdown(conf *HecklerdConf, commit *git.Commit, groupedResources []*groupedResource, templates *template.Template) (string, error) {
 	var err error
 	groupedResources, err = groupedResourcesNodeFiles(groupedResources, conf.WorkRepo)
 	if err != nil {
@@ -1644,7 +1696,7 @@ func noopOwnersToMarkdown(conf HecklerdConf, commit *git.Commit, groupedResource
 	no := groupedResourcesUniqueOwners(groupedResources, conf.GitHubDisableNotifications)
 	data := struct {
 		Commit     *git.Commit
-		Conf       HecklerdConf
+		Conf       *HecklerdConf
 		NoopOwners noopOwners
 	}{
 		commit,
@@ -1673,7 +1725,7 @@ func nodeFile(node string, nodeFileRegexes map[string][]*regexp.Regexp, puppetCo
 	return "", false
 }
 
-func commitToMarkdown(conf HecklerdConf, commit *git.Commit, gr groupedReport, templates *template.Template) (string, error) {
+func commitToMarkdown(conf *HecklerdConf, commit *git.Commit, gr groupedReport, templates *template.Template) (string, error) {
 	title, body, err := noopToMarkdown(conf, commit, gr, templates)
 	if err != nil {
 		return "", err
@@ -1683,13 +1735,13 @@ func commitToMarkdown(conf HecklerdConf, commit *git.Commit, gr groupedReport, t
 	return md, nil
 }
 
-func commitMsgToMarkdown(commit *git.Commit, conf HecklerdConf, templates *template.Template) string {
+func commitMsgToMarkdown(commit *git.Commit, conf *HecklerdConf, templates *template.Template) string {
 	var body strings.Builder
 	var err error
 
 	data := struct {
 		Commit *git.Commit
-		Conf   HecklerdConf
+		Conf   *HecklerdConf
 	}{
 		commit,
 		conf,
@@ -1701,7 +1753,7 @@ func commitMsgToMarkdown(commit *git.Commit, conf HecklerdConf, templates *templ
 	return body.String()
 }
 
-func groupedResourcesToMarkdown(groupedResources []*groupedResource, commit *git.Commit, conf HecklerdConf, templates *template.Template) string {
+func groupedResourcesToMarkdown(groupedResources []*groupedResource, commit *git.Commit, conf *HecklerdConf, templates *template.Template) string {
 	var body strings.Builder
 	var err error
 
@@ -1719,7 +1771,7 @@ func groupedResourcesToMarkdown(groupedResources []*groupedResource, commit *git
 	data := struct {
 		GroupedResources []*groupedResource
 		Commit           *git.Commit
-		Conf             HecklerdConf
+		Conf             *HecklerdConf
 	}{
 		groupedResources,
 		commit,
@@ -2177,7 +2229,7 @@ func dirtyNodeSet(ns *NodeSet, repo *git.Repository, logger *log.Logger) error {
 	return nil
 }
 
-func fetchRepo(conf HecklerdConf) (*git.Repository, error) {
+func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 	_, itr, err := githubConn(conf)
 	if err != nil {
 		return nil, err
@@ -2223,7 +2275,7 @@ func sleepAndLog(sleepDur, logDur time.Duration, msg string, logger *log.Logger)
 	time.Sleep(sleepDurRem)
 }
 
-func tagReadyAndApproved(nextTag string, priorTag string, ghclient *github.Client, conf HecklerdConf, repo *git.Repository, logger *log.Logger) (bool, *github.Milestone, error) {
+func tagReadyAndApproved(nextTag string, priorTag string, ghclient *github.Client, conf *HecklerdConf, repo *git.Repository, logger *log.Logger) (bool, *github.Milestone, error) {
 	nextTagMilestone, err := milestoneFromTag(nextTag, ghclient, conf)
 	if err != nil {
 		return false, nil, err
@@ -2248,7 +2300,7 @@ func tagReadyAndApproved(nextTag string, priorTag string, ghclient *github.Clien
 	return true, nextTagMilestone, nil
 }
 
-func greatestTagApproved(nextTags []string, priorTag string, conf HecklerdConf, repo *git.Repository, logger *log.Logger) (string, *github.Milestone, error) {
+func greatestTagApproved(nextTags []string, priorTag string, conf *HecklerdConf, repo *git.Repository, logger *log.Logger) (string, *github.Milestone, error) {
 	ghclient, _, err := githubConn(conf)
 	if err != nil {
 		return "", nil, err
@@ -2284,11 +2336,17 @@ func greatestTagApproved(nextTags []string, priorTag string, conf HecklerdConf, 
 //       If yes
 //         Apply new tag across all nodes
 //   If no, do nothing
-func apply(noopLock *sync.Mutex, applySem chan int, conf HecklerdConf, repo *git.Repository, templates *template.Template) {
+func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *git.Repository, templates *template.Template, snowManager snowIFC.SNowManagerInterface) {
 	var err error
 	var ns *NodeSet
 	var perApply *NodeSet
 	logger := log.New(os.Stdout, "[apply] ", log.Lshortfile)
+	logger.Println("apply..")
+	ghclient, _, err := githubConn(conf)
+	if err != nil {
+		logger.Printf("Error: unable to connect to GitHub: %v", err)
+		return
+	}
 	select {
 	case applySem <- 1:
 		defer func() { <-applySem }()
@@ -2349,6 +2407,29 @@ func apply(noopLock *sync.Mutex, applySem chan int, conf HecklerdConf, repo *git
 		}
 	}
 	logger.Printf("Tag '%s' is ready to apply, applying with set order: %v", nextTag, conf.ApplySetOrder)
+	changeRequestID, createError := snowManager.SearchAndCreateChangeRequest(conf.EnvPrefix, nextTag)
+	logger.Printf("CreateChangeRequest Status for %s:: : changeRequestID::%s and  createError::'%v'", nextTag, changeRequestID, createError)
+	/*
+		for {
+			isCheckedIN, checkinError := snowutil.CheckInChangeRequest(changeRequestID)
+			logger.Printf("CheckInChangeRequest Status: isCheckedIN::%t and  checkinError::'%v'", isCheckedIN, checkinError)
+
+			if checkinError != nil || isCheckedIN == false {
+				sleepLogMsg := fmt.Sprintf("ChangeRequest %s is failed to CheckIn::  '%v'", changeRequestID, checkinError)
+				sleepAndLog(applySetSleep, time.Duration(1)*time.Second, sleepLogMsg, logger)
+			} else {
+				break
+			}
+
+		}
+	*/
+	isCheckedIN, checkinError := snowManager.CheckInChangeRequest(changeRequestID)
+	logger.Printf("CheckInChangeRequest Status: isCheckedIN::%t and  checkinError::'%v'", isCheckedIN, checkinError)
+
+	if checkinError != nil || isCheckedIN == false {
+		logger.Printf(changeRequestID, "is not checked, returing from apply")
+		return
+	}
 	var applyErrors []error
 	for nodeSetIndex, nodeSetName := range conf.ApplySetOrder {
 		logger.Printf("Applying Set '%s' (%d of %d sets)", nodeSetName, nodeSetIndex+1, len(conf.ApplySetOrder))
@@ -2361,7 +2442,7 @@ func apply(noopLock *sync.Mutex, applySem chan int, conf HecklerdConf, repo *git
 			logger.Printf("Error: unable to dial node set: %v", err)
 			break
 		}
-		appliedNodes, beyondRevNodes, err := applyNodeSet(perApply, false, false, nextTag, repo, conf.LockMessage, logger)
+		appliedNodes, beyondRevNodes, err := applyNodeSet(perApply, false, false, nextTag, repo, conf.LockMessage, conf, ghclient, snowManager, changeRequestID, logger)
 		if err != nil {
 			logger.Printf("Error: unable to apply nodes, returning: %v", err)
 			closeNodeSet(perApply, logger)
@@ -2381,10 +2462,12 @@ func apply(noopLock *sync.Mutex, applySem chan int, conf HecklerdConf, repo *git
 			if applySetSleep > 0 {
 				logger.Printf("Sleeping for %v, before applying next set '%s'...", applySetSleep, conf.ApplySetOrder[nodeSetIndex+1])
 				sleepLogMsg := fmt.Sprintf("Node sets '%v' applied, Next sets to apply '%v'", conf.ApplySetOrder[:nodeSetIndex+1], conf.ApplySetOrder[nodeSetIndex+1:])
-				sleepAndLog(applySetSleep, time.Duration(10)*time.Second, sleepLogMsg, logger)
+				sleepAndLog(applySetSleep, time.Duration(1)*time.Second, sleepLogMsg, logger)
 			}
 		}
 	}
+	isSignedOff, signOffError := snowManager.SignOffChangeRequest(changeRequestID)
+	logger.Printf("SignOffChangeRequest Status: isSignedOff::%t and  signOffError::'%v'", isSignedOff, signOffError)
 	err = reportErrors(applyErrors, true, conf, templates, logger)
 	if err != nil {
 		logger.Printf("Error: unable to report apply errors, '%v'", err)
@@ -2406,7 +2489,7 @@ func noopRequiresApproval(gr groupedReport) bool {
 //      Is the issue approved?
 //        If No, do nothing
 //        If Yes, note approval and close the issue
-func approvalLoop(conf HecklerdConf, repo *git.Repository, templates *template.Template) {
+func approvalLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	var err error
 	var ns *NodeSet
 	logger := log.New(os.Stdout, "[approvalLoop] ", log.Lshortfile)
@@ -2465,7 +2548,7 @@ func approvalLoop(conf HecklerdConf, repo *git.Repository, templates *template.T
 	}
 }
 
-func updateIssueApproval(ghclient *github.Client, conf HecklerdConf, commit *git.Commit, issue *github.Issue, templates *template.Template) error {
+func updateIssueApproval(ghclient *github.Client, conf *HecklerdConf, commit *git.Commit, issue *github.Issue, templates *template.Template) error {
 	if conf.AutoCloseIssues {
 		if issue.GetState() == "closed" {
 			return nil
@@ -2494,6 +2577,7 @@ func updateIssueApproval(ghclient *github.Client, conf HecklerdConf, commit *git
 			return nil
 		}
 	}
+	fmt.Println("calling noopApproved....")
 	ns, err := noopApproved(ghclient, conf, gr.Resources, commit, issue)
 	if err != nil {
 		return fmt.Errorf("Unable to determine if issue(%d) is approved: %w", issue.GetNumber(), err)
@@ -2526,7 +2610,7 @@ func updateIssueApproval(ghclient *github.Client, conf HecklerdConf, commit *git
 // if each grouped resource has been approved by a valid approver, exclude
 // authors of the commit in the approvers set. Return a noopStatus struct
 // detailing the state of the approval.
-func noopApproved(ghclient *github.Client, conf HecklerdConf, groupedResources []*groupedResource, commit *git.Commit, issue *github.Issue) (noopStatus, error) {
+func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources []*groupedResource, commit *git.Commit, issue *github.Issue) (noopStatus, error) {
 	var err error
 	ns := noopStatus{approved: notApproved}
 	groupedResources, err = groupedResourcesNodeFiles(groupedResources, conf.WorkRepo)
@@ -2585,7 +2669,7 @@ func adminOwnerApproved(groupedResources []*groupedResource, adminOwnersList []s
 	}
 }
 
-func approvedComment(gr groupedReport, ns noopStatus, conf HecklerdConf, templates *template.Template) (string, *regexp.Regexp, error) {
+func approvedComment(gr groupedReport, ns noopStatus, conf *HecklerdConf, templates *template.Template) (string, *regexp.Regexp, error) {
 	if ns.approved == adminApproved &&
 		!hasEvalErrors(gr.Errors) &&
 		(len(gr.Resources) == 0 || len(gr.Resources[0].AdminApprovals) == 0) {
@@ -2848,7 +2932,7 @@ func stripAtSignsSlice(users []string) []string {
 }
 
 // Given a github issue return the set of github logins which have approved the issue
-func githubNoopApprovals(ghclient *github.Client, conf HecklerdConf, issue *github.Issue) ([]string, error) {
+func githubNoopApprovals(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue) ([]string, error) {
 	approvers := make([]string, 0)
 	ctx := context.Background()
 	comments, _, err := ghclient.Issues.ListComments(ctx, conf.RepoOwner, conf.Repo, issue.GetNumber(), nil)
@@ -2871,7 +2955,7 @@ func githubNoopApprovals(ghclient *github.Client, conf HecklerdConf, issue *gith
 // Given a GitHub issue, the approval status, groupedResources, and
 // commitAuthors generate an approval status comment and update the GitHub
 // comment if it is different
-func updateApprovalComment(ghclient *github.Client, conf HecklerdConf, issue *github.Issue, gr groupedReport, ns noopStatus, templates *template.Template) error {
+func updateApprovalComment(ghclient *github.Client, conf *HecklerdConf, issue *github.Issue, gr groupedReport, ns noopStatus, templates *template.Template) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	comments, _, err := ghclient.Issues.ListComments(ctx, conf.RepoOwner, conf.Repo, issue.GetNumber(), nil)
@@ -3112,7 +3196,7 @@ func ownersNeeded(groupedResources []*groupedResource, admins []string) []string
 	return uniqueStrSlice(owners)
 }
 
-func unlockAll(conf HecklerdConf, logger *log.Logger) error {
+func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 	var err error
 	ns := &NodeSet{
 		name: "all",
@@ -3149,8 +3233,9 @@ func unlockAll(conf HecklerdConf, logger *log.Logger) error {
 //     Are there new commits beyond are common tag?
 //       If no, do nothing
 //       If yes, create a new tag
-func autoTag(conf HecklerdConf, repo *git.Repository) {
+func autoTag(conf *HecklerdConf, repo *git.Repository) {
 	logger := log.New(os.Stdout, "[autoTag] ", log.Lshortfile)
+	logger.Println("autoTag...")
 	var err error
 	var ns *NodeSet
 	ns = &NodeSet{
@@ -3228,7 +3313,7 @@ func autoTag(conf HecklerdConf, repo *git.Repository) {
 
 // Find issues that are open and have not been updated for move than
 // conf.HoundWait. For each issue add a hounding comment, with an apology!
-func houndOpenIssues(conf HecklerdConf, repo *git.Repository) {
+func houndOpenIssues(conf *HecklerdConf, repo *git.Repository) {
 	logger := log.New(os.Stdout, "[houndOpenIssues] ", log.Lshortfile)
 	var err error
 	configLoc, err := time.LoadLocation(conf.Timezone)
@@ -3252,7 +3337,7 @@ func houndOpenIssues(conf HecklerdConf, repo *git.Repository) {
 	type issueHound struct {
 		issueType  string
 		searchTerm string
-		msgFunc    func(*github.Client, *github.Issue, *git.Repository, HecklerdConf) string
+		msgFunc    func(*github.Client, *github.Issue, *git.Repository, *HecklerdConf) string
 	}
 
 	issueHounds := []issueHound{
@@ -3300,16 +3385,16 @@ func houndOpenIssues(conf HecklerdConf, repo *git.Repository) {
 	return
 }
 
-func applyFailedHound(ghclient *github.Client, issue *github.Issue, repo *git.Repository, conf HecklerdConf) string {
+func applyFailedHound(ghclient *github.Client, issue *github.Issue, repo *git.Repository, conf *HecklerdConf) string {
 	return "Sorry to hound you all, but please fix this Puppet apply error and close this issue."
 }
 
-func cleanFailedHound(ghclient *github.Client, issue *github.Issue, repo *git.Repository, conf HecklerdConf) string {
+func cleanFailedHound(ghclient *github.Client, issue *github.Issue, repo *git.Repository, conf *HecklerdConf) string {
 	return "Sorry to hound you all, but please Puppet these boxes clean with a known commit and close this issue."
 }
 
 // Return a msg indicating which owners still need to approve an isssue
-func noopHound(ghclient *github.Client, issue *github.Issue, repo *git.Repository, conf HecklerdConf) string {
+func noopHound(ghclient *github.Client, issue *github.Issue, repo *git.Repository, conf *HecklerdConf) string {
 	var err error
 	fallbackMsg := "Sorry to hound you all, but your unapproved commit is **blocking this release**, please have an owner, other than the authors, approve this noop!"
 	regexIssueCommitCapture := regexp.MustCompile(` commit: ([^ ]*) - `)
@@ -3337,7 +3422,7 @@ func noopHound(ghclient *github.Client, issue *github.Issue, repo *git.Repositor
 
 // Given two git tags, a git repo, and a github client, this function returns
 // true if the noops for each commit have been approved.
-func tagApproved(repo *git.Repository, ghclient *github.Client, conf HecklerdConf, priorTag string, nextTag string, logger *log.Logger) (bool, error) {
+func tagApproved(repo *git.Repository, ghclient *github.Client, conf *HecklerdConf, priorTag string, nextTag string, logger *log.Logger) (bool, error) {
 	_, commits, err := commitLogIdList(repo, priorTag, nextTag)
 	if err != nil {
 		return false, err
@@ -3426,7 +3511,7 @@ func eligibleNodeSet(user string, ns *NodeSet) {
 //       If yes, associate issue with milestone
 //       If no, do nothing
 //   If no, do nothing
-func milestoneLoop(conf HecklerdConf, repo *git.Repository) {
+func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 	var err error
 	var ns *NodeSet
 	logger := log.New(os.Stdout, "[milestoneLoop] ", log.Lshortfile)
@@ -3469,7 +3554,7 @@ func milestoneLoop(conf HecklerdConf, repo *git.Repository) {
 	}
 }
 
-func reconcileMilestone(priorTag string, nextTag string, repo *git.Repository, conf HecklerdConf, logger *log.Logger) error {
+func reconcileMilestone(priorTag string, nextTag string, repo *git.Repository, conf *HecklerdConf, logger *log.Logger) error {
 	ghclient, _, err := githubConn(conf)
 	if err != nil {
 		return err
@@ -3534,7 +3619,7 @@ func thresholdExceededNodeSet(ns *NodeSet, logger *log.Logger) bool {
 	return false
 }
 
-func dialNodeSet(conf HecklerdConf, ns *NodeSet, logger *log.Logger) error {
+func dialNodeSet(conf *HecklerdConf, ns *NodeSet, logger *log.Logger) error {
 	nodesToDial, err := setNameToNodes(conf, ns.name, logger)
 	if err != nil {
 		return err
@@ -3551,7 +3636,7 @@ func dialNodeSet(conf HecklerdConf, ns *NodeSet, logger *log.Logger) error {
 }
 
 // Return the most recent tag across all nodes in an environment
-func commonTagNodeSet(conf HecklerdConf, ns *NodeSet, repo *git.Repository, logger *log.Logger) error {
+func commonTagNodeSet(conf *HecklerdConf, ns *NodeSet, repo *git.Repository, logger *log.Logger) error {
 	err := lastApplyNodeSet(ns, repo, logger)
 	if err != nil {
 		return err
@@ -3582,7 +3667,7 @@ func commonTagNodeSet(conf HecklerdConf, ns *NodeSet, repo *git.Repository, logg
 //          Does the commit noop clean?
 //            If No, mark failure
 //            If Yes, apply commit and stop nooping node
-func clean(noopLock *sync.Mutex, conf HecklerdConf, repo *git.Repository, nodeDirtyNoops map[string]dirtyNoops, templates *template.Template, logger *log.Logger) {
+func clean(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, nodeDirtyNoops map[string]dirtyNoops, templates *template.Template, logger *log.Logger) {
 	cleanChan := make(chan cleanNodeResult)
 	var err error
 	var ns *NodeSet
@@ -3646,7 +3731,7 @@ func clean(noopLock *sync.Mutex, conf HecklerdConf, repo *git.Repository, nodeDi
 	}
 }
 
-func cleanLoop(noopLock *sync.Mutex, conf HecklerdConf, repo *git.Repository, templates *template.Template) {
+func cleanLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	logger := log.New(os.Stdout, "[cleanLoop] ", log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopCleanSleepSeconds) * time.Second
 	nodeDirtyNoops := make(map[string]dirtyNoops)
@@ -3658,7 +3743,7 @@ func cleanLoop(noopLock *sync.Mutex, conf HecklerdConf, repo *git.Repository, te
 	}
 }
 
-func lockErroredNodes(errors []error, msg string, conf HecklerdConf, logger *log.Logger) error {
+func lockErroredNodes(errors []error, msg string, conf *HecklerdConf, logger *log.Logger) error {
 	var host string
 	var erroredHosts []string
 	for _, err := range errors {
@@ -3685,7 +3770,7 @@ func lockErroredNodes(errors []error, msg string, conf HecklerdConf, logger *log
 	return nil
 }
 
-func reportErrors(errors []error, lockNodes bool, conf HecklerdConf, templates *template.Template, logger *log.Logger) error {
+func reportErrors(errors []error, lockNodes bool, conf *HecklerdConf, templates *template.Template, logger *log.Logger) error {
 	ghclient, _, err := githubConn(conf)
 	if err != nil {
 		return err
@@ -3815,7 +3900,7 @@ func cleanFailuresToMarkdown(nodeErrors []error, nodeFile string, prefix string,
 	return title, body.String(), nil
 }
 
-func nodeOwners(ghclient *github.Client, nodeFile string, conf HecklerdConf) ([]string, error) {
+func nodeOwners(ghclient *github.Client, nodeFile string, conf *HecklerdConf) ([]string, error) {
 	var err error
 	file, err := os.Open(conf.WorkRepo + "/" + "CODEOWNERS")
 	if err != nil {
@@ -3847,7 +3932,7 @@ func nodeOwners(ghclient *github.Client, nodeFile string, conf HecklerdConf) ([]
 	return usernames, nil
 }
 
-func githubIssueForApplyFailure(ghclient *github.Client, nodeFile string, conf HecklerdConf) (*github.Issue, error) {
+func githubIssueForApplyFailure(ghclient *github.Client, nodeFile string, conf *HecklerdConf) (*github.Issue, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	prefix := conf.EnvPrefix
@@ -3877,7 +3962,7 @@ func githubIssueForApplyFailure(ghclient *github.Client, nodeFile string, conf H
 // Noop a dirty node with its dirty commit and also childThreshold number of
 // child commits. If a diffless noop is found, apply the commit, which marks
 // the node as clean.
-func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Repository, conf HecklerdConf, logger *log.Logger) {
+func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Repository, conf *HecklerdConf, logger *log.Logger) {
 	// Threshold for the number of child commits from the dirty commit to consider
 	childThreshold := 10
 	headCommit, err := gitutil.RevparseToCommit(conf.RepoBranch, repo)
@@ -4018,7 +4103,7 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 //        If No,
 //          - Noop commit to create grouped report
 //          - Create a Github issue, if it does not exist
-func noop(noopLock *sync.Mutex, conf HecklerdConf, repo *git.Repository, templates *template.Template, logger *log.Logger) {
+func noop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template, logger *log.Logger) {
 	var err error
 	var ns *NodeSet
 	noopLock.Lock()
@@ -4105,7 +4190,7 @@ func noop(noopLock *sync.Mutex, conf HecklerdConf, repo *git.Repository, templat
 
 // Grabs the latest common tag, then searches for and deletes all duplicate
 // issues since that tag.
-func deleteDupIssues(conf HecklerdConf, repo *git.Repository, logger *log.Logger) {
+func deleteDupIssues(conf *HecklerdConf, repo *git.Repository, logger *log.Logger) {
 	var err error
 	var ns *NodeSet
 	ns = &NodeSet{
@@ -4149,10 +4234,10 @@ func deleteDupIssues(conf HecklerdConf, repo *git.Repository, logger *log.Logger
 	}
 }
 
-func noopLoop(noopLock *sync.Mutex, conf HecklerdConf, repo *git.Repository, templates *template.Template) {
+func noopLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	logger := log.New(os.Stdout, "[noopLoop] ", log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopNoopSleepSeconds) * time.Second
-	logger.Printf("Started, looping every %v", loopSleep)
+	logger.Printf("Started, nooplooping every %v", loopSleep)
 	for {
 		noop(noopLock, conf, repo, templates, logger)
 		logger.Println("Nooping complete, sleeping")
@@ -4423,9 +4508,9 @@ func resourceIgnored(title string, ignoredResources []IgnoredResources) (bool, e
 func main() {
 }
 
-type HecklerService struct {
-	conf         HecklerdConf
-	logger       *log.Logger
+type HecklerdApp struct {
+	hecklerdConf *HecklerdConf
+	hAppLogger   *log.Logger
 	templates    *template.Template
 	cpuprofile   string
 	memprofile   string
@@ -4433,12 +4518,12 @@ type HecklerService struct {
 	delDups      bool
 	clearGitHub  bool
 	printVersion bool
-	snowManager  snowIFC.SNowManager
+	snowManager  snowIFC.SNowManagerInterface
 }
 
-func NewHecklerdManager(defaultTemplatesPath string, snowManager snowIFC.SNowManager) (HecklerService, error) {
+func NewHecklerdApp(defaultTemplatesPath string, snowManager snowIFC.SNowManagerInterface) (HecklerdApp, error) {
 	log.SetFlags(log.Lshortfile)
-	logger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
+	hAppLogger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
 	var clearState bool
 	var delDups bool
 	var clearGitHub bool
@@ -4451,14 +4536,14 @@ func NewHecklerdManager(defaultTemplatesPath string, snowManager snowIFC.SNowMan
 	flag.BoolVar(&delDups, "deldups", false, "Soft delete duplicate issues for commits, retaining the oldest")
 	flag.BoolVar(&printVersion, "version", false, "print version")
 	flag.Parse()
-	conf, confErr := loadConfig(logger)
+	hecklerdConf, confErr := loadConfig(hAppLogger)
 	if confErr != nil {
-		logger.Fatalf("Cannot unmarshal config: %v", confErr)
+		hAppLogger.Fatalf("Cannot unmarshal config: %v", confErr)
 	}
-	validateConfig(logger, *conf, clearState, clearGitHub)
+	validateConfig(hAppLogger, hecklerdConf, clearState, clearGitHub)
 	templates := parseTemplates(defaultTemplatesPath)
-	hm := HecklerService{conf: *conf,
-		logger:       logger,
+	hm := HecklerdApp{hecklerdConf: hecklerdConf,
+		hAppLogger:   hAppLogger,
 		templates:    templates,
 		cpuprofile:   *cpuprofile,
 		memprofile:   *memprofile,
@@ -4471,53 +4556,52 @@ func NewHecklerdManager(defaultTemplatesPath string, snowManager snowIFC.SNowMan
 	return hm, nil
 
 }
-func (hm HecklerService) Run() {
+func (hApp HecklerdApp) Run() {
 	// add filename and line number to log output
 	t := time.Now()
 	abbrevZone, _ := t.Zone()
 	var err error
-	changeJson, err := hm.snowManager.GetChangeTicket("testID")
+	changeJson, err := hApp.snowManager.GetChangeRequestDetails("testID")
 	fmt.Println("changeJson,err", changeJson, err)
-	// 	var conf *HecklerdConf
-	// 	var file *os.File
-	// 	var data []byte
+	logger := hApp.hAppLogger
+	conf := hApp.hecklerdConf
 
-	if hm.cpuprofile != "" {
-		f, err := os.Create(hm.cpuprofile)
+	if hApp.cpuprofile != "" {
+		f, err := os.Create(hApp.cpuprofile)
 		if err != nil {
-			hm.logger.Fatal("could not create CPU profile: ", err)
+			logger.Fatal("could not create CPU profile: ", err)
 		}
 		defer f.Close() // error handling omitted for example
 		if err := pprof.StartCPUProfile(f); err != nil {
-			hm.logger.Fatal("could not start CPU profile: ", err)
+			logger.Fatal("could not start CPU profile: ", err)
 		}
 		defer pprof.StopCPUProfile()
 	}
 
-	if hm.printVersion {
+	if hApp.printVersion {
 		fmt.Printf("v%s\n", Version)
 		os.Exit(0)
 	}
 
-	hm.logger.Printf("hecklerd: v%s\n", Version)
-	os.MkdirAll(hm.conf.NoopDir, 0755)
-	os.MkdirAll(hm.conf.GroupedNoopDir, 0755)
-	repo, err := fetchRepo(hm.conf)
+	logger.Printf("hecklerd: v%s\n", Version)
+	os.MkdirAll(conf.NoopDir, 0755)
+	os.MkdirAll(conf.GroupedNoopDir, 0755)
+	repo, err := fetchRepo(conf)
 	if err != nil {
-		hm.logger.Fatalf("Unable to fetch repo to serve: %v", err)
+		logger.Fatalf("Unable to fetch repo to serve: %v", err)
 	}
 
-	if hm.delDups {
-		deleteDupIssues(hm.conf, repo, hm.logger)
+	if hApp.delDups {
+		deleteDupIssues(conf, repo, logger)
 		os.Exit(0)
 	}
 
 	gitServer := &gitcgiserver.GitCGIServer{}
 	gitServer.ExportAll = true
-	gitServer.ProjectRoot = hm.conf.StateDir + "/served_repo"
+	gitServer.ProjectRoot = conf.StateDir + "/served_repo"
 	gitServer.Addr = defaultAddr
 	gitServer.ShutdownTimeout = shutdownTimeout
-	gitServer.MaxClients = hm.conf.GitServerMaxClients
+	gitServer.MaxClients = conf.GitServerMaxClients
 
 	idleConnsClosed := make(chan struct{})
 	done := make(chan bool, 1)
@@ -4530,7 +4614,7 @@ func (hm HecklerService) Run() {
 			if Debug {
 				logger.Println("Updating repo..")
 			}
-			_, err = fetchRepo(hm.conf)
+			_, err = fetchRepo(conf)
 			if err != nil {
 				logger.Printf("Unable to fetch repo, sleeping: %v", err)
 			}
@@ -4549,12 +4633,12 @@ func (hm HecklerService) Run() {
 
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
-		hm.logger.Fatalf("failed to listen: %v", err)
+		logger.Fatalf("failed to listen: %v", err)
 	}
 	grpcServer := grpc.NewServer()
 	hecklerServer := new(hecklerServer)
-	hecklerServer.conf = hm.conf
-	hecklerServer.templates = hm.templates
+	hecklerServer.conf = conf
+	hecklerServer.templates = hApp.templates
 	hecklerServer.repo = repo
 	hecklerpb.RegisterHecklerServer(grpcServer, hecklerServer)
 
@@ -4571,14 +4655,14 @@ func (hm HecklerService) Run() {
 	// listener to the git server, so we know it is available, as we did with the
 	// grpc server.
 	time.Sleep(1 * time.Second)
-	_, err = gitutil.Pull("http://localhost:8080/puppetcode", hm.conf.WorkRepo)
+	_, err = gitutil.Pull("http://localhost:8080/puppetcode", conf.WorkRepo)
 	if err != nil {
-		hm.logger.Fatalf("Unable to fetch repo: %v", err)
+		logger.Fatalf("Unable to fetch repo: %v", err)
 	}
 	go func() {
 		logger := log.New(os.Stdout, "[GitFetchWork] ", log.Lshortfile)
 		for {
-			_, err := gitutil.Pull("http://localhost:8080/puppetcode", hm.conf.WorkRepo)
+			_, err := gitutil.Pull("http://localhost:8080/puppetcode", conf.WorkRepo)
 			if err != nil {
 				logger.Fatalf("Unable to fetch repo: %v", err)
 			}
@@ -4586,10 +4670,10 @@ func (hm HecklerService) Run() {
 		}
 	}()
 
-	hm.logger.Println("Unlocking 'all' in case they are locked, from a segfault")
-	unlockAll(hm.conf, hm.logger)
-	if hm.conf.ManualMode {
-		hm.logger.Println("Manual mode, not starting loops or cron schedules")
+	logger.Println("Unlocking 'all' in case they are locked, from a segfault")
+	unlockAll(conf, logger)
+	if conf.ManualMode {
+		logger.Println("Manual mode, not starting loops or cron schedules")
 	} else {
 		// Use a mutex to prevent loops which noop hosts from running concurrently.
 		// Though having them run concurrently has been mostly harmless in
@@ -4597,73 +4681,73 @@ func (hm HecklerService) Run() {
 		// noop kicks off while an apply is sleeping before applying its next set,
 		// the apply might fail and need to start over.
 		noopLock := &sync.Mutex{}
-		if hm.conf.LoopNoopSleepSeconds == 0 {
-			hm.logger.Println("noopLoop disabled")
+		if conf.LoopNoopSleepSeconds == 0 {
+			logger.Println("noopLoop disabled")
 		} else {
-			go noopLoop(noopLock, hm.conf, repo, hm.templates)
+			go noopLoop(noopLock, conf, repo, hApp.templates)
 		}
-		if hm.conf.LoopMilestoneSleepSeconds == 0 {
-			hm.logger.Println("milestoneLoop disabled")
+		if conf.LoopMilestoneSleepSeconds == 0 {
+			logger.Println("milestoneLoop disabled")
 		} else {
-			go milestoneLoop(hm.conf, repo)
+			go milestoneLoop(conf, repo)
 		}
-		if hm.conf.LoopApprovalSleepSeconds == 0 {
-			hm.logger.Println("approvalLoop disabled")
+		if conf.LoopApprovalSleepSeconds == 0 {
+			logger.Println("approvalLoop disabled")
 		} else {
-			go approvalLoop(hm.conf, repo, hm.templates)
+			go approvalLoop(conf, repo, hApp.templates)
 		}
-		if hm.conf.LoopCleanSleepSeconds == 0 {
-			hm.logger.Println("cleanLoop disabled")
+		if conf.LoopCleanSleepSeconds == 0 {
+			logger.Println("cleanLoop disabled")
 		} else {
-			go cleanLoop(noopLock, hm.conf, repo, hm.templates)
+			go cleanLoop(noopLock, conf, repo, hApp.templates)
 		}
 		hecklerdCron := cron.New()
-		if hm.conf.AutoTagCronSchedule == "" {
-			hm.logger.Println("autoTag cron schedule disabled")
+		if conf.AutoTagCronSchedule == "" {
+			logger.Println("autoTag cron schedule disabled")
 		} else {
-			hm.logger.Printf("autoTag enabled with cron schedule of '%s' (Timezone %s)", hm.conf.AutoTagCronSchedule, abbrevZone)
+			logger.Printf("autoTag enabled with cron schedule of '%s' (Timezone %s)", conf.AutoTagCronSchedule, abbrevZone)
 			hecklerdCron.AddFunc(
-				hm.conf.AutoTagCronSchedule,
+				conf.AutoTagCronSchedule,
 				func() {
-					autoTag(hm.conf, repo)
+					autoTag(conf, repo)
 				},
 			)
 		}
-		if hm.conf.HoundCronSchedule == "" {
-			hm.logger.Println("hound cron schedule disabled")
+		if conf.HoundCronSchedule == "" {
+			logger.Println("hound cron schedule disabled")
 		} else {
-			hm.logger.Printf("hound enabled with cron schedule of '%s' (Timezone %s)", hm.conf.HoundCronSchedule, abbrevZone)
+			logger.Printf("hound enabled with cron schedule of '%s' (Timezone %s)", conf.HoundCronSchedule, abbrevZone)
 			hecklerdCron.AddFunc(
-				hm.conf.HoundCronSchedule,
+				conf.HoundCronSchedule,
 				func() {
-					houndOpenIssues(hm.conf, repo)
+					houndOpenIssues(conf, repo)
 				},
 			)
 		}
 
 		// Ensure only one apply is running
 		applySem := make(chan int, 1)
-		if hm.conf.ApplyCronSchedule == "" {
-			hm.logger.Println("apply cron schedule disabled")
+		if conf.ApplyCronSchedule == "" {
+			logger.Println("apply cron schedule disabled")
 		} else {
-			hm.logger.Printf("apply enabled with cron schedule of '%s' (Timezone %s)", hm.conf.ApplyCronSchedule, abbrevZone)
+			logger.Printf("apply enabled with cron schedule of '%s' (Timezone %s)", conf.ApplyCronSchedule, abbrevZone)
 			hecklerdCron.AddFunc(
-				hm.conf.ApplyCronSchedule,
+				conf.ApplyCronSchedule,
 				func() {
-					apply(noopLock, applySem, hm.conf, repo, hm.templates)
+					apply(noopLock, applySem, conf, repo, hApp.templates, hApp.snowManager)
 				},
 			)
 		}
 		hecklerdCron.AddFunc(
 			"0 12 * * *",
 			func() {
-				gitutil.Gc(hm.conf.WorkRepo, hm.logger)
+				gitutil.Gc(conf.WorkRepo, logger)
 			},
 		)
 		hecklerdCron.AddFunc(
 			"0 14 * * *",
 			func() {
-				gitutil.Gc(hm.conf.ServedRepo, hm.logger)
+				gitutil.Gc(conf.ServedRepo, logger)
 			},
 		)
 		hecklerdCron.Start()
@@ -4674,30 +4758,30 @@ func (hm HecklerService) Run() {
 	go func() {
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-		hm.logger.Printf("Received %s", <-sigs)
-		if !hm.conf.ManualMode {
-			unlockAll(hm.conf, hm.logger)
+		logger.Printf("Received %s", <-sigs)
+		if !conf.ManualMode {
+			unlockAll(conf, logger)
 		}
 		if err := gitServer.Shutdown(context.Background()); err != nil {
-			hm.logger.Printf("HTTP server shutdown error: %v", err)
+			logger.Printf("HTTP server shutdown error: %v", err)
 		}
 		close(idleConnsClosed)
 		grpcServer.GracefulStop()
-		hm.logger.Println("Heckler Shutdown")
+		logger.Println("Heckler Shutdown")
 		done <- true
 	}()
 
 	<-done
 
-	if hm.memprofile != "" {
-		f, err := os.Create(hm.memprofile)
+	if hApp.memprofile != "" {
+		f, err := os.Create(hApp.memprofile)
 		if err != nil {
-			hm.logger.Fatal("could not create memory profile: ", err)
+			logger.Fatal("could not create memory profile: ", err)
 		}
 		defer f.Close() // error handling omitted for example
 		runtime.GC()    // get up-to-date statistics
 		if err := pprof.WriteHeapProfile(f); err != nil {
-			hm.logger.Fatal("could not write memory profile: ", err)
+			logger.Fatal("could not write memory profile: ", err)
 		}
 	}
 }
