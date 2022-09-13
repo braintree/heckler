@@ -4505,8 +4505,6 @@ func resourceIgnored(title string, ignoredResources []IgnoredResources) (bool, e
 	}
 	return false, nil
 }
-func main() {
-}
 
 type HecklerdApp struct {
 	hecklerdConf *HecklerdConf

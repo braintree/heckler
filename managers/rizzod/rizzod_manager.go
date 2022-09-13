@@ -396,42 +396,21 @@ type RizzoConf struct {
 	RepoDir         string `yaml:"repo_dir"`
 }
 
-func main() {
-	// add filename and linenumber to log output
-	log.SetFlags(log.Lshortfile)
-	var err error
+type RizzodApp struct {
+	rizzoConf       *RizzoConf
+	rizzodAppLogger *log.Logger
+	cpuprofile      string
+	memprofile      string
+	clearState      bool
+	printVersion    bool
+}
+
+func loadConfig(logger *log.Logger) (*RizzoConf, error) {
 	var rizzoConfPath string
-	var file *os.File
+	var err error
 	var data []byte
 	var conf *RizzoConf
-	var clearState bool
-	var printVersion bool
-	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
-	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
-
-	logger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
-
-	flag.BoolVar(&clearState, "clear", false, "Clear local state, e.g. puppet code repo")
-	flag.BoolVar(&printVersion, "version", false, "print version")
-	flag.Parse()
-
-	if *cpuprofile != "" {
-		f, err := os.Create(*cpuprofile)
-		if err != nil {
-			logger.Fatal("could not create CPU profile: ", err)
-		}
-		defer f.Close() // error handling omitted for example
-		if err := pprof.StartCPUProfile(f); err != nil {
-			logger.Fatal("could not start CPU profile: ", err)
-		}
-		defer pprof.StopCPUProfile()
-	}
-
-	if printVersion {
-		fmt.Printf("v%s\n", Version)
-		os.Exit(0)
-	}
-
+	var file *os.File
 	if _, err := os.Stat("/etc/rizzod/rizzod_conf.yaml"); err == nil {
 		rizzoConfPath = "/etc/rizzod/rizzod_conf.yaml"
 	} else if _, err := os.Stat("rizzod_conf.yaml"); err == nil {
@@ -456,18 +435,69 @@ func main() {
 		logger.Fatalf("Cannot unmarshal config: %v", err)
 	}
 	file.Close()
-
+	return conf, nil
+}
+func validateConfig(logger *log.Logger, conf *RizzoConf) {
 	if conf.RepoBranch == "" {
 		logger.Fatalf("No branch specified in config, please add RepoBranch")
 	}
 
-	if clearState {
-		logger.Printf("Removing state directory: %v", conf.StateDir)
-		os.RemoveAll(conf.StateDir)
+}
+func NewRizzodApp() (RizzodApp, error) {
+	log.SetFlags(log.Lshortfile)
+	rizzodAppLogger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
+
+	var clearState bool
+	var printVersion bool
+	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
+	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
+
+	flag.BoolVar(&clearState, "clear", false, "Clear local state, e.g. puppet code repo")
+	flag.BoolVar(&printVersion, "version", false, "print version")
+	flag.Parse()
+	rizzoConf, confErr := loadConfig(rizzodAppLogger)
+	if confErr != nil {
+		rizzodAppLogger.Fatalf("Cannot unmarshal config: %v", confErr)
+	}
+	validateConfig(rizzodAppLogger, rizzoConf)
+	hm := RizzodApp{rizzoConf: rizzoConf,
+		rizzodAppLogger: rizzodAppLogger,
+		cpuprofile:      *cpuprofile,
+		memprofile:      *memprofile,
+		clearState:      clearState,
+		printVersion:    printVersion,
+	}
+	return hm, nil
+
+}
+
+func (rizzodApp RizzodApp) Run() {
+	// add filename and linenumber to log output
+	logger := rizzodApp.rizzodAppLogger
+	conf := rizzodApp.rizzoConf
+	if rizzodApp.cpuprofile != "" {
+		f, err := os.Create(rizzodApp.cpuprofile)
+		if err != nil {
+			logger.Fatal("could not create CPU profile: ", err)
+		}
+		defer f.Close() // error handling omitted for example
+		if err := pprof.StartCPUProfile(f); err != nil {
+			logger.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
+
+	if rizzodApp.printVersion {
+		fmt.Printf("v%s\n", Version)
 		os.Exit(0)
 	}
 
 	logger.Printf("rizzod: v%s\n", Version)
+	if rizzodApp.clearState {
+		logger.Printf("Removing state directory: %v", conf.StateDir)
+		os.RemoveAll(conf.StateDir)
+		os.Exit(0)
+	}
 
 	// Open the port earlier than needed, to ensure we are the only process
 	// running. This ensures the gitutil.ResetRepo command is safe to run.
@@ -522,8 +552,8 @@ func main() {
 
 	<-done
 
-	if *memprofile != "" {
-		f, err := os.Create(*memprofile)
+	if rizzodApp.memprofile != "" {
+		f, err := os.Create(rizzodApp.memprofile)
 		if err != nil {
 			logger.Fatal("could not create memory profile: ", err)
 		}

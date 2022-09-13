@@ -54,7 +54,14 @@ func readNodeFile(nodeFile string) ([]string, error) {
 	return nodes, nil
 }
 
-func main() {
+type HecklerCLIManager struct {
+}
+
+func NewHecklerCLIManager() HecklerCLIManager {
+	hCliMgr := new(HecklerCLIManager)
+	return *hCliMgr
+}
+func (hCliMgr HecklerCLIManager) Run() {
 	// add filename and linenumber to log output
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var nodeFlags nodeFlag
