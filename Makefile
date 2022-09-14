@@ -10,6 +10,7 @@ export CC := /usr/local/musl/bin/musl-gcc
 GO_LDFLAGS := -X main.Version=$(HECKLER_VERSION) -extldflags=-static -linkmode=external
 export GOFLAGS := -mod=vendor -tags=static,osusergo
 export GOCACHE := $(CURDIR)/.go-build
+export GO111MODULE := on
 
 .PHONY: help
 help: ## Show the help
@@ -75,10 +76,11 @@ test: vendor/github.com/libgit2/git2go/v31/static-build ## Test heckler, usually
 	go test ./...
 
 vendor/github.com/libgit2/git2go/v31/static-build: ## Build libgit2
+	go mod vendor
 	./build-libgit2-static
 
 .PHONY: deb
-deb: ## Build the deb, usually called inside the container
+deb: build ## Build the deb, usually called inside the container
 	rm -f debian/changelog
 	dch --create --distribution stable --package $(NAME) -v $(DEB_VERSION) "new version"
 	dpkg-buildpackage -us -uc -b
