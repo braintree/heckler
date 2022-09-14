@@ -23,6 +23,10 @@ vendor/github.com/libgit2/git2go/v31/static-build:
 
 override_dh_golang:
 
-
 override_dh_auto_install:
+	mkdir -p debian/tmp/usr/bin/
+	cp rizzod debian/tmp/usr/bin/
+	cp rizzo-rev debian/tmp/usr/bin/
+	cp heckler debian/tmp/usr/bin/
+	cp hecklerd debian/tmp/usr/bin/
 	dh_auto_install -- --no-source
