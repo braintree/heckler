@@ -1,6 +1,6 @@
 NAME = heckler
 BUILD_GIT_SHA = $(shell git rev-parse --short HEAD)
-IMAGE = dockerhub.com/lollipopman/$(NAME)
+IMAGE = dockerhub.com/heckler/$(NAME)
 IMAGE_TAGGED = $(IMAGE):$(BUILD_GIT_SHA)
 DEBIAN_RELEASE := $(shell . /etc/os-release && echo "$${VERSION_ID}")
 HECKLER_VERSION := $(shell git describe --abbrev=0 | sed 's/^v//')
@@ -61,14 +61,17 @@ clean: ## Remove all state
 
 .PHONY: build
 build: vendor/github.com/libgit2/git2go/v31/static-build ## Build heckler, usually called inside the container
+	go mod vendor
 	go build -o . -ldflags '$(GO_LDFLAGS)' ./...
 
 .PHONY: vet
 vet: ## Vet heckler, usually called inside the container
+	go mod vendor
 	go vet ./...
 
 .PHONY: test
 test: vendor/github.com/libgit2/git2go/v31/static-build ## Test heckler, usually called inside the container
+	go mod vendor
 	go test ./...
 
 vendor/github.com/libgit2/git2go/v31/static-build: ## Build libgit2
