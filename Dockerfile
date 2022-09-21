@@ -28,6 +28,7 @@ RUN apt-get update \
    sudo \
    tree \
    vim-tiny \
+   libdistro-info-perl \
    2>&1
 
 WORKDIR /usr/local

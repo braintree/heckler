@@ -32,6 +32,19 @@ ignored_resources:
     resources:
       - type: 'File'
         title: '/data/puppet_apply/statler/wit'
+change_management_config:
+  snow_plugin_path1: '/etc/hecklerd/gsnow_plugin.so'
+  snow_cli_path: '/usr/bin/hecklerd_snow_cli'
+  is_mandatory: false
+  change_request_config:
+    env: 'snowEnv'
+    template: "snow_template_name"
+    assignedTo: "tome"
+    assignedGroup: "tous"
+    brand: "our"
+  snow_config:
+    url: 'https://snow.com/gsnow'
+    token: 'snowtoken'
 node_sets:
   all:
     cmd:

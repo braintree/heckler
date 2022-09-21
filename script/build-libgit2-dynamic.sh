@@ -31,4 +31,3 @@ cmake -DTHREADSAFE=ON \
       "${VENDORED_PATH}" &&
 
 cmake --build . --target install
-

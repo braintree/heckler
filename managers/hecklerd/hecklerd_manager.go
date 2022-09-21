@@ -29,7 +29,8 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Masterminds/sprig"
-	snowIFC "github.com/braintree/heckler/interfaces/snow"
+	cm_adapter "github.com/braintree/heckler/change_management/cm_adapter"
+	cm_ifc "github.com/braintree/heckler/change_management/interfaces"
 	"github.com/braintree/heckler/internal/gitutil"
 	"github.com/braintree/heckler/internal/heckler"
 	"github.com/braintree/heckler/internal/hecklerpb"
@@ -192,57 +193,48 @@ type IgnoredResources struct {
 }
 
 type HecklerdConf struct {
-	AdminOwners                []string              `yaml:"admin_owners"`
-	ApplySetOrder              []string              `yaml:"apply_set_order"`
-	ApplySetSleepSeconds       int                   `yaml:"apply_set_sleep_seconds"`
-	AutoCloseIssues            bool                  `yaml:"auto_close_issues"`
-	AutoTagCronSchedule        string                `yaml:"auto_tag_cron_schedule"`
-	EnvPrefix                  string                `yaml:"env_prefix"`
-	GitHubAppEmail             string                `yaml:"github_app_email"`
-	GitHubAppId                int64                 `yaml:"github_app_id"`
-	GitHubAppInstallId         int64                 `yaml:"github_app_install_id"`
-	GitHubAppSlug              string                `yaml:"github_app_slug"`
-	GitHubDisableNotifications bool                  `yaml:"github_disable_notifications"`
-	GitHubDomain               string                `yaml:"github_domain"`
-	GitHubHttpProxy            string                `yaml:"github_http_proxy"`
-	GitHubPrivateKeyPath       string                `yaml:"github_private_key_path"`
-	GitServerMaxClients        int                   `yaml:"git_server_max_clients"`
-	GroupedNoopDir             string                `yaml:"grouped_noop_dir"`
-	IgnoredResources           []IgnoredResources    `yaml:"ignored_resources"`
-	LockMessage                string                `yaml:"lock_message"`
-	LoopApprovalSleepSeconds   int                   `yaml:"loop_approval_sleep_seconds"`
-	LoopCleanSleepSeconds      int                   `yaml:"loop_clean_sleep_seconds"`
-	LoopMilestoneSleepSeconds  int                   `yaml:"loop_milestone_sleep_seconds"`
-	LoopNoopSleepSeconds       int                   `yaml:"loop_noop_sleep_seconds"`
-	ManualMode                 bool                  `yaml:"manual_mode"`
-	MaxNodeThresholds          NodeThresholds        `yaml:"max_node_thresholds"`
-	ModulesPaths               []string              `yaml:"module_paths"`
-	NodeSets                   map[string]NodeSetCfg `yaml:"node_sets"`
-	Timezone                   string                `yaml:"timezone"`
-	HoundWait                  string                `yaml:"hound_wait"`
-	HoundCronSchedule          string                `yaml:"hound_cron_schedule"`
-	ApplyCronSchedule          string                `yaml:"apply_cron_schedule"`
-	NoopDir                    string                `yaml:"noop_dir"`
-	Repo                       string                `yaml:"repo"`
-	RepoBranch                 string                `yaml:"repo_branch"`
-	RepoOwner                  string                `yaml:"repo_owner"`
-	ServedRepo                 string                `yaml:"served_repo"`
-	SlackAnnounceChannels      []SlackChannelCfg     `yaml:"slack_announce_channels"`
-	SlackPrivateConfPath       string                `yaml:"slack_private_conf_path"`
-	StateDir                   string                `yaml:"state_dir"`
-	WorkRepo                   string                `yaml:"work_repo"`
-	SNowMGRCfg                 SNowMGRCfg            `yaml:"snow_manager_config"`
+	AdminOwners                []string                      `yaml:"admin_owners"`
+	ApplySetOrder              []string                      `yaml:"apply_set_order"`
+	ApplySetSleepSeconds       int                           `yaml:"apply_set_sleep_seconds"`
+	AutoCloseIssues            bool                          `yaml:"auto_close_issues"`
+	AutoTagCronSchedule        string                        `yaml:"auto_tag_cron_schedule"`
+	EnvPrefix                  string                        `yaml:"env_prefix"`
+	GitHubAppEmail             string                        `yaml:"github_app_email"`
+	GitHubAppId                int64                         `yaml:"github_app_id"`
+	GitHubAppInstallId         int64                         `yaml:"github_app_install_id"`
+	GitHubAppSlug              string                        `yaml:"github_app_slug"`
+	GitHubDisableNotifications bool                          `yaml:"github_disable_notifications"`
+	GitHubDomain               string                        `yaml:"github_domain"`
+	GitHubHttpProxy            string                        `yaml:"github_http_proxy"`
+	GitHubPrivateKeyPath       string                        `yaml:"github_private_key_path"`
+	GitServerMaxClients        int                           `yaml:"git_server_max_clients"`
+	GroupedNoopDir             string                        `yaml:"grouped_noop_dir"`
+	IgnoredResources           []IgnoredResources            `yaml:"ignored_resources"`
+	LockMessage                string                        `yaml:"lock_message"`
+	LoopApprovalSleepSeconds   int                           `yaml:"loop_approval_sleep_seconds"`
+	LoopCleanSleepSeconds      int                           `yaml:"loop_clean_sleep_seconds"`
+	LoopMilestoneSleepSeconds  int                           `yaml:"loop_milestone_sleep_seconds"`
+	LoopNoopSleepSeconds       int                           `yaml:"loop_noop_sleep_seconds"`
+	ManualMode                 bool                          `yaml:"manual_mode"`
+	MaxNodeThresholds          NodeThresholds                `yaml:"max_node_thresholds"`
+	ModulesPaths               []string                      `yaml:"module_paths"`
+	NodeSets                   map[string]NodeSetCfg         `yaml:"node_sets"`
+	Timezone                   string                        `yaml:"timezone"`
+	HoundWait                  string                        `yaml:"hound_wait"`
+	HoundCronSchedule          string                        `yaml:"hound_cron_schedule"`
+	ApplyCronSchedule          string                        `yaml:"apply_cron_schedule"`
+	NoopDir                    string                        `yaml:"noop_dir"`
+	Repo                       string                        `yaml:"repo"`
+	RepoBranch                 string                        `yaml:"repo_branch"`
+	RepoOwner                  string                        `yaml:"repo_owner"`
+	ServedRepo                 string                        `yaml:"served_repo"`
+	SlackAnnounceChannels      []SlackChannelCfg             `yaml:"slack_announce_channels"`
+	SlackPrivateConfPath       string                        `yaml:"slack_private_conf_path"`
+	StateDir                   string                        `yaml:"state_dir"`
+	WorkRepo                   string                        `yaml:"work_repo"`
+	ChangeManagementConfig     cm_ifc.ChangeManagementConfig `yaml:"change_management_config"`
 }
 
-type CRCfg struct {
-	Env string `yaml:"env"`
-}
-type SNowMGRCfg struct {
-	Url            string `yaml:"url"`
-	SnowPluginPath string `yaml:"snow_plugin_path"`
-	Token          string `yaml:"token"`
-	crCfg          CRCfg  `yaml:"change_request_config"`
-}
 type SlackConf struct {
 	Token string `yaml:"token"`
 }
@@ -288,6 +280,7 @@ type hecklerServer struct {
 	conf      *HecklerdConf
 	repo      *git.Repository
 	templates *template.Template
+	cmAdapter cm_adapter.ChangeManagementAdapter
 }
 
 type Node struct {
@@ -1429,10 +1422,16 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 			return nil, err
 		}
 	} else {
-		//TODO RAMAN apply same logic ,work it today
-		changeRequestID := "" //TODO 2nd round
-		var snowManager snowIFC.SNowManagerInterface
-		appliedNodes, beyondRevNodes, err := applyNodeSet(ns, req.Force, req.Noop, req.Rev, hs.repo, hs.conf.LockMessage, hs.conf, ghclient, snowManager, changeRequestID, logger)
+		changeRequestID, pauseExecution := createChangeRequest(logger, hs.conf.EnvPrefix, req.Rev, hs.cmAdapter)
+		if pauseExecution == true {
+			msg := fmt.Sprintf("'(%s)'is not created/checked, returning from apply", changeRequestID)
+			logger.Println(msg)
+			return nil, errors.New(msg)
+		}
+		appliedNodes, beyondRevNodes, err := applyNodeSet(ns, req.Force, req.Noop, req.Rev, hs.repo, hs.conf.LockMessage, hs.conf, ghclient, hs.cmAdapter, changeRequestID, logger)
+		isSignedOff, signOffError := hs.cmAdapter.SignOffChangeRequest(changeRequestID)
+		logger.Printf("SignOffChangeRequest Status: isSignedOff::%t and  signOffError::'%v'", isSignedOff, signOffError)
+
 		if err != nil {
 			return nil, err
 		}
@@ -1452,7 +1451,7 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 	return har, nil
 }
 
-func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git.Repository, lockMsg string, conf *HecklerdConf, ghclient *github.Client, snowManager snowIFC.SNowManagerInterface, changeRequestID string, logger *log.Logger) (map[string]*Node, map[string]*Node, error) {
+func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git.Repository, lockMsg string, conf *HecklerdConf, ghclient *github.Client, cmAdapter cm_adapter.ChangeManagementAdapter, changeRequestID string, logger *log.Logger) (map[string]*Node, map[string]*Node, error) {
 	var err error
 	beyondRevNodes := make(map[string]*Node)
 	appliedNodes := make(map[string]*Node)
@@ -1494,7 +1493,7 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 					logger.Printf("revId %s and host %s", revId, host)
 					snowComments = fmt.Sprintf("Commit::%s is already applied on Host::%s", revId.String(), host)
 					logger.Printf("snowComments %s", snowComments)
-					snowManager.CommentChangeRequest(changeRequestID, snowComments)
+					cmAdapter.CommentChangeRequest(changeRequestID, snowComments)
 				}
 			}
 		}
@@ -1509,7 +1508,7 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 	for host, node := range ns.nodes.active {
 		if !noop {
 			snowComments = fmt.Sprintf("Heckler is going to apply Tag::%s, puppet on  Host::%s", rev, host)
-			snowManager.CommentChangeRequest(changeRequestID, snowComments)
+			cmAdapter.CommentChangeRequest(changeRequestID, snowComments)
 		}
 		go hecklerApply(node, puppetReportChan, par)
 	}
@@ -1535,7 +1534,7 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 			appliedNodes[r.report.Host] = ns.nodes.active[r.report.Host]
 		}
 		if !noop {
-			snowManager.CommentChangeRequest(changeRequestID, snowComments)
+			cmAdapter.CommentChangeRequest(changeRequestID, snowComments)
 		}
 
 	}
@@ -2336,7 +2335,7 @@ func greatestTagApproved(nextTags []string, priorTag string, conf *HecklerdConf,
 //       If yes
 //         Apply new tag across all nodes
 //   If no, do nothing
-func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *git.Repository, templates *template.Template, snowManager snowIFC.SNowManagerInterface) {
+func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *git.Repository, templates *template.Template, cmAdapter cm_adapter.ChangeManagementAdapter) {
 	var err error
 	var ns *NodeSet
 	var perApply *NodeSet
@@ -2407,27 +2406,9 @@ func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *gi
 		}
 	}
 	logger.Printf("Tag '%s' is ready to apply, applying with set order: %v", nextTag, conf.ApplySetOrder)
-	changeRequestID, createError := snowManager.SearchAndCreateChangeRequest(conf.EnvPrefix, nextTag)
-	logger.Printf("CreateChangeRequest Status for %s:: : changeRequestID::%s and  createError::'%v'", nextTag, changeRequestID, createError)
-	/*
-		for {
-			isCheckedIN, checkinError := snowutil.CheckInChangeRequest(changeRequestID)
-			logger.Printf("CheckInChangeRequest Status: isCheckedIN::%t and  checkinError::'%v'", isCheckedIN, checkinError)
-
-			if checkinError != nil || isCheckedIN == false {
-				sleepLogMsg := fmt.Sprintf("ChangeRequest %s is failed to CheckIn::  '%v'", changeRequestID, checkinError)
-				sleepAndLog(applySetSleep, time.Duration(1)*time.Second, sleepLogMsg, logger)
-			} else {
-				break
-			}
-
-		}
-	*/
-	isCheckedIN, checkinError := snowManager.CheckInChangeRequest(changeRequestID)
-	logger.Printf("CheckInChangeRequest Status: isCheckedIN::%t and  checkinError::'%v'", isCheckedIN, checkinError)
-
-	if checkinError != nil || isCheckedIN == false {
-		logger.Printf(changeRequestID, "is not checked, returing from apply")
+	changeRequestID, pauseExecution := createChangeRequest(logger, conf.EnvPrefix, nextTag, cmAdapter)
+	if pauseExecution == true {
+		logger.Printf(changeRequestID, "is not created/checked, returning from apply")
 		return
 	}
 	var applyErrors []error
@@ -2442,7 +2423,7 @@ func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *gi
 			logger.Printf("Error: unable to dial node set: %v", err)
 			break
 		}
-		appliedNodes, beyondRevNodes, err := applyNodeSet(perApply, false, false, nextTag, repo, conf.LockMessage, conf, ghclient, snowManager, changeRequestID, logger)
+		appliedNodes, beyondRevNodes, err := applyNodeSet(perApply, false, false, nextTag, repo, conf.LockMessage, conf, ghclient, cmAdapter, changeRequestID, logger)
 		if err != nil {
 			logger.Printf("Error: unable to apply nodes, returning: %v", err)
 			closeNodeSet(perApply, logger)
@@ -2466,7 +2447,7 @@ func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *gi
 			}
 		}
 	}
-	isSignedOff, signOffError := snowManager.SignOffChangeRequest(changeRequestID)
+	isSignedOff, signOffError := cmAdapter.SignOffChangeRequest(changeRequestID)
 	logger.Printf("SignOffChangeRequest Status: isSignedOff::%t and  signOffError::'%v'", isSignedOff, signOffError)
 	err = reportErrors(applyErrors, true, conf, templates, logger)
 	if err != nil {
@@ -4516,10 +4497,10 @@ type HecklerdApp struct {
 	delDups      bool
 	clearGitHub  bool
 	printVersion bool
-	snowManager  snowIFC.SNowManagerInterface
+	cmAdapter    cm_adapter.ChangeManagementAdapter
 }
 
-func NewHecklerdApp(defaultTemplatesPath string, snowManager snowIFC.SNowManagerInterface) (HecklerdApp, error) {
+func NewHecklerdApp(defaultTemplatesPath string, cmIFCMGR cm_ifc.ChangeManagementInterface) (HecklerdApp, error) {
 	log.SetFlags(log.Lshortfile)
 	hAppLogger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
 	var clearState bool
@@ -4540,6 +4521,10 @@ func NewHecklerdApp(defaultTemplatesPath string, snowManager snowIFC.SNowManager
 	}
 	validateConfig(hAppLogger, hecklerdConf, clearState, clearGitHub)
 	templates := parseTemplates(defaultTemplatesPath)
+	cmAdapter, cmError := cm_adapter.NewCMAdapter(hecklerdConf.ChangeManagementConfig, cmIFCMGR)
+	if cmError != nil {
+		hAppLogger.Fatalf("Cannot get CM Adapter")
+	}
 	hm := HecklerdApp{hecklerdConf: hecklerdConf,
 		hAppLogger:   hAppLogger,
 		templates:    templates,
@@ -4549,7 +4534,7 @@ func NewHecklerdApp(defaultTemplatesPath string, snowManager snowIFC.SNowManager
 		delDups:      delDups,
 		clearGitHub:  clearGitHub,
 		printVersion: printVersion,
-		snowManager:  snowManager,
+		cmAdapter:    cmAdapter,
 	}
 	return hm, nil
 
@@ -4559,8 +4544,8 @@ func (hApp HecklerdApp) Run() {
 	t := time.Now()
 	abbrevZone, _ := t.Zone()
 	var err error
-	changeJson, err := hApp.snowManager.GetChangeRequestDetails("testID")
-	fmt.Println("changeJson,err", changeJson, err)
+	isValid, vError := hApp.cmAdapter.Validate()
+	fmt.Println("cmAdapter.Validate,err", isValid, vError)
 	logger := hApp.hAppLogger
 	conf := hApp.hecklerdConf
 
@@ -4638,6 +4623,7 @@ func (hApp HecklerdApp) Run() {
 	hecklerServer.conf = conf
 	hecklerServer.templates = hApp.templates
 	hecklerServer.repo = repo
+	hecklerServer.cmAdapter = hApp.cmAdapter
 	hecklerpb.RegisterHecklerServer(grpcServer, hecklerServer)
 
 	// grpc server
@@ -4732,7 +4718,7 @@ func (hApp HecklerdApp) Run() {
 			hecklerdCron.AddFunc(
 				conf.ApplyCronSchedule,
 				func() {
-					apply(noopLock, applySem, conf, repo, hApp.templates, hApp.snowManager)
+					apply(noopLock, applySem, conf, repo, hApp.templates, hApp.cmAdapter)
 				},
 			)
 		}

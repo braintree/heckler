@@ -1,20 +1,26 @@
 # github.com/Masterminds/goutils v1.1.0
+## explicit
 github.com/Masterminds/goutils
 # github.com/Masterminds/semver v1.5.0
+## explicit
 github.com/Masterminds/semver
 # github.com/Masterminds/semver/v3 v3.0.3
+## explicit
 github.com/Masterminds/semver/v3
 # github.com/Masterminds/sprig v2.22.0+incompatible
+## explicit
 github.com/Masterminds/sprig
 # github.com/abbot/go-http-auth v0.4.0
 github.com/abbot/go-http-auth
 # github.com/bradleyfalzon/ghinstallation v1.1.1
+## explicit
 github.com/bradleyfalzon/ghinstallation
 # github.com/deckarep/golang-set v0.0.0-20170202203032-fc8930a5e645
 github.com/deckarep/golang-set
 # github.com/dgrijalva/jwt-go v3.2.0+incompatible
 github.com/dgrijalva/jwt-go
 # github.com/gogo/protobuf v1.3.1
+## explicit
 github.com/gogo/protobuf/proto
 # github.com/golang/protobuf v1.3.3
 github.com/golang/protobuf/proto
@@ -23,6 +29,7 @@ github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
 # github.com/google/go-cmp v0.4.1
+## explicit
 github.com/google/go-cmp/cmp
 github.com/google/go-cmp/cmp/cmpopts
 github.com/google/go-cmp/cmp/internal/diff
@@ -30,45 +37,59 @@ github.com/google/go-cmp/cmp/internal/flags
 github.com/google/go-cmp/cmp/internal/function
 github.com/google/go-cmp/cmp/internal/value
 # github.com/google/go-github/v29 v29.0.3
+## explicit
 github.com/google/go-github/v29/github
 # github.com/google/go-querystring v1.0.0
 github.com/google/go-querystring/query
 # github.com/google/uuid v1.1.1
+## explicit
 github.com/google/uuid
 # github.com/gorilla/websocket v1.4.2
 github.com/gorilla/websocket
 # github.com/hmarr/codeowners v0.2.0
+## explicit
 github.com/hmarr/codeowners
 # github.com/huandu/xstrings v1.3.0
+## explicit
 github.com/huandu/xstrings
 # github.com/imdario/mergo v0.3.8
+## explicit
 github.com/imdario/mergo
 # github.com/libgit2/git2go/v31 v31.0.0
+## explicit
 github.com/libgit2/git2go/v31
 # github.com/lollipopman/git-cgi-server v1.0.2-0.20200407142400-d6c3040ae76f
+## explicit
 github.com/lollipopman/git-cgi-server
 # github.com/lollipopman/luser v0.0.0-20200226194359-0e64908ec951
+## explicit
 github.com/lollipopman/luser
 # github.com/lyraproj/issue v0.0.0-20190606092846-e082d6813d15
 github.com/lyraproj/issue/issue
 # github.com/lyraproj/puppet-parser v0.0.0-20190606112603-21687f912799
+## explicit
 github.com/lyraproj/puppet-parser/parser
 github.com/lyraproj/puppet-parser/pn
 # github.com/mitchellh/copystructure v1.0.0
+## explicit
 github.com/mitchellh/copystructure
 # github.com/mitchellh/reflectwalk v1.0.1
+## explicit
 github.com/mitchellh/reflectwalk
 # github.com/orcaman/concurrent-map v0.0.0-20160823150647-8bf1e9bacbf6
 github.com/orcaman/concurrent-map
 # github.com/pkg/errors v0.8.0
 github.com/pkg/errors
 # github.com/rickar/cal/v2 v2.0.0
+## explicit
 github.com/rickar/cal/v2
 github.com/rickar/cal/v2/aa
 github.com/rickar/cal/v2/us
 # github.com/robfig/cron/v3 v3.0.1
+## explicit
 github.com/robfig/cron/v3
 # github.com/slack-go/slack v0.8.0
+## explicit
 github.com/slack-go/slack
 github.com/slack-go/slack/internal/backoff
 github.com/slack-go/slack/internal/errorsx
@@ -76,6 +97,7 @@ github.com/slack-go/slack/internal/misc
 github.com/slack-go/slack/internal/timex
 github.com/slack-go/slack/slackutilsx
 # github.com/square/grange v0.0.0-20200108221412-2a4cb7b5b334
+## explicit
 github.com/square/grange
 # golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de
 golang.org/x/crypto/bcrypt
@@ -98,8 +120,10 @@ golang.org/x/net/idna
 golang.org/x/net/internal/timeseries
 golang.org/x/net/trace
 # golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5
+## explicit
 golang.org/x/sys/unix
 # golang.org/x/text v0.3.2
+## explicit
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
@@ -108,8 +132,10 @@ golang.org/x/text/unicode/norm
 golang.org/x/xerrors
 golang.org/x/xerrors/internal
 # google.golang.org/genproto v0.0.0-20200205142000-a86caf926a67
+## explicit
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.28.1
+## explicit
 google.golang.org/grpc
 google.golang.org/grpc/attributes
 google.golang.org/grpc/backoff
@@ -149,6 +175,8 @@ google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
 # gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+## explicit
 gopkg.in/yaml.v3
 # vbom.ml/util v0.0.0-20150502001426-d600ec780753
 vbom.ml/util/sortorder
+# github.com/braintree/heckler => ../heckler
