@@ -4501,8 +4501,8 @@ type HecklerdApp struct {
 }
 
 func NewHecklerdApp(defaultTemplatesPath string, cmIFCMGR cm_ifc.ChangeManagementInterface) (HecklerdApp, error) {
-	log.SetFlags(log.Lshortfile)
-	hAppLogger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	hAppLogger := log.New(os.Stdout, "[Main] ", log.LstdFlags|log.Lshortfile)
 	var clearState bool
 	var delDups bool
 	var clearGitHub bool

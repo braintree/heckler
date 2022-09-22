@@ -2,10 +2,10 @@ package cm_adapter
 
 import (
 	"errors"
-	"fmt"
 	cmIFC "github.com/braintree/heckler/change_management/interfaces"
 	snow_cli_manager "github.com/braintree/heckler/change_management/snow_cli_manager"
 	snow_plugin_manager "github.com/braintree/heckler/change_management/snow_plugin_manager"
+	"log"
 )
 
 func getCMProvider(cmConfig cmIFC.ChangeManagementConfig, cmIFCMGR cmIFC.ChangeManagementInterface) (cmIFC.ChangeManagementInterface, error) {
@@ -13,20 +13,20 @@ func getCMProvider(cmConfig cmIFC.ChangeManagementConfig, cmIFCMGR cmIFC.ChangeM
 	var cmProvider cmIFC.ChangeManagementInterface
 	var cmProviderError error
 	if cmIFCMGR != nil {
-		fmt.Println("cmIFCMGR is passed::", cmIFCMGR)
+		log.Println("cmIFCMGR is passed::", cmIFCMGR)
 		cmProvider, cmProviderError = cmIFCMGR, nil
 
 	}
 	if cmConfig.SNOWCLIPath != "" {
-		fmt.Println("SNOWCLIPath::", cmConfig.SNOWCLIPath)
+		log.Println("SNOWCLIPath::", cmConfig.SNOWCLIPath)
 		cmProvider, cmProviderError = snow_cli_manager.GetSNowCLIManager(cmConfig.SNOWCLIPath)
 	}
 	if cmConfig.SNOWPluginPath != "" {
-		fmt.Println("SNOWPluginPath::", cmConfig.SNOWPluginPath)
+		log.Println("SNOWPluginPath::", cmConfig.SNOWPluginPath)
 		cmProvider, cmProviderError = snow_plugin_manager.GetSNowPluginManager(cmConfig.SNOWPluginPath)
 	}
 	if cmProviderError != nil {
-		fmt.Println("cmProviderError::", cmProviderError)
+		log.Println("cmProviderError::", cmProviderError)
 		return emptyCMProvider, cmProviderError
 	}
 	isValidated, vError := cmProvider.Validate()
@@ -35,12 +35,12 @@ func getCMProvider(cmConfig cmIFC.ChangeManagementConfig, cmIFCMGR cmIFC.ChangeM
 			return cmProvider, nil
 		} else {
 			msg := fmt.Sprintf("cmProvider %t Validate returns %t", cmProvider, isValidated)
-			fmt.Println()
+			log.Println()
 			return emptyCMProvider, errors.New(msg)
 		}
 	} else {
 		msg := fmt.Sprintf("cmProvider %t Not able to call Validate method %v", cmProvider, vError)
-		fmt.Println(msg)
+		log.Println(msg)
 		return emptyCMProvider, errors.New(msg)
 	}
 

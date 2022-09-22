@@ -444,7 +444,7 @@ func validateConfig(logger *log.Logger, conf *RizzoConf) {
 
 }
 func NewRizzodApp() (RizzodApp, error) {
-	log.SetFlags(log.Lshortfile)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	rizzodAppLogger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
 
 	var clearState bool
