@@ -2,44 +2,45 @@ package cm_adapter
 
 import (
 	"errors"
-	cmIFC "github.com/braintree/heckler/change_management/interfaces"
-	snow_cli_manager "github.com/braintree/heckler/change_management/snow_cli_manager"
-	snow_plugin_manager "github.com/braintree/heckler/change_management/snow_plugin_manager"
+	"fmt"
+	cm_cli "github.com/braintree/heckler/change_management/agent/cli"
+	cm_plugin "github.com/braintree/heckler/change_management/agent/plugin"
+	cm_itfc "github.com/braintree/heckler/change_management/interfaces"
 	"log"
 )
 
-func getCMProvider(cmConfig cmIFC.ChangeManagementConfig, cmIFCMGR cmIFC.ChangeManagementInterface) (cmIFC.ChangeManagementInterface, error) {
-	var emptyCMProvider cmIFC.ChangeManagementInterface
-	var cmProvider cmIFC.ChangeManagementInterface
-	var cmProviderError error
-	if cmIFCMGR != nil {
-		log.Println("cmIFCMGR is passed::", cmIFCMGR)
-		cmProvider, cmProviderError = cmIFCMGR, nil
+func getCMAgent(adapterConfig cm_itfc.ChangeManagementAdapterConfig, cmITFCMGR cm_itfc.ChangeManagementInterface) (cm_itfc.ChangeManagementInterface, error) {
+	var emptyCMProvider cm_itfc.ChangeManagementInterface
+	var cmAgent cm_itfc.ChangeManagementInterface
+	var cmAgentError error
+	if cmITFCMGR != nil {
+		log.Println("cmITFCMGR is passed::", cmITFCMGR)
+		cmAgent, cmAgentError = cmITFCMGR, nil
 
 	}
-	if cmConfig.SNOWCLIPath != "" {
-		log.Println("SNOWCLIPath::", cmConfig.SNOWCLIPath)
-		cmProvider, cmProviderError = snow_cli_manager.GetSNowCLIManager(cmConfig.SNOWCLIPath)
+	if adapterConfig.CLIAgentPath != "" {
+		log.Println("CLIAgentPath::", adapterConfig.CLIAgentPath)
+		cmAgent, cmAgentError = cm_cli.GetCMCLIAgent(adapterConfig.CLIAgentPath, adapterConfig.Verbose)
 	}
-	if cmConfig.SNOWPluginPath != "" {
-		log.Println("SNOWPluginPath::", cmConfig.SNOWPluginPath)
-		cmProvider, cmProviderError = snow_plugin_manager.GetSNowPluginManager(cmConfig.SNOWPluginPath)
+	if adapterConfig.PluginAgentPath != "" {
+		log.Println("PluginAgentPath::", adapterConfig.PluginAgentPath)
+		cmAgent, cmAgentError = cm_plugin.GetCMPluginAgent(adapterConfig.PluginAgentPath)
 	}
-	if cmProviderError != nil {
-		log.Println("cmProviderError::", cmProviderError)
-		return emptyCMProvider, cmProviderError
+	if cmAgentError != nil {
+		log.Println("cmAgentError::", cmAgentError)
+		return emptyCMProvider, cmAgentError
 	}
-	isValidated, vError := cmProvider.Validate()
+	isValidated, vError := cmAgent.Validate()
 	if vError == nil {
 		if isValidated {
-			return cmProvider, nil
+			return cmAgent, nil
 		} else {
-			msg := fmt.Sprintf("cmProvider %t Validate returns %t", cmProvider, isValidated)
-			log.Println()
+			msg := fmt.Sprintf("cmAgent %t Validate returns %t", cmAgent, isValidated)
+			log.Println(msg)
 			return emptyCMProvider, errors.New(msg)
 		}
 	} else {
-		msg := fmt.Sprintf("cmProvider %t Not able to call Validate method %v", cmProvider, vError)
+		msg := fmt.Sprintf("cmAgent %t Not able to call Validate method %v", cmAgent, vError)
 		log.Println(msg)
 		return emptyCMProvider, errors.New(msg)
 	}
@@ -47,53 +48,58 @@ func getCMProvider(cmConfig cmIFC.ChangeManagementConfig, cmIFCMGR cmIFC.ChangeM
 }
 
 type ChangeManagementAdapter struct {
-	cmConfig   cmIFC.ChangeManagementConfig
-	cmProvider cmIFC.ChangeManagementInterface
+	// 	cmConfig    cm_itfc.ChangeManagementConfig
+	cmAgent       cm_itfc.ChangeManagementInterface
+	adapterConfig cm_itfc.ChangeManagementAdapterConfig
 }
 
-func NewCMAdapter(cmConfig cmIFC.ChangeManagementConfig, cmIFCMGR cmIFC.ChangeManagementInterface) (ChangeManagementAdapter, error) {
+func NewCMAdapter(adapterConfig cm_itfc.ChangeManagementAdapterConfig, cm_itfcMGR cm_itfc.ChangeManagementInterface) (ChangeManagementAdapter, error) {
 	var cmAdapter ChangeManagementAdapter
-	provider, pError := getCMProvider(cmConfig, cmIFCMGR)
+	agent, pError := getCMAgent(adapterConfig, cm_itfcMGR)
 	if pError != nil {
 		return cmAdapter, pError
 	}
-	cmAdapter = ChangeManagementAdapter{cmConfig: cmConfig, cmProvider: provider}
+	// 	var cmConfig cm_itfc.ChangeManagementConfig
+	cmAdapter = ChangeManagementAdapter{adapterConfig: adapterConfig, cmAgent: agent}
 	return cmAdapter, nil
 
 }
 func (cmAdapter ChangeManagementAdapter) GetChangeRequestDetails(changeRequestID string) (string, error) {
 	if changeRequestID == "" {
-		fmt.Printf("GetChangeRequestDetails::changeRequestID is empty")
+		log.Println("GetChangeRequestDetails::changeRequestID is empty")
 		return "", nil
 	}
-	crDetails, crError := cmAdapter.cmProvider.GetChangeRequestDetails(changeRequestID)
-	if crError != nil && cmAdapter.cmConfig.IsMandatory == false {
+	crDetails, crError := cmAdapter.cmAgent.GetChangeRequestDetails(changeRequestID)
+	if crError != nil && cmAdapter.isMandatory() == false {
 		return "", nil
 	}
 	return crDetails, crError
 }
 func (cmAdapter ChangeManagementAdapter) SearchChangeRequest(gsnowEnv, tag string) (string, error) {
 
-	crID, searchError := cmAdapter.cmProvider.SearchChangeRequest(gsnowEnv, tag)
-	if searchError != nil && cmAdapter.cmConfig.IsMandatory == false {
-		fmt.Printf("SearchChangeRequest::IsMandatory is false", searchError)
+	crID, searchError := cmAdapter.cmAgent.SearchChangeRequest(gsnowEnv, tag)
+	if searchError != nil && cmAdapter.isMandatory() == false {
+		log.Println("SearchChangeRequest::IsMandatory is false", searchError)
 		return "", nil
 	}
 	return crID, searchError
 }
+
+/*
 func (cmAdapter ChangeManagementAdapter) SearchAndCreateChangeRequest(hecklerEnv, tag string) (string, error) {
 
-	crID, searchError := cmAdapter.cmProvider.SearchAndCreateChangeRequest(hecklerEnv, tag)
-	if searchError != nil && cmAdapter.cmConfig.IsMandatory == false {
-		fmt.Printf("SearchAndCreateChangeRequest::IsMandatory is false", searchError)
+	crID, searchError := cmAdapter.cmAgent.SearchAndCreateChangeRequest(hecklerEnv, tag)
+	if searchError != nil && cmAdapter.isMandatory() == false {
+		log.Println("SearchAndCreateChangeRequest::IsMandatory is false", searchError)
 		return "", nil
 	}
 	return crID, searchError
 }
+*/
 func (cmAdapter ChangeManagementAdapter) CreateChangeRequest(gsnowEnv, tag string) (string, error) {
-	crID, crError := cmAdapter.cmProvider.CreateChangeRequest(gsnowEnv, tag)
-	if crError != nil && cmAdapter.cmConfig.IsMandatory == false {
-		fmt.Printf("CreateChangeRequest::IsMandatory is false", crError)
+	crID, crError := cmAdapter.cmAgent.CreateChangeRequest(gsnowEnv, tag)
+	if crError != nil && cmAdapter.isMandatory() == false {
+		log.Println("CreateChangeRequest::IsMandatory is false", crError)
 		return "", nil
 	}
 	return crID, crError
@@ -101,63 +107,77 @@ func (cmAdapter ChangeManagementAdapter) CreateChangeRequest(gsnowEnv, tag strin
 }
 func (cmAdapter ChangeManagementAdapter) CommentChangeRequest(changeRequestID, comments string) (bool, error) {
 	if changeRequestID == "" {
-		fmt.Printf("CommentChangeRequest::changeRequestID is empty")
+		log.Println("CommentChangeRequest::changeRequestID is empty")
 		return true, nil
 	}
-	updated, crError := cmAdapter.cmProvider.CommentChangeRequest(changeRequestID, comments)
+	updated, crError := cmAdapter.cmAgent.CommentChangeRequest(changeRequestID, comments)
 
-	if crError != nil && cmAdapter.cmConfig.IsMandatory == false {
-		fmt.Printf("CommentChangeRequest::IsMandatory is false", crError)
+	if crError != nil && cmAdapter.isMandatory() == false {
+		log.Println("CommentChangeRequest::IsMandatory is false", crError)
 		return true, nil
 	}
 	return updated, crError
 }
-func (cmAdapter ChangeManagementAdapter) CheckInChangeRequest(changeRequestID string) (bool, error) {
+func (cmAdapter ChangeManagementAdapter) CheckInChangeRequest(changeRequestID, comments string) (bool, error) {
 	if changeRequestID == "" {
-		fmt.Printf("CheckInChangeRequest::changeRequestID is empty")
+		log.Println("CheckInChangeRequest::changeRequestID is empty")
 		return true, nil
 	}
-	updated, crError := cmAdapter.cmProvider.CheckInChangeRequest(changeRequestID)
-	if crError != nil && cmAdapter.cmConfig.IsMandatory == false {
-		fmt.Printf("CheckInChangeRequest::IsMandatory is false", crError)
+	updated, crError := cmAdapter.cmAgent.CheckInChangeRequest(changeRequestID, comments)
+	if crError != nil && cmAdapter.isMandatory() == false {
+		log.Println("CheckInChangeRequest::IsMandatory is false", crError)
 		return true, nil
 	}
 	return updated, crError
 }
-func (cmAdapter ChangeManagementAdapter) SignOffChangeRequest(changeRequestID string) (bool, error) {
+
+func (cmAdapter ChangeManagementAdapter) ReviewChangeRequest(changeRequestID, comments string) (bool, error) {
 	if changeRequestID == "" {
-		fmt.Printf("SignOffChangeRequest::changeRequestID is empty")
+		log.Println("ReviewChangeRequest::changeRequestID is empty")
 		return true, nil
 	}
-	updated, crError := cmAdapter.cmProvider.SignOffChangeRequest(changeRequestID)
-	if crError != nil && cmAdapter.cmConfig.IsMandatory == false {
-		fmt.Printf("SignOffChangeRequest::IsMandatory is false", crError)
+	updated, crError := cmAdapter.cmAgent.ReviewChangeRequest(changeRequestID, comments)
+	if crError != nil && cmAdapter.isMandatory() == false {
+		log.Println("ReviewChangeRequest::IsMandatory is false", crError)
+		return true, nil
+	}
+	return updated, crError
+}
+
+func (cmAdapter ChangeManagementAdapter) SignOffChangeRequest(changeRequestID, comments string) (bool, error) {
+	if changeRequestID == "" {
+		log.Println("SignOffChangeRequest::changeRequestID is empty")
+		return true, nil
+	}
+	updated, crError := cmAdapter.cmAgent.SignOffChangeRequest(changeRequestID, comments)
+	if crError != nil && cmAdapter.isMandatory() == false {
+		log.Println("SignOffChangeRequest::IsMandatory is false", crError)
 		return true, nil
 	}
 	return updated, crError
 }
 
 func (cmAdapter ChangeManagementAdapter) Validate() (bool, error) {
-	if cmAdapter.cmConfig.IsMandatory == false {
-		fmt.Printf("Validate::IsMandatory is false")
+	if cmAdapter.isMandatory() == false {
+		log.Println("Validate::IsMandatory is false")
 		return true, nil
 	}
-	return cmAdapter.cmProvider.Validate()
+	return cmAdapter.cmAgent.Validate()
 
 }
 
-func (cmAdapter ChangeManagementAdapter) OnErrorFail() bool {
-	if cmAdapter.cmConfig.IsMandatory == true {
+func (cmAdapter ChangeManagementAdapter) onErrorStop() bool {
+	if cmAdapter.isMandatory() == true {
 		return true
 	} else {
-		fmt.Printf("OnErrorFail::IsMandatory is false so returning ONErrorFail returning configured value")
+		log.Println("OnErrorStop::IsMandatory is false so returning ONErrorFail returning configured value")
 
-		return cmAdapter.cmConfig.OnErrorFail
+		return cmAdapter.adapterConfig.OnErrorStop
 	}
 
 }
 
-func (cmAdapter ChangeManagementAdapter) IsMandatory() bool {
-	return cmAdapter.cmConfig.IsMandatory
+func (cmAdapter ChangeManagementAdapter) isMandatory() bool {
+	return cmAdapter.adapterConfig.IsMandatory
 
 }

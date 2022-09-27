@@ -30,7 +30,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/Masterminds/sprig"
 	cm_adapter "github.com/braintree/heckler/change_management/cm_adapter"
-	cm_ifc "github.com/braintree/heckler/change_management/interfaces"
+	cm_itfc "github.com/braintree/heckler/change_management/interfaces"
 	"github.com/braintree/heckler/internal/gitutil"
 	"github.com/braintree/heckler/internal/heckler"
 	"github.com/braintree/heckler/internal/hecklerpb"
@@ -193,46 +193,46 @@ type IgnoredResources struct {
 }
 
 type HecklerdConf struct {
-	AdminOwners                []string                      `yaml:"admin_owners"`
-	ApplySetOrder              []string                      `yaml:"apply_set_order"`
-	ApplySetSleepSeconds       int                           `yaml:"apply_set_sleep_seconds"`
-	AutoCloseIssues            bool                          `yaml:"auto_close_issues"`
-	AutoTagCronSchedule        string                        `yaml:"auto_tag_cron_schedule"`
-	EnvPrefix                  string                        `yaml:"env_prefix"`
-	GitHubAppEmail             string                        `yaml:"github_app_email"`
-	GitHubAppId                int64                         `yaml:"github_app_id"`
-	GitHubAppInstallId         int64                         `yaml:"github_app_install_id"`
-	GitHubAppSlug              string                        `yaml:"github_app_slug"`
-	GitHubDisableNotifications bool                          `yaml:"github_disable_notifications"`
-	GitHubDomain               string                        `yaml:"github_domain"`
-	GitHubHttpProxy            string                        `yaml:"github_http_proxy"`
-	GitHubPrivateKeyPath       string                        `yaml:"github_private_key_path"`
-	GitServerMaxClients        int                           `yaml:"git_server_max_clients"`
-	GroupedNoopDir             string                        `yaml:"grouped_noop_dir"`
-	IgnoredResources           []IgnoredResources            `yaml:"ignored_resources"`
-	LockMessage                string                        `yaml:"lock_message"`
-	LoopApprovalSleepSeconds   int                           `yaml:"loop_approval_sleep_seconds"`
-	LoopCleanSleepSeconds      int                           `yaml:"loop_clean_sleep_seconds"`
-	LoopMilestoneSleepSeconds  int                           `yaml:"loop_milestone_sleep_seconds"`
-	LoopNoopSleepSeconds       int                           `yaml:"loop_noop_sleep_seconds"`
-	ManualMode                 bool                          `yaml:"manual_mode"`
-	MaxNodeThresholds          NodeThresholds                `yaml:"max_node_thresholds"`
-	ModulesPaths               []string                      `yaml:"module_paths"`
-	NodeSets                   map[string]NodeSetCfg         `yaml:"node_sets"`
-	Timezone                   string                        `yaml:"timezone"`
-	HoundWait                  string                        `yaml:"hound_wait"`
-	HoundCronSchedule          string                        `yaml:"hound_cron_schedule"`
-	ApplyCronSchedule          string                        `yaml:"apply_cron_schedule"`
-	NoopDir                    string                        `yaml:"noop_dir"`
-	Repo                       string                        `yaml:"repo"`
-	RepoBranch                 string                        `yaml:"repo_branch"`
-	RepoOwner                  string                        `yaml:"repo_owner"`
-	ServedRepo                 string                        `yaml:"served_repo"`
-	SlackAnnounceChannels      []SlackChannelCfg             `yaml:"slack_announce_channels"`
-	SlackPrivateConfPath       string                        `yaml:"slack_private_conf_path"`
-	StateDir                   string                        `yaml:"state_dir"`
-	WorkRepo                   string                        `yaml:"work_repo"`
-	ChangeManagementConfig     cm_ifc.ChangeManagementConfig `yaml:"change_management_config"`
+	AdminOwners                []string                              `yaml:"admin_owners"`
+	ApplySetOrder              []string                              `yaml:"apply_set_order"`
+	ApplySetSleepSeconds       int                                   `yaml:"apply_set_sleep_seconds"`
+	AutoCloseIssues            bool                                  `yaml:"auto_close_issues"`
+	AutoTagCronSchedule        string                                `yaml:"auto_tag_cron_schedule"`
+	EnvPrefix                  string                                `yaml:"env_prefix"`
+	GitHubAppEmail             string                                `yaml:"github_app_email"`
+	GitHubAppId                int64                                 `yaml:"github_app_id"`
+	GitHubAppInstallId         int64                                 `yaml:"github_app_install_id"`
+	GitHubAppSlug              string                                `yaml:"github_app_slug"`
+	GitHubDisableNotifications bool                                  `yaml:"github_disable_notifications"`
+	GitHubDomain               string                                `yaml:"github_domain"`
+	GitHubHttpProxy            string                                `yaml:"github_http_proxy"`
+	GitHubPrivateKeyPath       string                                `yaml:"github_private_key_path"`
+	GitServerMaxClients        int                                   `yaml:"git_server_max_clients"`
+	GroupedNoopDir             string                                `yaml:"grouped_noop_dir"`
+	IgnoredResources           []IgnoredResources                    `yaml:"ignored_resources"`
+	LockMessage                string                                `yaml:"lock_message"`
+	LoopApprovalSleepSeconds   int                                   `yaml:"loop_approval_sleep_seconds"`
+	LoopCleanSleepSeconds      int                                   `yaml:"loop_clean_sleep_seconds"`
+	LoopMilestoneSleepSeconds  int                                   `yaml:"loop_milestone_sleep_seconds"`
+	LoopNoopSleepSeconds       int                                   `yaml:"loop_noop_sleep_seconds"`
+	ManualMode                 bool                                  `yaml:"manual_mode"`
+	MaxNodeThresholds          NodeThresholds                        `yaml:"max_node_thresholds"`
+	ModulesPaths               []string                              `yaml:"module_paths"`
+	NodeSets                   map[string]NodeSetCfg                 `yaml:"node_sets"`
+	Timezone                   string                                `yaml:"timezone"`
+	HoundWait                  string                                `yaml:"hound_wait"`
+	HoundCronSchedule          string                                `yaml:"hound_cron_schedule"`
+	ApplyCronSchedule          string                                `yaml:"apply_cron_schedule"`
+	NoopDir                    string                                `yaml:"noop_dir"`
+	Repo                       string                                `yaml:"repo"`
+	RepoBranch                 string                                `yaml:"repo_branch"`
+	RepoOwner                  string                                `yaml:"repo_owner"`
+	ServedRepo                 string                                `yaml:"served_repo"`
+	SlackAnnounceChannels      []SlackChannelCfg                     `yaml:"slack_announce_channels"`
+	SlackPrivateConfPath       string                                `yaml:"slack_private_conf_path"`
+	StateDir                   string                                `yaml:"state_dir"`
+	WorkRepo                   string                                `yaml:"work_repo"`
+	CMAdapterConfig            cm_itfc.ChangeManagementAdapterConfig `yaml:"change_management_adapter_config"`
 }
 
 type SlackConf struct {
@@ -4500,7 +4500,7 @@ type HecklerdApp struct {
 	cmAdapter    cm_adapter.ChangeManagementAdapter
 }
 
-func NewHecklerdApp(defaultTemplatesPath string, cmIFCMGR cm_ifc.ChangeManagementInterface) (HecklerdApp, error) {
+func NewHecklerdApp(defaultTemplatesPath string, cmITFCMGR cm_itfc.ChangeManagementInterface) (HecklerdApp, error) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	hAppLogger := log.New(os.Stdout, "[Main] ", log.LstdFlags|log.Lshortfile)
 	var clearState bool
@@ -4521,7 +4521,9 @@ func NewHecklerdApp(defaultTemplatesPath string, cmIFCMGR cm_ifc.ChangeManagemen
 	}
 	validateConfig(hAppLogger, hecklerdConf, clearState, clearGitHub)
 	templates := parseTemplates(defaultTemplatesPath)
-	cmAdapter, cmError := cm_adapter.NewCMAdapter(hecklerdConf.ChangeManagementConfig, cmIFCMGR)
+	// 	if CMConfigPath  ***FIX IT
+	cmAdapterConfig := hecklerdConf.CMAdapterConfig
+	cmAdapter, cmError := cm_adapter.NewCMAdapter(cmAdapterConfig, cmITFCMGR)
 	if cmError != nil {
 		hAppLogger.Fatalf("Cannot get CM Adapter")
 	}
