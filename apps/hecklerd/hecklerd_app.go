@@ -1267,8 +1267,10 @@ func parseTemplates(defaultTemplatesPath string) *template.Template {
 	var templatesPath string
 	if _, err := os.Stat("/usr/share/hecklerd/templates"); err == nil {
 		templatesPath = "/usr/share/hecklerd/templates" + "/*.tmpl"
-	} else {
+	} else if defaultTemplatesPath != "" {
 		templatesPath = defaultTemplatesPath + "/*.tmpl"
+	} else {
+		templatesPath = defaultTemplatesPath + "*.tmpl"
 	}
 	return template.Must(template.New("base").Funcs(sprig.TxtFuncMap()).ParseGlob(templatesPath))
 }
@@ -1422,14 +1424,16 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 			return nil, err
 		}
 	} else {
-		changeRequestID, pauseExecution := createChangeRequest(logger, hs.conf.EnvPrefix, req.Rev, hs.cmAdapter)
+		checkINComments := "Checking the CR by hecklerServer(apply)"
+		changeRequestID, pauseExecution := hs.cmAdapter.CreateAndCheckInCR(hs.conf.EnvPrefix, req.Rev, checkINComments)
 		if pauseExecution == true {
 			msg := fmt.Sprintf("'(%s)'is not created/checked, returning from apply", changeRequestID)
 			logger.Println(msg)
 			return nil, errors.New(msg)
 		}
 		appliedNodes, beyondRevNodes, err := applyNodeSet(ns, req.Force, req.Noop, req.Rev, hs.repo, hs.conf.LockMessage, hs.conf, ghclient, hs.cmAdapter, changeRequestID, logger)
-		isSignedOff, signOffError := hs.cmAdapter.SignOffChangeRequest(changeRequestID)
+		signOffComments := "SigningOff the changeRequest by hecklerServer(apply)"
+		isSignedOff, signOffError := hs.cmAdapter.SignOffChangeRequest(changeRequestID, signOffComments)
 		logger.Printf("SignOffChangeRequest Status: isSignedOff::%t and  signOffError::'%v'", isSignedOff, signOffError)
 
 		if err != nil {
@@ -2406,7 +2410,8 @@ func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *gi
 		}
 	}
 	logger.Printf("Tag '%s' is ready to apply, applying with set order: %v", nextTag, conf.ApplySetOrder)
-	changeRequestID, pauseExecution := createChangeRequest(logger, conf.EnvPrefix, nextTag, cmAdapter)
+	checkINComments := "Checking the CR by Hecklerd(apply)"
+	changeRequestID, pauseExecution := cmAdapter.CreateAndCheckInCR(conf.EnvPrefix, nextTag, checkINComments)
 	if pauseExecution == true {
 		logger.Printf(changeRequestID, "is not created/checked, returning from apply")
 		return
@@ -2447,8 +2452,7 @@ func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *gi
 			}
 		}
 	}
-	isSignedOff, signOffError := cmAdapter.SignOffChangeRequest(changeRequestID)
-	logger.Printf("SignOffChangeRequest Status: isSignedOff::%t and  signOffError::'%v'", isSignedOff, signOffError)
+	signOffChangeRequest(logger, changeRequestID, cmAdapter)
 	err = reportErrors(applyErrors, true, conf, templates, logger)
 	if err != nil {
 		logger.Printf("Error: unable to report apply errors, '%v'", err)
@@ -4500,7 +4504,10 @@ type HecklerdApp struct {
 	cmAdapter    cm_adapter.ChangeManagementAdapter
 }
 
-func NewHecklerdApp(defaultTemplatesPath string, cmITFCMGR cm_itfc.ChangeManagementInterface) (HecklerdApp, error) {
+func NewHecklerdApp() (HecklerdApp, error) {
+	return NewCustomHecklerdApp("", nil)
+}
+func NewCustomHecklerdApp(defaultTemplatesPath string, getCMITFCManager func(string) (cm_itfc.ChangeManagementInterface, error)) (HecklerdApp, error) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	hAppLogger := log.New(os.Stdout, "[Main] ", log.LstdFlags|log.Lshortfile)
 	var clearState bool
@@ -4523,7 +4530,7 @@ func NewHecklerdApp(defaultTemplatesPath string, cmITFCMGR cm_itfc.ChangeManagem
 	templates := parseTemplates(defaultTemplatesPath)
 	// 	if CMConfigPath  ***FIX IT
 	cmAdapterConfig := hecklerdConf.CMAdapterConfig
-	cmAdapter, cmError := cm_adapter.NewCMAdapter(cmAdapterConfig, cmITFCMGR)
+	cmAdapter, cmError := cm_adapter.NewCMAdapter(cmAdapterConfig, getCMITFCManager)
 	if cmError != nil {
 		hAppLogger.Fatalf("Cannot get CM Adapter")
 	}

@@ -42,7 +42,7 @@ type ChangeManagementAdapterConfig struct {
 	IsMandatory     bool   `yaml:"is_mandatory"`
 	CMConfigPath    string `yaml:"cm_config_path"`
 	PluginAgentPath string `yaml:"plugin_agent_path"`
-	CLIAgentPath    string `yaml:"cm_cli_path"`
+	CLIAgentPath    string `yaml:"cli_agent_path"`
 	Verbose         bool   `yaml:"verbose"`
 }
 

@@ -19,7 +19,7 @@ var cmAdapterError error
 func init() {
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	var emptyMGR cm_itfc.ChangeManagementInterface
+	// 	var emptyMGR cm_itfc.ChangeManagementInterface
 	cmAdapterConfig := cm_itfc.ChangeManagementAdapterConfig{
 		OnErrorStop:     true,
 		IsMandatory:     true,
@@ -27,7 +27,7 @@ func init() {
 		PluginAgentPath: "",
 		CLIAgentPath:    "/usr/local/bin/cli_cm_main",
 	}
-	cmAdapter, cmAdapterError = cm_adapter.NewCMAdapter(cmAdapterConfig, emptyMGR)
+	cmAdapter, cmAdapterError = cm_adapter.NewCMAdapter(cmAdapterConfig, nil)
 }
 func getEnvPrefixFlag() string { return "-env_prefix=" + ENV_PREFIX }
 func getTagFlag() string       { return "-tag=" + TAG_VALUE }
