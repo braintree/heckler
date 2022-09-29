@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	cm_interfaces "github.com/braintree/heckler/change_management/interfaces"
-	temp_file_util "github.com/braintree/heckler/util/temp_file"
+	cm_models "github.com/braintree/heckler/change_management/models"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -44,13 +44,13 @@ func GetCMCLIAgent(cliPath string, verbose bool) (CMCLIAgent, error) {
 	return cmCLIAgent, nil
 }
 
-func (cmCLIAgent CMCLIAgent) process(arguments ...string) (int, cm_interfaces.CMResponsePayLoad, error) {
+func (cmCLIAgent CMCLIAgent) process(arguments ...string) (int, cm_models.CMResponsePayLoad, error) {
 	fmt.Println("inside process")
-	var emtpyResponse cm_interfaces.CMResponsePayLoad
+	var emtpyResponse cm_models.CMResponsePayLoad
 	path, err := exec.LookPath(cmCLIAgent.cliPath)
 	fmt.Println(path, err)
 	var outputFile string
-	jsonFile, fileError := temp_file_util.GetTempJsonFile("heckler_cm_cli_output")
+	jsonFile, fileError := ioutil.TempFile("/tmp", "heckler_cm_cli_output"+".*.json")
 	if fileError != nil {
 		log.Println(fileError)
 		return LOCAL_RUNTIME_ERROR_CODE, emtpyResponse, fileError
@@ -107,7 +107,7 @@ func (cmCLIAgent CMCLIAgent) SearchChangeRequest(envPrefix, tagValue string) (st
 	exitCode, responseJson, responseError := cmCLIAgent.process(arguments...)
 	if exitCode == 0 {
 		log.Println("exit code is zero,Call is success", responseJson.CRResult.ChangeRequestID)
-		if responseJson.Status == cm_interfaces.STATUS_SUCCESS {
+		if responseJson.Status == cm_models.STATUS_SUCCESS {
 			return responseJson.CRResult.ChangeRequestID, nil
 		} else {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
@@ -115,7 +115,7 @@ func (cmCLIAgent CMCLIAgent) SearchChangeRequest(envPrefix, tagValue string) (st
 		}
 	} else {
 		log.Println("responseJson, responseError", responseJson, responseError)
-		if responseJson.Status == cm_interfaces.STATUS_FAILURE {
+		if responseJson.Status == cm_models.STATUS_FAILURE {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
 			return "", errors.New(responseJson.Error.Message)
 		} else {
@@ -133,7 +133,7 @@ func (cmCLIAgent CMCLIAgent) SearchAndCreateChangeRequest(envPrefix, tagValue st
 	exitCode, responseJson, responseError := cmCLIAgent.process(arguments...)
 	if exitCode == 0 {
 		log.Println("exit code is zero,Call is success", responseJson.CRResult.ChangeRequestID)
-		if responseJson.Status == cm_interfaces.STATUS_SUCCESS {
+		if responseJson.Status == cm_models.STATUS_SUCCESS {
 			return responseJson.CRResult.ChangeRequestID, nil
 		} else {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
@@ -141,7 +141,7 @@ func (cmCLIAgent CMCLIAgent) SearchAndCreateChangeRequest(envPrefix, tagValue st
 		}
 	} else {
 		log.Println("responseJson, responseError", responseJson, responseError)
-		if responseJson.Status == cm_interfaces.STATUS_FAILURE {
+		if responseJson.Status == cm_models.STATUS_FAILURE {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
 			return "", errors.New(responseJson.Error.Message)
 		} else {
@@ -159,7 +159,7 @@ func (cmCLIAgent CMCLIAgent) CreateChangeRequest(envPrefix, tagValue string) (st
 	exitCode, responseJson, responseError := cmCLIAgent.process(arguments...)
 	if exitCode == 0 {
 		log.Println("exit code is zero,Call is success", responseJson.CRResult.ChangeRequestID)
-		if responseJson.Status == cm_interfaces.STATUS_SUCCESS {
+		if responseJson.Status == cm_models.STATUS_SUCCESS {
 			return responseJson.CRResult.ChangeRequestID, nil
 		} else {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
@@ -167,7 +167,7 @@ func (cmCLIAgent CMCLIAgent) CreateChangeRequest(envPrefix, tagValue string) (st
 		}
 	} else {
 		log.Println("responseJson, responseError", responseJson, responseError)
-		if responseJson.Status == cm_interfaces.STATUS_FAILURE {
+		if responseJson.Status == cm_models.STATUS_FAILURE {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
 			return "", errors.New(responseJson.Error.Message)
 		} else {
@@ -185,7 +185,7 @@ func (cmCLIAgent CMCLIAgent) GetChangeRequestDetails(changeRequestID string) (st
 	exitCode, responseJson, responseError := cmCLIAgent.process(arguments...)
 	if exitCode == 0 {
 		log.Println("exit code is zero,Call is success")
-		if responseJson.Status == cm_interfaces.STATUS_SUCCESS {
+		if responseJson.Status == cm_models.STATUS_SUCCESS {
 			return responseJson.CRResult.CRDetails, nil
 		} else {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
@@ -193,7 +193,7 @@ func (cmCLIAgent CMCLIAgent) GetChangeRequestDetails(changeRequestID string) (st
 		}
 	} else {
 		log.Println("responseJson, responseError", responseJson, responseError)
-		if responseJson.Status == cm_interfaces.STATUS_FAILURE {
+		if responseJson.Status == cm_models.STATUS_FAILURE {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
 			return "", errors.New(responseJson.Error.Message)
 		} else {
@@ -213,7 +213,7 @@ func (cmCLIAgent CMCLIAgent) CommentChangeRequest(changeRequestID, comments stri
 	exitCode, responseJson, responseError := cmCLIAgent.process(arguments...)
 	if exitCode == 0 {
 		log.Println("exit code is zero,Call is success", responseJson.CRActionResult.Message)
-		if responseJson.Status == cm_interfaces.STATUS_SUCCESS {
+		if responseJson.Status == cm_models.STATUS_SUCCESS {
 			return true, nil
 		} else {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
@@ -221,7 +221,7 @@ func (cmCLIAgent CMCLIAgent) CommentChangeRequest(changeRequestID, comments stri
 		}
 	} else {
 		log.Println("responseJson, responseError", responseJson, responseError)
-		if responseJson.Status == cm_interfaces.STATUS_FAILURE {
+		if responseJson.Status == cm_models.STATUS_FAILURE {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
 			return false, errors.New(responseJson.Error.Message)
 		} else {
@@ -241,7 +241,7 @@ func (cmCLIAgent CMCLIAgent) CheckInChangeRequest(changeRequestID, comments stri
 	exitCode, responseJson, responseError := cmCLIAgent.process(arguments...)
 	if exitCode == 0 {
 		log.Println("exit code is zero,Call is success", responseJson.CRActionResult.Message)
-		if responseJson.Status == cm_interfaces.STATUS_SUCCESS {
+		if responseJson.Status == cm_models.STATUS_SUCCESS {
 			return true, nil
 		} else {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
@@ -249,7 +249,7 @@ func (cmCLIAgent CMCLIAgent) CheckInChangeRequest(changeRequestID, comments stri
 		}
 	} else {
 		log.Println("responseJson, responseError", responseJson, responseError)
-		if responseJson.Status == cm_interfaces.STATUS_FAILURE {
+		if responseJson.Status == cm_models.STATUS_FAILURE {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
 			return false, errors.New(responseJson.Error.Message)
 		} else {
@@ -268,7 +268,7 @@ func (cmCLIAgent CMCLIAgent) ReviewChangeRequest(changeRequestID, comments strin
 	exitCode, responseJson, responseError := cmCLIAgent.process(arguments...)
 	if exitCode == 0 {
 		log.Println("exit code is zero,Call is success", responseJson.CRActionResult.Message)
-		if responseJson.Status == cm_interfaces.STATUS_SUCCESS {
+		if responseJson.Status == cm_models.STATUS_SUCCESS {
 			return true, nil
 		} else {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
@@ -276,7 +276,7 @@ func (cmCLIAgent CMCLIAgent) ReviewChangeRequest(changeRequestID, comments strin
 		}
 	} else {
 		log.Println("responseJson, responseError", responseJson, responseError)
-		if responseJson.Status == cm_interfaces.STATUS_FAILURE {
+		if responseJson.Status == cm_models.STATUS_FAILURE {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
 			return false, errors.New(responseJson.Error.Message)
 		} else {
@@ -294,7 +294,7 @@ func (cmCLIAgent CMCLIAgent) SignOffChangeRequest(changeRequestID, comments stri
 	exitCode, responseJson, responseError := cmCLIAgent.process(arguments...)
 	if exitCode == 0 {
 		log.Println("exit code is zero,Call is success", responseJson.CRActionResult.Message)
-		if responseJson.Status == cm_interfaces.STATUS_SUCCESS {
+		if responseJson.Status == cm_models.STATUS_SUCCESS {
 			return true, nil
 		} else {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
@@ -302,7 +302,7 @@ func (cmCLIAgent CMCLIAgent) SignOffChangeRequest(changeRequestID, comments stri
 		}
 	} else {
 		log.Println("responseJson, responseError", responseJson, responseError)
-		if responseJson.Status == cm_interfaces.STATUS_FAILURE {
+		if responseJson.Status == cm_models.STATUS_FAILURE {
 			log.Println("responseJson.Error.Message..", responseJson.Error.Message)
 			return false, errors.New(responseJson.Error.Message)
 		} else {

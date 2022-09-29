@@ -6,14 +6,14 @@ import (
 	cm_cli "github.com/braintree/heckler/change_management/agent/cli"
 	cm_plugin "github.com/braintree/heckler/change_management/agent/plugin"
 	cm_itfc "github.com/braintree/heckler/change_management/interfaces"
+	cm_models "github.com/braintree/heckler/change_management/models"
 	"log"
 )
 
-func getCMAgent(adapterConfig cm_itfc.ChangeManagementAdapterConfig, getCMITFCManager func(string) (cm_itfc.ChangeManagementInterface, error)) (cm_itfc.ChangeManagementInterface, error) {
+func getCMAgent(adapterConfig cm_models.ChangeManagementAdapterConfig, getCMITFCManager func(string) (cm_itfc.ChangeManagementInterface, error)) (cm_itfc.ChangeManagementInterface, error) {
 	var emptyCMAgent cm_itfc.ChangeManagementInterface
 	var cmAgent cm_itfc.ChangeManagementInterface
 	var cmAgentError error
-	// 	cmConfig.CRConfig, cmConfig.CMClientConfig
 	log.Println("getCMITFCManager is None?::", getCMITFCManager == nil, adapterConfig.CMConfigPath)
 	if getCMITFCManager != nil {
 		log.Println("getCMITFCManager is not None::", adapterConfig.CMConfigPath)
@@ -59,17 +59,16 @@ func getCMAgent(adapterConfig cm_itfc.ChangeManagementAdapterConfig, getCMITFCMa
 
 type ChangeManagementAdapter struct {
 	cmAgent       cm_itfc.ChangeManagementInterface
-	adapterConfig cm_itfc.ChangeManagementAdapterConfig
+	adapterConfig cm_models.ChangeManagementAdapterConfig
 }
 
-func NewCMAdapter(adapterConfig cm_itfc.ChangeManagementAdapterConfig, getCMITFCManager func(string) (cm_itfc.ChangeManagementInterface, error)) (ChangeManagementAdapter, error) {
+func NewCMAdapter(adapterConfig cm_models.ChangeManagementAdapterConfig, getCMITFCManager func(string) (cm_itfc.ChangeManagementInterface, error)) (ChangeManagementAdapter, error) {
 	var cmAdapter ChangeManagementAdapter
 	agent, agentError := getCMAgent(adapterConfig, getCMITFCManager)
 	if agentError != nil {
 		log.Println("agentError", agentError)
 		return cmAdapter, agentError
 	}
-	// 	var cmConfig cm_itfc.ChangeManagementConfig
 	cmAdapter = ChangeManagementAdapter{adapterConfig: adapterConfig, cmAgent: agent}
 	return cmAdapter, nil
 

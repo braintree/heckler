@@ -4,8 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	cm_itfc "github.com/braintree/heckler/change_management/interfaces"
-	temp_file_util "github.com/braintree/heckler/util/temp_file"
+	cm_models "github.com/braintree/heckler/change_management/models"
 	"log"
 	"os"
 	"os/exec"
@@ -36,14 +35,14 @@ func getExitCodeOrPathError(err error) int {
 	}
 }
 
-func getResponseJson(outputFile string, outb bytes.Buffer) (cm_itfc.CMResponsePayLoad, error) {
+func getResponseJson(outputFile string, outb bytes.Buffer) (cm_models.CMResponsePayLoad, error) {
 	var responseJson string
-	var emptyCMResponse cm_itfc.CMResponsePayLoad
-	cmResponse := new(cm_itfc.CMResponsePayLoad)
+	var emptyCMResponse cm_models.CMResponsePayLoad
+	cmResponse := new(cm_models.CMResponsePayLoad)
 	if outputFile == "" {
 		responseJson = outb.String()
 	} else {
-		outputBytes, readError := temp_file_util.ReadFile(outputFile)
+		outputBytes, readError := os.ReadFile(outputFile)
 		if readError == nil {
 			responseJson = string(outputBytes)
 		} else {
