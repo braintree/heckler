@@ -1,6 +1,6 @@
 NAME = heckler
 BUILD_GIT_SHA = $(shell git rev-parse --short HEAD)
-IMAGE = dockerhub.com/lollipopman/$(NAME)
+IMAGE = dockerhub.com/heckler/$(NAME)
 IMAGE_TAGGED = $(IMAGE):$(BUILD_GIT_SHA)
 DEBIAN_RELEASE := $(shell . /etc/os-release && echo "$${VERSION_ID}")
 HECKLER_VERSION := $(shell git describe --abbrev=0 | sed 's/^v//')
@@ -72,6 +72,7 @@ test: vendor/github.com/libgit2/git2go/v31/static-build ## Test heckler, usually
 	go test ./...
 
 vendor/github.com/libgit2/git2go/v31/static-build: ## Build libgit2
+	go mod vendor
 	./build-libgit2-static
 
 .PHONY: deb
