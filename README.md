@@ -148,3 +148,23 @@ of node sets which are specified by the user.
     apply_set_order:
       - canaries
       - all
+
+### Building/Running Hecklerd on Mac
+1. check GO111MODULE value in go env
+
+	go env | grep MOD
+	if GO111MODULE="off" then export GO111MODULE=on
+
+2. build libgit2 in dynamic
+
+	chmod +x build-libgit2-dynamic
+	chmod +x script/build-libgit2-dynamic.sh
+	./build-libgit2-dynamic
+
+3. Running hecklerd main.go on local mac dev env
+
+	export GO111MODULE=on
+	export CGO_LDFLAGS='-g -O2 -Wl,-rpath,<<local_dev_folder>>/heckler/sub-modules/heckler/vendor/github.com/libgit2/git2go/v31/dynamic-build/install/lib'
+	export PKG_CONFIG_PATH='<<local_dev_folder>>/heckler/sub-modules/heckler/vendor/github.com/libgit2/git2go/v31/dynamic-build/install/lib/pkgconfig'
+
+	go run cmd/hecklerd/main.go  | tee output_`date +%d-%m-%Y-%s`.log

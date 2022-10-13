@@ -21,5 +21,8 @@ override_dh_auto_configure: vendor/github.com/libgit2/git2go/v31/static-build
 vendor/github.com/libgit2/git2go/v31/static-build:
 	./build-libgit2-static
 
+## To avoid "dpkg-query: no path found matching pattern /usr/local/go/src/vendor/golang.org/**.go errors
+override_dh_golang:
+
 override_dh_auto_install:
 	dh_auto_install -- --no-source
