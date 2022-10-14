@@ -1,0 +1,52 @@
+#!/bin/bash
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+# found in git2go: git submodule
+LIBGIT2_REV='1.1.0'
+BUILD_SCRIPT='build-libgit2-dynamic.sh'
+
+git2go_rel_dir='vendor/github.com/libgit2/git2go/v31'
+
+if [[ ! -e "${git2go_rel_dir}" ]]; then
+	printf 'No git2go vendored dir: %s\n' "${git2go_rel_dir}"
+	exit 1
+fi
+
+build_script_path="$PWD"/script/"${BUILD_SCRIPT}"
+if [[ ! -e "${build_script_path}" ]]; then
+	printf 'No libgit2 build script found: %s\n' "${build_script_path}"
+	exit 1
+fi
+
+if [[ -e "${git2go_rel_dir}"/dynamic-build ]]; then
+	printf 'Dynamic build already exists! %s\n' "${git2go_rel_dir}"/dynamic-build
+	exit 1
+fi
+
+pushd "${git2go_rel_dir}" >/dev/null
+
+mkdir -p vendor
+git config --global http.postBuffer 1048576000
+git config --global http.sslVerify false
+git config --global core.compression -1 
+git config --global core.longpaths true
+git config --global http.proxy http://proxy-pse.paypalcorp.com:80
+git config --global https.proxy http://proxy-pse.paypalcorp.com:80
+
+#git clone https://github.com/libgit2/libgit2 --depth=1 --single-branch --branch ${LIBGIT2_REV} vendor/libgit2
+#pushd vendor/libgit2 >/dev/null
+#git checkout "${LIBGIT2_REV}"
+#popd >/dev/null
+
+LIBGIT2_REV='1.1.0'
+curl -Lks https://github.com/libgit2/libgit2/archive/refs/tags/v${LIBGIT2_REV}.tar.gz | tar -xz
+mv libgit2-${LIBGIT2_REV} vendor/libgit2
+
+mkdir -p script
+cp "${build_script_path}" script/
+./script/"${BUILD_SCRIPT}"
+
+popd >/dev/null

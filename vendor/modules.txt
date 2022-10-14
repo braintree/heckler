@@ -179,3 +179,4 @@ google.golang.org/grpc/tap
 gopkg.in/yaml.v3
 # vbom.ml/util v0.0.0-20150502001426-d600ec780753
 vbom.ml/util/sortorder
+# github.com/braintree/heckler => ../heckler
