@@ -64,7 +64,7 @@ build: vendor/github.com/libgit2/git2go/v31/static-build ## Build heckler, usual
 	go build -o . -ldflags '$(GO_LDFLAGS)' ./...
 
 .PHONY: vet
-vet: ## Vet heckler, usually called inside the container
+vet: vendor/github.com/libgit2/git2go/v31/static-build ## Vet heckler, usually called inside the container
 	go vet ./...
 
 .PHONY: test
