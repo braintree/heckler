@@ -32,6 +32,12 @@ ignored_resources:
     resources:
       - type: 'File'
         title: '/data/puppet_apply/statler/wit'
+change_management_adapter_config:
+  cli_agent_path: '/usr/local/bin/heckler-cm-cli'
+  cm_config_path: '/etc/hecklerd/cm_config_conf.yaml'
+  is_mandatory: true
+  on_error_stop: true
+  verboase: true
 node_sets:
   all:
     cmd:

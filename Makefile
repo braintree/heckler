@@ -69,6 +69,7 @@ vet: vendor/github.com/libgit2/git2go/v31/static-build ## Vet heckler, usually c
 
 .PHONY: test
 test: vendor/github.com/libgit2/git2go/v31/static-build ## Test heckler, usually called inside the container
+	go build -o . ./mockups/change_management_system/cmd/mockup-cm-cli
 	go test ./...
 
 vendor/github.com/libgit2/git2go/v31/static-build: ## Build libgit2

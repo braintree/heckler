@@ -30,6 +30,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/Masterminds/sprig"
 	"github.com/bradleyfalzon/ghinstallation"
+	cm_adapter "github.com/braintree/heckler/change_management/adapter"
 	"github.com/braintree/heckler/internal/gitutil"
 	"github.com/braintree/heckler/internal/heckler"
 	"github.com/braintree/heckler/internal/hecklerpb"
@@ -191,46 +192,48 @@ type IgnoredResources struct {
 	Resources []Resource `yaml:"resources"`
 }
 
+/* 2022-OCT-01 Added new field to read config for ChangeManagement Adapter */
 type HecklerdConf struct {
-	AdminOwners                []string              `yaml:"admin_owners"`
-	ApplySetOrder              []string              `yaml:"apply_set_order"`
-	ApplySetSleepSeconds       int                   `yaml:"apply_set_sleep_seconds"`
-	AutoCloseIssues            bool                  `yaml:"auto_close_issues"`
-	AutoTagCronSchedule        string                `yaml:"auto_tag_cron_schedule"`
-	EnvPrefix                  string                `yaml:"env_prefix"`
-	GitHubAppEmail             string                `yaml:"github_app_email"`
-	GitHubAppId                int64                 `yaml:"github_app_id"`
-	GitHubAppInstallId         int64                 `yaml:"github_app_install_id"`
-	GitHubAppSlug              string                `yaml:"github_app_slug"`
-	GitHubDisableNotifications bool                  `yaml:"github_disable_notifications"`
-	GitHubDomain               string                `yaml:"github_domain"`
-	GitHubHttpProxy            string                `yaml:"github_http_proxy"`
-	GitHubPrivateKeyPath       string                `yaml:"github_private_key_path"`
-	GitServerMaxClients        int                   `yaml:"git_server_max_clients"`
-	GroupedNoopDir             string                `yaml:"grouped_noop_dir"`
-	IgnoredResources           []IgnoredResources    `yaml:"ignored_resources"`
-	LockMessage                string                `yaml:"lock_message"`
-	LoopApprovalSleepSeconds   int                   `yaml:"loop_approval_sleep_seconds"`
-	LoopCleanSleepSeconds      int                   `yaml:"loop_clean_sleep_seconds"`
-	LoopMilestoneSleepSeconds  int                   `yaml:"loop_milestone_sleep_seconds"`
-	LoopNoopSleepSeconds       int                   `yaml:"loop_noop_sleep_seconds"`
-	ManualMode                 bool                  `yaml:"manual_mode"`
-	MaxNodeThresholds          NodeThresholds        `yaml:"max_node_thresholds"`
-	ModulesPaths               []string              `yaml:"module_paths"`
-	NodeSets                   map[string]NodeSetCfg `yaml:"node_sets"`
-	Timezone                   string                `yaml:"timezone"`
-	HoundWait                  string                `yaml:"hound_wait"`
-	HoundCronSchedule          string                `yaml:"hound_cron_schedule"`
-	ApplyCronSchedule          string                `yaml:"apply_cron_schedule"`
-	NoopDir                    string                `yaml:"noop_dir"`
-	Repo                       string                `yaml:"repo"`
-	RepoBranch                 string                `yaml:"repo_branch"`
-	RepoOwner                  string                `yaml:"repo_owner"`
-	ServedRepo                 string                `yaml:"served_repo"`
-	SlackAnnounceChannels      []SlackChannelCfg     `yaml:"slack_announce_channels"`
-	SlackPrivateConfPath       string                `yaml:"slack_private_conf_path"`
-	StateDir                   string                `yaml:"state_dir"`
-	WorkRepo                   string                `yaml:"work_repo"`
+	AdminOwners                []string               `yaml:"admin_owners"`
+	ApplySetOrder              []string               `yaml:"apply_set_order"`
+	ApplySetSleepSeconds       int                    `yaml:"apply_set_sleep_seconds"`
+	AutoCloseIssues            bool                   `yaml:"auto_close_issues"`
+	AutoTagCronSchedule        string                 `yaml:"auto_tag_cron_schedule"`
+	EnvPrefix                  string                 `yaml:"env_prefix"`
+	GitHubAppEmail             string                 `yaml:"github_app_email"`
+	GitHubAppId                int64                  `yaml:"github_app_id"`
+	GitHubAppInstallId         int64                  `yaml:"github_app_install_id"`
+	GitHubAppSlug              string                 `yaml:"github_app_slug"`
+	GitHubDisableNotifications bool                   `yaml:"github_disable_notifications"`
+	GitHubDomain               string                 `yaml:"github_domain"`
+	GitHubHttpProxy            string                 `yaml:"github_http_proxy"`
+	GitHubPrivateKeyPath       string                 `yaml:"github_private_key_path"`
+	GitServerMaxClients        int                    `yaml:"git_server_max_clients"`
+	GroupedNoopDir             string                 `yaml:"grouped_noop_dir"`
+	IgnoredResources           []IgnoredResources     `yaml:"ignored_resources"`
+	LockMessage                string                 `yaml:"lock_message"`
+	LoopApprovalSleepSeconds   int                    `yaml:"loop_approval_sleep_seconds"`
+	LoopCleanSleepSeconds      int                    `yaml:"loop_clean_sleep_seconds"`
+	LoopMilestoneSleepSeconds  int                    `yaml:"loop_milestone_sleep_seconds"`
+	LoopNoopSleepSeconds       int                    `yaml:"loop_noop_sleep_seconds"`
+	ManualMode                 bool                   `yaml:"manual_mode"`
+	MaxNodeThresholds          NodeThresholds         `yaml:"max_node_thresholds"`
+	ModulesPaths               []string               `yaml:"module_paths"`
+	NodeSets                   map[string]NodeSetCfg  `yaml:"node_sets"`
+	Timezone                   string                 `yaml:"timezone"`
+	HoundWait                  string                 `yaml:"hound_wait"`
+	HoundCronSchedule          string                 `yaml:"hound_cron_schedule"`
+	ApplyCronSchedule          string                 `yaml:"apply_cron_schedule"`
+	NoopDir                    string                 `yaml:"noop_dir"`
+	Repo                       string                 `yaml:"repo"`
+	RepoBranch                 string                 `yaml:"repo_branch"`
+	RepoOwner                  string                 `yaml:"repo_owner"`
+	ServedRepo                 string                 `yaml:"served_repo"`
+	SlackAnnounceChannels      []SlackChannelCfg      `yaml:"slack_announce_channels"`
+	SlackPrivateConfPath       string                 `yaml:"slack_private_conf_path"`
+	StateDir                   string                 `yaml:"state_dir"`
+	WorkRepo                   string                 `yaml:"work_repo"`
+	CMAdapterConfig            map[string]interface{} `yaml:"change_management_adapter_config"`
 }
 
 type SlackConf struct {
@@ -278,6 +281,7 @@ type hecklerServer struct {
 	conf      *HecklerdConf
 	repo      *git.Repository
 	templates *template.Template
+	cmAdapter cm_adapter.ChangeManagementAdapter
 }
 
 type Node struct {
@@ -1424,7 +1428,7 @@ func copyNodeMap(nodeMap map[string]*Node) map[string]*Node {
 
 func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.HecklerApplyRequest) (*hecklerpb.HecklerApplyReport, error) {
 	var err error
-	logger := log.New(os.Stdout, "[HecklerApply] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[HecklerApply] ", log.LstdFlags|log.Lshortfile)
 	commit, err := gitutil.RevparseToCommit(req.Rev, hs.repo)
 	if err != nil {
 		return nil, err
@@ -1460,7 +1464,24 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 			return nil, err
 		}
 	} else {
-		appliedNodes, beyondRevNodes, err := applyNodeSet(ns, req.Force, req.Noop, req.Rev, hs.repo, hs.conf.LockMessage, logger)
+		/*
+			2022-OCT-01  Creating a Change Request and CheckIn the Change Request
+			change_management_adapter_config:
+				  is_mandatory: true
+				  on_error_stop: true
+			If Change Request is Mandatory [(is_mandatory:true) or on_error_stop true] for any issues in Creating/Checkin pauseExecution value will be true
+			and apply process will stop and will retry in next crontab cycle.
+		*/
+		checkINComments := "Checking the CR by hecklerServer(apply)"
+		changeRequestID, pauseExecution := hs.cmAdapter.CreateAndCheckInCR(hs.conf.EnvPrefix, req.Rev, checkINComments)
+		if pauseExecution == true {
+			msg := fmt.Sprintf("'(%s)'is not created/checked, returning from apply", changeRequestID)
+			logger.Println(msg)
+			return nil, errors.New(msg)
+		}
+		appliedNodes, beyondRevNodes, err := applyNodeSet(ns, req.Force, req.Noop, req.Rev, hs.repo, hs.conf.LockMessage, hs.conf, hs.cmAdapter, changeRequestID, logger)
+		/*2022-OCT-01  calling SignOff ChangeRequest to close the change Request*/
+		hs.cmAdapter.SignOffChangeRequest(changeRequestID, "SigningOff the changeRequest by hecklerServer(apply)")
 		if err != nil {
 			return nil, err
 		}
@@ -1480,10 +1501,11 @@ func (hs *hecklerServer) HecklerApply(ctx context.Context, req *hecklerpb.Heckle
 	return har, nil
 }
 
-func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git.Repository, lockMsg string, logger *log.Logger) (map[string]*Node, map[string]*Node, error) {
+func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git.Repository, lockMsg string, conf *HecklerdConf, cmAdapter cm_adapter.ChangeManagementAdapter, changeRequestID string, logger *log.Logger) (map[string]*Node, map[string]*Node, error) {
 	var err error
 	beyondRevNodes := make(map[string]*Node)
 	appliedNodes := make(map[string]*Node)
+	var crPuppetApplyComments string
 
 	// Check node revision if not force applying
 	if !forceApply {
@@ -1496,10 +1518,18 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 			return nil, nil, err
 		}
 		revId := *obj.Id()
+		/*2022-OCT-01  Updated GithubIssue with a comment with Chagne Request ID */
+		_commentIssueWithCRID(logger, conf, changeRequestID, revId)
 		for host, node := range ns.nodes.active {
 			if commitAlreadyApplied(node.lastApply, revId, repo) {
 				beyondRevNodes[host] = node
 				delete(ns.nodes.active, host)
+				/*2022-OCT-01 CM Providing Comments to CR for puppet apply actions */
+				if !noop {
+					logger.Printf("commitAlreadyApplied:: revId %s and host %s", revId, host)
+					crPuppetApplyComments = fmt.Sprintf("Commit::%s is already applied on Host::%s", revId.String(), host)
+					cmAdapter.CommentChangeRequest(changeRequestID, crPuppetApplyComments)
+				}
 			}
 		}
 	}
@@ -1510,7 +1540,12 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 	}
 	par := rizzopb.PuppetApplyRequest{Rev: rev, Noop: noop}
 	puppetReportChan := make(chan applyResult)
-	for _, node := range ns.nodes.active {
+	for host, node := range ns.nodes.active {
+		/*2022-OCT-01 Commenting ChangeRequest with Tag/Host Value */
+		if !noop {
+			crPuppetApplyComments = fmt.Sprintf("Heckler is going to apply Tag::%s, puppet on  Host::%s", rev, host)
+			cmAdapter.CommentChangeRequest(changeRequestID, crPuppetApplyComments)
+		}
 		go hecklerApply(node, puppetReportChan, par)
 	}
 
@@ -1520,16 +1555,23 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 		if r.err != nil {
 			ns.nodes.active[r.host].err = fmt.Errorf("Apply failed: %w", r.err)
 			errApplyNodes[r.host] = ns.nodes.active[r.host]
+			crPuppetApplyComments = fmt.Sprintf("Failed: %s@%s", r.report.Host, "execution of Puppet apply is failed to run")
 		} else if r.report.Status == "failed" {
 			ns.nodes.active[r.host].err = &applyError{r.host, r.report}
 			errApplyNodes[r.host] = ns.nodes.active[r.host]
+			crPuppetApplyComments = fmt.Sprintf("Failed: %s@%s", r.report.Host, "Puppet applied resulted in failed state")
 		} else {
 			if noop {
 				logger.Printf("Nooped: %s@%s", r.report.Host, r.report.ConfigurationVersion)
 			} else {
 				logger.Printf("Applied: %s@%s", r.report.Host, r.report.ConfigurationVersion)
+				crPuppetApplyComments = fmt.Sprintf("Applied: %s@%s", r.report.Host, r.report.ConfigurationVersion)
 			}
 			appliedNodes[r.report.Host] = ns.nodes.active[r.report.Host]
+		}
+		/*2022-OCT-01 Commenting ChangeRequest puppet apply status */
+		if !noop {
+			cmAdapter.CommentChangeRequest(changeRequestID, crPuppetApplyComments)
 		}
 	}
 	unlockNodeSet("root", false, ns, logger)
@@ -1540,7 +1582,7 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 
 func (hs *hecklerServer) HecklerNoopRange(ctx context.Context, req *hecklerpb.HecklerNoopRangeRequest) (*hecklerpb.HecklerNoopRangeReport, error) {
 	var err error
-	logger := log.New(os.Stdout, "[HecklerNoopRange] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[HecklerNoopRange] ", log.LstdFlags|log.Lshortfile)
 	ns, err := dialReqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
@@ -2347,7 +2389,7 @@ func beyondRevNodesToMarkdown(groupedBeyondRevs []*groupedBeyondRev, templates *
 
 func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.HecklerStatusRequest) (*hecklerpb.HecklerStatusReport, error) {
 	var err error
-	logger := log.New(os.Stdout, "[HecklerStatus] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[HecklerStatus] ", log.LstdFlags|log.Lshortfile)
 	ns, err := dialReqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
@@ -2381,7 +2423,7 @@ func (hs *hecklerServer) HecklerStatus(ctx context.Context, req *hecklerpb.Heckl
 }
 
 func (hs *hecklerServer) HecklerUnlock(ctx context.Context, req *hecklerpb.HecklerUnlockRequest) (*hecklerpb.HecklerUnlockReport, error) {
-	logger := log.New(os.Stdout, "[HecklerUnlock] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[HecklerUnlock] ", log.LstdFlags|log.Lshortfile)
 	ns, err := dialReqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
@@ -2419,7 +2461,7 @@ func closeNodeSet(ns *NodeSet, logger *log.Logger) {
 
 func (hs *hecklerServer) HecklerLock(ctx context.Context, req *hecklerpb.HecklerLockRequest) (*hecklerpb.HecklerLockReport, error) {
 	var err error
-	logger := log.New(os.Stdout, "[HecklerLock] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[HecklerLock] ", log.LstdFlags|log.Lshortfile)
 	ns, err := dialReqNodes(hs.conf, req.Nodes, req.NodeSet, logger)
 	if err != nil {
 		return nil, err
@@ -2818,11 +2860,11 @@ func greatestTagApproved(nextTags []string, priorTag string, conf *HecklerdConf,
 //       If yes
 //         Apply new tag across all nodes
 //   If no, do nothing
-func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
+func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *git.Repository, templates *template.Template, cmAdapter cm_adapter.ChangeManagementAdapter) {
 	var err error
 	var ns *NodeSet
 	var perApply *NodeSet
-	logger := log.New(os.Stdout, "[apply] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[apply] ", log.LstdFlags|log.Lshortfile)
 	select {
 	case applySem <- 1:
 		defer func() { <-applySem }()
@@ -2883,6 +2925,20 @@ func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *gi
 		}
 	}
 	logger.Printf("Tag '%s' is ready to apply, applying with set order: %v", nextTag, conf.ApplySetOrder)
+	/*
+		2022-OCT-01  Creating a Change Request and CheckIn the Change Request
+		change_management_adapter_config:
+			  is_mandatory: true
+			  on_error_stop: true
+		If Change Request is Mandatory [(is_mandatory:true) or on_error_stop true] for any issues in Creating/Checkin pauseExecution value will be true
+		and apply process will stop and will retry in next crontab cycle.
+	*/
+	checkINComments := "Checking the CR by Hecklerd(apply)"
+	changeRequestID, pauseExecution := cmAdapter.CreateAndCheckInCR(conf.EnvPrefix, nextTag, checkINComments)
+	if pauseExecution == true {
+		logger.Println("changeRequestID::(", changeRequestID, ")is not created/checked, returning from apply. Please Check CM logs to fix it")
+		return
+	}
 	var applyErrors []error
 	for nodeSetIndex, nodeSetName := range conf.ApplySetOrder {
 		logger.Printf("Applying Set '%s' (%d of %d sets)", nodeSetName, nodeSetIndex+1, len(conf.ApplySetOrder))
@@ -2895,7 +2951,7 @@ func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *gi
 			logger.Printf("Error: unable to dial node set: %v", err)
 			break
 		}
-		appliedNodes, beyondRevNodes, err := applyNodeSet(perApply, false, false, nextTag, repo, conf.LockMessage, logger)
+		appliedNodes, beyondRevNodes, err := applyNodeSet(perApply, false, false, nextTag, repo, conf.LockMessage, conf, cmAdapter, changeRequestID, logger)
 		if err != nil {
 			logger.Printf("Error: unable to apply nodes, returning: %v", err)
 			closeNodeSet(perApply, logger)
@@ -2919,6 +2975,8 @@ func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *gi
 			}
 		}
 	}
+	/*2022-OCT-01 calls SignOff ChangeRequest to close the change Request*/
+	cmAdapter.SignOffChangeRequest(changeRequestID, "SigningOff the changeRequest by hecklerServer(apply)")
 	err = reportErrors(applyErrors, true, conf, templates, logger)
 	if err != nil {
 		logger.Printf("Error: unable to report apply errors, '%v'", err)
@@ -2943,7 +3001,7 @@ func noopRequiresApproval(gr groupedReport) bool {
 func approvalLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	var err error
 	var ns *NodeSet
-	logger := log.New(os.Stdout, "[approvalLoop] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[approvalLoop] ", log.LstdFlags|log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopApprovalSleepSeconds) * time.Second
 	logger.Printf("Started, looping every %v", loopSleep)
 	for {
@@ -3684,7 +3742,7 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 //       If no, do nothing
 //       If yes, create a new tag
 func autoTag(conf *HecklerdConf, repo *git.Repository) {
-	logger := log.New(os.Stdout, "[autoTag] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[autoTag] ", log.LstdFlags|log.Lshortfile)
 	var err error
 	var ns *NodeSet
 	ns = &NodeSet{
@@ -3763,7 +3821,7 @@ func autoTag(conf *HecklerdConf, repo *git.Repository) {
 // Find issues that are open and have not been updated for move than
 // conf.HoundWait. For each issue add a hounding comment, with an apology!
 func houndOpenIssues(conf *HecklerdConf, repo *git.Repository) {
-	logger := log.New(os.Stdout, "[houndOpenIssues] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[houndOpenIssues] ", log.LstdFlags|log.Lshortfile)
 	var err error
 	configLoc, err := time.LoadLocation(conf.Timezone)
 	if err != nil {
@@ -4016,7 +4074,7 @@ func eligibleNodeSet(user string, ns *NodeSet) {
 func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 	var err error
 	var ns *NodeSet
-	logger := log.New(os.Stdout, "[milestoneLoop] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[milestoneLoop] ", log.LstdFlags|log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopMilestoneSleepSeconds) * time.Second
 	logger.Printf("Started, looping every %v", loopSleep)
 	for {
@@ -4234,7 +4292,7 @@ func clean(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, nodeD
 }
 
 func cleanLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
-	logger := log.New(os.Stdout, "[cleanLoop] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[cleanLoop] ", log.LstdFlags|log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopCleanSleepSeconds) * time.Second
 	nodeDirtyNoops := make(map[string]dirtyNoops)
 	logger.Printf("Started, looping every %v", loopSleep)
@@ -4788,7 +4846,7 @@ func deleteDupIssues(conf *HecklerdConf, repo *git.Repository, logger *log.Logge
 }
 
 func noopLoop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
-	logger := log.New(os.Stdout, "[noopLoop] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[noopLoop] ", log.LstdFlags|log.Lshortfile)
 	loopSleep := time.Duration(conf.LoopNoopSleepSeconds) * time.Second
 	logger.Printf("Started, looping every %v", loopSleep)
 	for {
@@ -5077,7 +5135,7 @@ func resourceIgnored(title string, ignoredResources []IgnoredResources) (bool, e
 
 func main() {
 	// add filename and line number to log output
-	log.SetFlags(log.Lshortfile)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var err error
 	var hecklerdConfPath string
 	var conf *HecklerdConf
@@ -5091,7 +5149,7 @@ func main() {
 	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 
 	templates := parseTemplates()
-	logger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
+	logger := log.New(os.Stdout, "[Main] ", (log.LstdFlags | log.Lshortfile))
 
 	flag.BoolVar(&clearState, "clear", false, "Clear local state, e.g. puppet code repo")
 	flag.BoolVar(&clearGitHub, "ghclear", false, "Clear remote github state, e.g. issues & milestones")
@@ -5124,6 +5182,7 @@ func main() {
 		logger.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
 	}
 	file, err = os.Open(hecklerdConfPath)
+	defer file.Close()
 	if err != nil {
 		logger.Fatal(err)
 	}
@@ -5153,7 +5212,12 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Cannot unmarshal config: %v", err)
 	}
-	file.Close()
+
+	cmAdapterConfig := conf.CMAdapterConfig
+	cmAdapter, cmError := cm_adapter.NewCMAdapter(cmAdapterConfig, nil)
+	if cmError != nil {
+		logger.Fatalf("Cannot get CM Adapter")
+	}
 
 	if conf.RepoBranch == "" {
 		logger.Println("No branch specified in config, please add RepoBranch")
@@ -5225,7 +5289,7 @@ func main() {
 
 	// background polling git fetch
 	go func() {
-		logger := log.New(os.Stdout, "[GitFetchBare] ", log.Lshortfile)
+		logger := log.New(os.Stdout, "[GitFetchBare] ", log.LstdFlags|log.Lshortfile)
 		for {
 			time.Sleep(5 * time.Second)
 			if Debug {
@@ -5240,7 +5304,7 @@ func main() {
 
 	// git server
 	go func() {
-		logger := log.New(os.Stdout, "[GitServer] ", log.Lshortfile)
+		logger := log.New(os.Stdout, "[GitServer] ", log.LstdFlags|log.Lshortfile)
 		logger.Printf("Starting Git HTTP server on %s", gitServer.Addr)
 		if err := gitServer.Serve(); err != nil && err != http.ErrServerClosed {
 			logger.Println("Git HTTP server error:", err)
@@ -5257,11 +5321,12 @@ func main() {
 	hecklerServer.conf = conf
 	hecklerServer.templates = templates
 	hecklerServer.repo = repo
+	hecklerServer.cmAdapter = cmAdapter
 	hecklerpb.RegisterHecklerServer(grpcServer, hecklerServer)
 
 	// grpc server
 	go func() {
-		logger := log.New(os.Stdout, "[GrpcServer] ", log.Lshortfile)
+		logger := log.New(os.Stdout, "[GrpcServer] ", log.LstdFlags|log.Lshortfile)
 		logger.Printf("Starting GRPC HTTP server on %v", port)
 		if err := grpcServer.Serve(lis); err != nil {
 			logger.Fatalf("failed to serve: %v", err)
@@ -5277,7 +5342,7 @@ func main() {
 		logger.Fatalf("Unable to fetch repo: %v", err)
 	}
 	go func() {
-		logger := log.New(os.Stdout, "[GitFetchWork] ", log.Lshortfile)
+		logger := log.New(os.Stdout, "[GitFetchWork] ", log.LstdFlags|log.Lshortfile)
 		for {
 			_, err := gitutil.Pull("http://localhost:8080/puppetcode", conf.WorkRepo)
 			if err != nil {
@@ -5351,7 +5416,7 @@ func main() {
 			hecklerdCron.AddFunc(
 				conf.ApplyCronSchedule,
 				func() {
-					apply(noopLock, applySem, conf, repo, templates)
+					apply(noopLock, applySem, conf, repo, templates, cmAdapter)
 				},
 			)
 		}
@@ -5399,6 +5464,31 @@ func main() {
 		runtime.GC()    // get up-to-date statistics
 		if err := pprof.WriteHeapProfile(f); err != nil {
 			logger.Fatal("could not write memory profile: ", err)
+		}
+	}
+}
+
+/* 2022-OCT-01 Utility function to provide a comment to githubIssue with Change Request ID */
+
+func _commentIssueWithCRID(logger *log.Logger, conf *HecklerdConf, changeRequestID string, revId git.Oid) {
+	ghclient, _, err := githubConn(conf)
+	if err != nil {
+		logger.Printf("githubConnError %v", err)
+		logger.Printf("_commentIssueWithCRID::Unable to comment the issue(%v) for changeRequestID(%s) ", revId, changeRequestID)
+		return
+	}
+	issue, issueError := githubIssueFromCommit(ghclient, revId, conf)
+	if issueError != nil {
+		logger.Printf("Error: unable to githubIssueFromCommit: %v", issueError)
+	} else {
+		if changeRequestID != "" {
+			comment := "changeRequestID::" + changeRequestID
+			issueCommentError := githubIssueComment(ghclient, conf, issue, comment)
+			if issueCommentError != nil {
+				logger.Printf("Error: unable to githubIssueComment: %v", issueCommentError)
+			}
+		} else {
+			logger.Printf("changeRequestID is empty")
 		}
 	}
 }
