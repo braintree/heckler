@@ -1,0 +1,39 @@
+<html>
+<script>
+  // Parse the URL parameter
+function getParameterByName(name, url) {
+    if (!url) url = window.location.href;
+    name = name.replace(/[\[\]]/g, "\\$&");
+    var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
+        results = regex.exec(url);
+    if (!results) return null;
+    if (!results[2]) return '';
+    return decodeURIComponent(results[2].replace(/\+/g, " "));
+}
+
+var apply = function(){
+  var token = document.getElementById("bearer-in").value;
+  document.getElementById("bearer").innerHTML = token;
+}
+
+// Give the parameter a variable name
+var code = getParameterByName('code');
+var state = getParameterByName('state');
+</script>
+  <body>
+    Your bearer token:
+    <input type="text" name="bearer-in" id="bearer-in" value="Enter Here"></input>
+    <button onclick="apply()">Apply Token</button>
+    <pre>
+curl \
+  -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer <span id=bearer>[YOUR BEAER TOKEN]</span>" \
+      https://api.github.com/app-manifests/<span id="code">alksdjlkasjdlkajsdflkjasdf</span>/conversions > settings.json
+    </pre>
+  <script>
+    document.getElementById("code").innerHTML = code;
+    document.getElementById("state").innerHTML = state;
+  </script>
+  </body>
+</html>

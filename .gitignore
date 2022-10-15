@@ -2,6 +2,7 @@
 *.pem
 *.tar
 *.yaml
+!/docs/**/*.yaml
 # deb build dir
 /_build
 /.go-build

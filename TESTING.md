@@ -28,7 +28,7 @@ Second, an integration test with a sample repo.
 
         ssh heckler 'cd /heckler; ./hecklerd'
         ssh statler 'cd /heckler; ./rizzod'
-        ssh waldof 'cd /heckler; ./rizzod'
+        ssh waldorf 'cd /heckler; ./rizzod'
         ssh fozzie 'cd /heckler; ./rizzod'
 
 5.  Force apply tag `v1`
