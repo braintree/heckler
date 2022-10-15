@@ -1642,13 +1642,19 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 	if err != nil {
 		return nil, nil, err
 	}
-	githubUrl := "https://" + conf.GitHubDomain + "/api/v3"
-	itr.BaseURL = githubUrl
 
-	// Use installation transport with github.com/google/go-github
-	client, err := github.NewEnterpriseClient(githubUrl, githubUrl, &http.Client{Transport: itr})
-	if err != nil {
-		return nil, nil, err
+	var client *github.Client
+	if conf.GitHubDomain != "" {
+		githubUrl := "https://" + conf.GitHubDomain + "/api/v3"
+		itr.BaseURL = githubUrl
+
+		// Use installation transport with github.com/google/go-github
+		client, err = github.NewEnterpriseClient(githubUrl, githubUrl, &http.Client{Transport: itr})
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		client = github.NewClient(&http.Client{Transport: itr})
 	}
 	return client, itr, nil
 }
@@ -2756,7 +2762,14 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 			Url:  conf.GitHubHttpProxy,
 		}
 	}
-	remoteUrl := fmt.Sprintf("https://x-access-token:%s@%s/%s/%s", tok, conf.GitHubDomain, conf.RepoOwner, conf.Repo)
+	var githubdomain string
+	if conf.GitHubDomain != "" {
+		githubdomain = conf.GitHubDomain
+	} else {
+		githubdomain = "github.com"
+	}
+
+	remoteUrl := fmt.Sprintf("https://x-access-token:%s@%s/%s/%s", tok, githubdomain, conf.RepoOwner, conf.Repo)
 	bareRepo, err := gitutil.CloneOrOpen(remoteUrl, conf.ServedRepo, cloneOptions)
 	if err != nil {
 		return nil, err
@@ -4179,7 +4192,7 @@ func commonTagNodeSet(conf *HecklerdConf, ns *NodeSet, repo *git.Repository, log
 	return nil
 }
 
-// Users often apply a dirty branch and commit there changes after applying.
+// Users often apply a dirty branch and commit their changes after applying.
 // This unfortunately leaves nodes in a dirty state which are actually clean.
 // Attempt to clean up dirty nodes by nooping them with their own dirty commit
 // as well as children of their dirty commit which hopefully will include the
@@ -5174,8 +5187,8 @@ func main() {
 	conf.NoopDir = conf.StateDir + "/noops"
 	conf.GroupedNoopDir = conf.NoopDir + "/grouped"
 	conf.LoopNoopSleepSeconds = 10
-	conf.LoopMilestoneSleepSeconds = 10
-	conf.LoopApprovalSleepSeconds = 10
+	conf.LoopMilestoneSleepSeconds = 100
+	conf.LoopApprovalSleepSeconds = 100
 	conf.LoopCleanSleepSeconds = 10
 	conf.Timezone = "America/Chicago"
 	conf.HoundWait = "8h"
