@@ -239,6 +239,7 @@ type SlackConf struct {
 
 type NodeSetCfg struct {
 	Cmd       []string `yaml:"cmd"`
+	Raw       []string `yaml:"raw"`
 	Blacklist []string `yaml:"blacklist"`
 }
 
@@ -1351,18 +1352,23 @@ func setNameToNodes(conf *HecklerdConf, nodeSetName string, logger *log.Logger) 
 	if setCfg, ok = conf.NodeSets[nodeSetName]; !ok {
 		return nil, errors.New(fmt.Sprintf("nodeSetName '%s' not found in hecklerd config", nodeSetName))
 	}
-	// Change to code dir, so hiera relative paths resolve
-	cmd := exec.Command(setCfg.Cmd[0], setCfg.Cmd[1:]...)
-	cmd.Dir = conf.WorkRepo
-	stdout, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
 
 	var nodes []string
-	err = json.Unmarshal(stdout, &nodes)
-	if err != nil {
-		return nil, err
+	if len(setCfg.Cmd) > 0 {
+		// Change to code dir, so hiera relative paths resolve
+		cmd := exec.Command(setCfg.Cmd[0], setCfg.Cmd[1:]...)
+		cmd.Dir = conf.WorkRepo
+		stdout, err := cmd.Output()
+		if err != nil {
+			return nil, err
+		}
+		err = json.Unmarshal(stdout, &nodes)
+		if err != nil {
+			return nil, err
+		}
+
+	} else if len(setCfg.Raw) > 0 {
+		nodes = setCfg.Raw
 	}
 
 	regexes := make([]*regexp.Regexp, 0)
