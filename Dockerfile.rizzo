@@ -1,0 +1,24 @@
+FROM debian:bookworm
+RUN useradd -u 10001 scratchuser
+RUN apt update
+RUN apt install -y ca-certificates
+RUN mkdir -p /var
+RUN chown -R scratchuser:scratchuser /var
+
+RUN mkdir /usr_merge
+WORKDIR /usr_merge
+RUN bash -c 'for dir in usr/{s,}bin usr/lib{,64,32,x32}; do ln -s $dir; done'
+
+FROM scratch
+USER scratchuser
+
+COPY --from=0 /etc/passwd /etc/passwd
+COPY --from=0 /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=0 /etc/ssl /etc/ssl
+COPY --from=0 /usr/share/ca-certificates /usr/share/ca-certificates
+COPY --from=0 /var /var
+COPY --from=0 /usr_merge /
+
+COPY docs/sample-configs/rizzod_conf.yaml rizzod rizzo-rev /
+
+CMD ["/rizzod"]

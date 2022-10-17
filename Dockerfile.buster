@@ -1,10 +1,7 @@
-ARG DEBIAN_CODENAME=buster
-FROM debian:${DEBIAN_CODENAME}
-ARG DEBIAN_CODENAME=buster
+FROM debian:buster
 ARG MUSL_VERSION=1.2.2
 ARG LIBRESSL_VERSION=3.3.3
 ARG GO_VERSION=1.16.5
-ARG USER=builder
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -50,9 +47,3 @@ RUN curl -Ls https://mirror.planetunix.net/pub/OpenBSD/LibreSSL/libressl-${LIBRE
 WORKDIR libressl-${LIBRESSL_VERSION}
 RUN ./configure --with-openssldir=/etc/ssl
 RUN make install
-
-RUN adduser --disabled-password --gecos "docker build user" $USER \
- && echo "$USER ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers # USER needs sudo to test-install the built .deb
-
-WORKDIR /home/$USER/heckler
-USER $USER
