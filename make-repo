@@ -115,20 +115,7 @@ modify the input to the sail game
 
 	REPO='muppetshow'
 
-	## Delete remote tags
-	tmp_repo=$(mktemp -d)
-	git clone "${REPO_URL}" "${tmp_repo}"
-	pushd "${tmp_repo}"
-	# # Delete all local tags and get the list of remote tags:
-	# git tag -l | xargs git tag -d
-	# git fetch
-	# Remove all remote tags
-	git tag -l | mapfile -t remote_tags
-	for tag in "${remote_tags[@]}"; do
-		git push --delete origin "${tag}"
-	done
-	popd
-
+	echo sudo rm -fr "${REPO}"
 	sudo rm -fr "${REPO}"
 	mkdir "${REPO}"
 	pushd "${REPO}"
@@ -198,6 +185,20 @@ modify the input to the sail game
 			git tag v4 -m 'Release v4'
 		fi
 	done
+
+	## Delete remote tags
+	tmp_repo=$(mktemp -d)
+	git clone "${REPO_URL}" "${tmp_repo}"
+	pushd "${tmp_repo}"
+	# # Delete all local tags and get the list of remote tags:
+	# git tag -l | xargs git tag -d
+	# git fetch
+	# Remove all remote tags
+	git tag -l | mapfile -t remote_tags
+	for tag in "${remote_tags[@]}"; do
+		git push --delete origin "${tag}"
+	done
+	popd
 
 	git remote add origin "${REPO_URL}"
 	git push -fu origin main
