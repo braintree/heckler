@@ -19,3 +19,4 @@
 /vendor/github.com/libgit2/git2go/v31/vendor/**
 # slack private conf file
 slack_conf.yaml
+.project
