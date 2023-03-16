@@ -19,14 +19,14 @@ func TestGroupedResourceNodeFiles(t *testing.T) {
 	}{
 		{
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/cast]",
 					File:  "",
 					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
 				},
 			},
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/cast]",
 					File:  "",
 					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
@@ -40,7 +40,7 @@ func TestGroupedResourceNodeFiles(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		actual, err := groupedResourcesNodeFiles(test.input, "../../muppetshow")
+		actual, err := groupedResourcesNodeFiles(test.input, "../../testdata/example_puppet_project")
 		if err != nil {
 			t.Fatalf("groupedResourcesNodeFiles returned an unexpected error: %v", err)
 			return
@@ -59,7 +59,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 	}{
 		{
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/cast]",
 					File:  "",
 					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
@@ -71,7 +71,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 				},
 			},
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/cast]",
 					File:  "",
 					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
@@ -93,7 +93,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 		},
 		{
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
 					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
@@ -105,7 +105,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 				},
 			},
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
 					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
@@ -127,7 +127,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 		},
 		{
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "Group[gonzo]",
 					Module: Module{
 						Name: "muppetshow",
@@ -136,7 +136,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 				},
 			},
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "Group[gonzo]",
 					Module: Module{
 						Name: "muppetshow",
@@ -152,7 +152,7 @@ func TestGroupedResourceOwners(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		actual, err := groupedResourcesOwners(test.input, "../../muppetshow")
+		actual, err := groupedResourcesOwners(test.input, "../../testdata/example_puppet_project")
 		if err != nil {
 			t.Fatalf("groupedResourcesOwners returned an unexpected error: %v", err)
 			return
@@ -182,7 +182,7 @@ func TestResourcesApproved(t *testing.T) {
 	testFileOwner := resourcesApprovedTest{
 		resourcesApprovedInput{
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
 					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
@@ -202,7 +202,7 @@ func TestResourcesApproved(t *testing.T) {
 		resourcesApprovedExpected{
 			true,
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
 					Hosts: []string{"fozzie.example.com", "statler.example.com", "waldorf.example.com"},
@@ -226,7 +226,7 @@ func TestResourcesApproved(t *testing.T) {
 	testNodeOwners := resourcesApprovedTest{
 		resourcesApprovedInput{
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
 					Hosts: []string{"fozzie.example.com", "waldorf.example.com"},
@@ -245,13 +245,13 @@ func TestResourcesApproved(t *testing.T) {
 			},
 			[]string{"@kermit"},
 			map[string][]string{
-				"@braintree/muppets": []string{"@kermit", "@misspiggy"},
+				"@braintree/muppets": {"@kermit", "@misspiggy"},
 			},
 		},
 		resourcesApprovedExpected{
 			true,
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
 					Hosts: []string{"fozzie.example.com", "waldorf.example.com"},
@@ -281,7 +281,7 @@ func TestResourcesApproved(t *testing.T) {
 	testModuleOwners := resourcesApprovedTest{
 		resourcesApprovedInput{
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
 					Module: Module{
@@ -305,13 +305,13 @@ func TestResourcesApproved(t *testing.T) {
 			},
 			[]string{"@kermit"},
 			map[string][]string{
-				"@braintree/muppets": []string{"@kermit", "@misspiggy"},
+				"@braintree/muppets": {"@kermit", "@misspiggy"},
 			},
 		},
 		resourcesApprovedExpected{
 			true,
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
 					Hosts: []string{"fozzie.example.com", "waldorf.example.com"},
@@ -369,7 +369,7 @@ func TestIntersectionOwnersApprovers(t *testing.T) {
 			[]string{"@foo", "@org/b"},
 			[]string{"@foo", "@butter", "@bubbles"},
 			map[string][]string{
-				"@org/b": []string{"@butter", "@bubbles"},
+				"@org/b": {"@butter", "@bubbles"},
 			},
 			[]string{"@foo", "@butter", "@bubbles"},
 		},
@@ -447,31 +447,31 @@ func TestResourceIgnored(t *testing.T) {
 	}
 	roDbUser, _ := SerializedRegexpCompile("^.*_ro$")
 	ignoredResources := []IgnoredResources{
-		IgnoredResources{
+		{
 			Purpose:   "Humor",
 			Rationale: "Ride that train!",
 			Resources: []Resource{
-				Resource{
+				{
 					Type:  "Exec",
 					Title: "sl",
 				},
 			},
 		},
-		IgnoredResources{
+		{
 			Purpose:   "IP mapping",
 			Rationale: "DNS is the dream",
 			Resources: []Resource{
-				Resource{
+				{
 					Type:  "File",
 					Title: "/etc/hosts",
 				},
 			},
 		},
-		IgnoredResources{
+		{
 			Purpose:   "Readonly DB user",
 			Rationale: "Love that SQL!",
 			Resources: []Resource{
-				Resource{
+				{
 					Type:       "Pg_user",
 					TitleRegex: roDbUser,
 				},
@@ -504,7 +504,7 @@ func TestOwnersNeeded(t *testing.T) {
 	testOwners := ownersNeededTest{
 		ownersNeededInput{
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
 					Module: Module{
@@ -525,7 +525,7 @@ func TestOwnersNeeded(t *testing.T) {
 					},
 					Approved: resourceSourceFileApproved,
 				},
-				&groupedResource{
+				{
 					Title: "Exec[/bin/sl]",
 					File:  "modules/fozzie/manifests/init.pp",
 					Module: Module{
@@ -555,7 +555,7 @@ func TestOwnersNeeded(t *testing.T) {
 	testAdminOwners := ownersNeededTest{
 		ownersNeededInput{
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "File[/data/puppet_apply/laughtrack]",
 					File:  "modules/muppetshow/manifests/episode.pp",
 					Module: Module{
@@ -579,7 +579,7 @@ func TestOwnersNeeded(t *testing.T) {
 	testNodeOwners := ownersNeededTest{
 		ownersNeededInput{
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "Exec[/bin/sl]",
 					File:  "modules/fozzie/manifests/init.pp",
 					Module: Module{
@@ -608,7 +608,7 @@ func TestOwnersNeeded(t *testing.T) {
 	testFileOwners := ownersNeededTest{
 		ownersNeededInput{
 			[]*groupedResource{
-				&groupedResource{
+				{
 					Title: "Exec[/bin/sl]",
 					File:  "modules/fozzie/manifests/init.pp",
 					Module: Module{

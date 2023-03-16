@@ -297,7 +297,7 @@ func parseStderr(oid string, stderr string) (*rizzopb.PuppetReport, error) {
 	for scanner.Scan() {
 		if regexEvalErr.MatchString(scanner.Text()) {
 			stderrLogs := []*rizzopb.Log{
-				&rizzopb.Log{
+				{
 					Source:  "EvalError",
 					Message: stderr,
 				},

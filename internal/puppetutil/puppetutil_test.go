@@ -76,7 +76,7 @@ func TestFindNodeRegexes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("findNodeRegexes returned an unexpected error: %v", err)
 		}
-		for x, _ := range test.expected {
+		for x := range test.expected {
 			if actual[x].String() != test.expected[x] {
 				t.Fatalf("findNodeRegexes returned an unexpected error: %v", err)
 			}

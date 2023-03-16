@@ -1,4 +1,5 @@
-FROM debian:buster
+ARG DEBIAN_CODENAME=bullseye
+FROM debian:${DEBIAN_CODENAME}
 
 RUN apt-get update -q && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -17,8 +18,8 @@ RUN apt-get update -q && \
       less \
       vim-tiny \
       2>&1
-RUN curl -sO https://apt.puppet.com/puppet6-release-buster.deb
-RUN dpkg -i puppet6-release-buster.deb
+RUN curl -sO https://apt.puppet.com/puppet6-release-${DEBIAN_CODENAME}.deb
+RUN dpkg -i puppet6-release-${DEBIAN_CODENAME}.deb
 RUN ln -s /dev/null /etc/systemd/system/pxp-agent.service
 RUN ln -s /dev/null /etc/systemd/system/puppet.service
 RUN apt-get update -q && \
