@@ -1,8 +1,8 @@
 #!/bin/bash
 HELP=$(
-	cat <<-EOF
-		This program produces a sample puppet repo used for testing
-	EOF
+  cat <<EOF
+This program produces a sample puppet repo used for testing
+EOF
 )
 
 THIS_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
@@ -14,192 +14,196 @@ set -o nounset
 shopt -s lastpipe
 
 usage() {
-	cat <<-EOF
-		${HELP}
-		
-		usage: ${0}
-		  -h this message
-		  -u sample repo url
-	EOF
+  cat <<EOF
+${HELP}
+
+Usage:
+  ${0} -u <repo_url>
+  ${0} -h
+
+Options:
+  -u <repo url>   Repo url to set up this example repo in. Should be uninitialized, but we do try to work around the case where you have already initialized it.
+  -h              Print this help message
+EOF
 }
 
 function main() {
-	NODES=(
-		fozzie
-		statler
-		waldorf
-	)
+  NODES=(
+    fozzie
+    statler
+    waldorf
+  )
 
-	MODULES=(
-		fozzie
-		statler
-		waldorf
-		muppetshow
-	)
+  MODULES=(
+    fozzie
+    statler
+    waldorf
+    muppetshow
+  )
 
-	AUTHORS=(
-		[1]='misspiggy <heckler+misspiggy@getbraintree.com>'
-		[2]='kermit <heckler+kermit@getbraintree.com>'
-		[3]='misspiggy <heckler+misspiggy@getbraintree.com>'
-		[4]='misspiggy <heckler+misspiggy@getbraintree.com>'
-		[5]='misspiggy <heckler+misspiggy@getbraintree.com>'
-		[6]='kermit <heckler+kermit@getbraintree.com>'
-		[7]='kermit <heckler+kermit@getbraintree.com>'
-		[8]='kermit <heckler+kermit@getbraintree.com>'
-		[9]='misspiggy <heckler+misspiggy@getbraintree.com>'
-		[10]='kermit <heckler+kermit@getbraintree.com>'
-	)
+  AUTHORS=(
+    [1]='misspiggy <heckler+misspiggy@getbraintree.com>'
+    [2]='kermit <heckler+kermit@getbraintree.com>'
+    [3]='misspiggy <heckler+misspiggy@getbraintree.com>'
+    [4]='misspiggy <heckler+misspiggy@getbraintree.com>'
+    [5]='misspiggy <heckler+misspiggy@getbraintree.com>'
+    [6]='kermit <heckler+kermit@getbraintree.com>'
+    [7]='kermit <heckler+kermit@getbraintree.com>'
+    [8]='kermit <heckler+kermit@getbraintree.com>'
+    [9]='misspiggy <heckler+misspiggy@getbraintree.com>'
+    [10]='kermit <heckler+kermit@getbraintree.com>'
+  )
 
-	CO_AUTHORS=(
-		[3]='kermit <heckler+kermit@getbraintree.com>'
-		[5]='kermit <heckler+kermit@getbraintree.com>'
-		[8]='misspiggy <heckler+misspiggy@getbraintree.com>'
-	)
+  CO_AUTHORS=(
+    [3]='kermit <heckler+kermit@getbraintree.com>'
+    [5]='kermit <heckler+kermit@getbraintree.com>'
+    [8]='misspiggy <heckler+misspiggy@getbraintree.com>'
+  )
 
-	MSGS=(
-		[1]='commit1'
-		[2]='stop nginx on fozzie & add episode one
+  MSGS=(
+    [1]='commit1'
+    [2]='stop nginx on fozzie & add episode one
 
 stop nginx on fozzie
 add episode one
 modify wit on statler
 modify poignant on waldor
 modify slapstick on fozzie'
-		[3]='finish the muppet show lyrics
+    [3]='finish the muppet show lyrics
 
 finish composing the muppet show lyrics
 move index out of muppetshow class into node
 class'
-		[4]='New Movie'
-		[5]='Gonzo'
-		[6]='add some fun diversions
+    [4]='New Movie'
+    [5]='Gonzo'
+    [6]='add some fun diversions
 
 add bsdgames on fozzie
 add sl to statler & waldorf
 '
-		[7]='add kermit user, modify sail input
+    [7]='add kermit user, modify sail input
 
 add kermit user and muppetshow group
 modify the input to the sail game
 '
-		[8]='More Statler'
-		[9]='Even more Statler'
-		[10]='add gonzo user'
-	)
+    [8]='More Statler'
+    [9]='Even more Statler'
+    [10]='add gonzo user'
+  )
 
-	while getopts ":hu:" opt; do
-		case "${opt}" in
-		h)
-			usage
-			return
-			;;
-		u)
-			REPO_URL=$OPTARG
-			;;
-		\?)
-			usage 1>&2
-			return 1
-			;;
-		:)
-			printf "ERROR: Option -%s requires an argument\n" "${OPTARG}" >&2
-			usage 1>&2
-			return 1
-			;;
-		esac
-	done
-	shift $((OPTIND - 1))
+  while getopts ":hu:" opt; do
+    case "${opt}" in
+    h)
+      usage
+      return
+      ;;
+    u)
+      REPO_URL=$OPTARG
+      ;;
+    \?)
+      usage 1>&2
+      return 1
+      ;;
+    :)
+      printf "ERROR: Option -%s requires an argument\n" "${OPTARG}" >&2
+      usage 1>&2
+      return 1
+      ;;
+    esac
+  done
+  shift $((OPTIND - 1))
 
-	if ! [[ -v REPO_URL ]]; then
-		printf 'ERROR: You must specify a repo url\n' >&2
-		usage >&2
-		return 1
-	fi
+  if ! [[ -v REPO_URL ]]; then
+    printf 'ERROR: You must specify a repo url\n' >&2
+    usage >&2
+    return 1
+  fi
 
-	## Delete remote tags
-	tmp_repo=$(mktemp -d)
-	git clone "${REPO_URL}" "${tmp_repo}"
-	pushd "${tmp_repo}"
-	# # Delete all local tags and get the list of remote tags:
-	# git tag -l | xargs git tag -d
-	# git fetch
-	# Remove all remote tags
-	git tag -l | mapfile -t remote_tags
-	for tag in "${remote_tags[@]}"; do
-		git push --delete origin "${tag}"
-	done
+  ## Delete remote tags
+  tmp_repo=$(mktemp -d)
+  git clone "${REPO_URL}" "${tmp_repo}"
+  pushd "${tmp_repo}"
+  # # Delete all local tags and get the list of remote tags:
+  # git tag -l | xargs git tag -d
+  # git fetch
+  # Remove all remote tags
+  git tag -l | mapfile -t remote_tags
+  for tag in "${remote_tags[@]}"; do
+    git push --delete origin "${tag}"
+  done
 
-	git init
+  git init
   git checkout -B main
-	git config advice.detachedHead false
+  git config advice.detachedHead false
 
-	mkdir -p nodes
-	mkdir -p modules
-	cp -r "${THIS_DIR}"/manifests/vendor/* modules/
-	git add -f modules
+  mkdir -p nodes
+  mkdir -p modules
+  cp -r "${THIS_DIR}"/manifests/vendor/* modules/
+  git add -f modules
 
-	for module in "${MODULES[@]}"; do
-		mkdir -p 'modules/'"${module}"'/manifests'
-	done
+  for module in "${MODULES[@]}"; do
+    mkdir -p 'modules/'"${module}"'/manifests'
+  done
 
-	for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
-		if ((commit == 1)); then
-			for f in site.pp CODEOWNERS; do
-				cp "${THIS_DIR}"/manifests/"${f}" ./
-				git add -f "${f}"
-			done
-			cp "${THIS_DIR}"/puppet.conf ./
-			git add -f puppet.conf
-		fi
-		if ((commit == 4)); then
-			git checkout -b manhattan
-		fi
-		if ((commit == 6)); then
-			git checkout main
-		fi
-		for module in "${MODULES[@]}"; do
-			printf -v src '%s/manifests/modules/%s/manifests' "${THIS_DIR}" "${module}"
-			printf -v dst 'modules/%s/manifests' "${module}"
-			pushd "${src}"
-			pps=(*"${commit}".pp)
-			popd
-			for pp in "${pps[@]}"; do
-				base_file=${pp%%"${commit}"'.pp'}
+  for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
+    if ((commit == 1)); then
+      for f in site.pp CODEOWNERS; do
+        cp "${THIS_DIR}"/manifests/"${f}" ./
+        git add -f "${f}"
+      done
+      cp "${THIS_DIR}"/puppet.conf ./
+      git add -f puppet.conf
+    fi
+    if ((commit == 4)); then
+      git checkout -b manhattan
+    fi
+    if ((commit == 6)); then
+      git checkout main
+    fi
+    for module in "${MODULES[@]}"; do
+      printf -v src '%s/manifests/modules/%s/manifests' "${THIS_DIR}" "${module}"
+      printf -v dst 'modules/%s/manifests' "${module}"
+      pushd "${src}"
+      pps=(*"${commit}".pp)
+      popd
+      for pp in "${pps[@]}"; do
+        base_file=${pp%%"${commit}"'.pp'}
         mkdir -p "${dst}"
-				cp "${src}"/"${pp}" "${dst}"/"${base_file}".pp
-				git add -f "${dst}"/"${base_file}".pp
-			done
-		done
-		for node in "${NODES[@]}"; do
-			printf -v src '%s/manifests/nodes/%s%d.pp' "${THIS_DIR}" "${node}" "${commit}"
-			printf -v dst 'nodes/%s.pp' "${node}"
-			cp "${src}" "${dst}"
-			git add -f "${dst}"
-		done
-		msg="${MSGS[commit]}"
-		if [[ -v "CO_AUTHORS[${commit}]" ]]; then
-			printf -v co_author '\n\nCo-authored-by: %s' "${CO_AUTHORS[${commit}]}"
-			msg+="${co_author}"
-		fi
-		git commit --author "${AUTHORS[$commit]}" -F - <<<"${msg}"
-		if ((commit == 1)); then
-			git tag v1 -m 'Release v1'
-		fi
-		if ((commit == 7)); then
-			git merge -m 'Take Manhattan' manhattan
-			git tag v2 -m 'Release v2'
-		fi
-		if ((commit == 9)); then
-			git tag v3 -m 'Release v3'
-		fi
-		if ((commit == 10)); then
-			git tag v4 -m 'Release v4'
-		fi
-	done
+        cp "${src}"/"${pp}" "${dst}"/"${base_file}".pp
+        git add -f "${dst}"/"${base_file}".pp
+      done
+    done
+    for node in "${NODES[@]}"; do
+      printf -v src '%s/manifests/nodes/%s%d.pp' "${THIS_DIR}" "${node}" "${commit}"
+      printf -v dst 'nodes/%s.pp' "${node}"
+      cp "${src}" "${dst}"
+      git add -f "${dst}"
+    done
+    msg="${MSGS[commit]}"
+    if [[ -v "CO_AUTHORS[${commit}]" ]]; then
+      printf -v co_author '\n\nCo-authored-by: %s' "${CO_AUTHORS[${commit}]}"
+      msg+="${co_author}"
+    fi
+    git commit --author "${AUTHORS[$commit]}" -F - <<<"${msg}"
+    if ((commit == 1)); then
+      git tag v1 -m 'Release v1'
+    fi
+    if ((commit == 7)); then
+      git merge -m 'Take Manhattan' manhattan
+      git tag v2 -m 'Release v2'
+    fi
+    if ((commit == 9)); then
+      git tag v3 -m 'Release v3'
+    fi
+    if ((commit == 10)); then
+      git tag v4 -m 'Release v4'
+    fi
+  done
 
-	git push -fu origin main
-	git push -f --tags
+  git push -fu origin main
+  git push -f --tags
 
-	popd
+  popd
 }
 
 main "${@}"
