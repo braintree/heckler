@@ -5,6 +5,8 @@ HELP=$(
 	EOF
 )
 
+THIS_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+
 set -o errexit
 set -o pipefail
 set -o nounset
@@ -113,8 +115,6 @@ modify the input to the sail game
 		return 1
 	fi
 
-	REPO='muppetshow'
-
 	## Delete remote tags
 	tmp_repo=$(mktemp -d)
 	git clone "${REPO_URL}" "${tmp_repo}"
@@ -127,19 +127,15 @@ modify the input to the sail game
 	for tag in "${remote_tags[@]}"; do
 		git push --delete origin "${tag}"
 	done
-	popd
 
-	sudo rm -fr "${REPO}"
-	mkdir "${REPO}"
-	pushd "${REPO}"
-
-	git init -b main
+	git init
+  git checkout -B main
 	git config advice.detachedHead false
 
 	mkdir -p nodes
 	mkdir -p modules
-	cp -r ../manifests/vendor/* modules/
-	git add modules
+	cp -r "${THIS_DIR}"/manifests/vendor/* modules/
+	git add -f modules
 
 	for module in "${MODULES[@]}"; do
 		mkdir -p 'modules/'"${module}"'/manifests'
@@ -148,11 +144,11 @@ modify the input to the sail game
 	for ((commit = 1; commit <= "${#AUTHORS[@]}"; commit++)); do
 		if ((commit == 1)); then
 			for f in site.pp CODEOWNERS; do
-				cp ../manifests/"${f}" ./
-				git add "${f}"
+				cp "${THIS_DIR}"/manifests/"${f}" ./
+				git add -f "${f}"
 			done
-			cp ../puppet.conf ./
-			git add puppet.conf
+			cp "${THIS_DIR}"/puppet.conf ./
+			git add -f puppet.conf
 		fi
 		if ((commit == 4)); then
 			git checkout -b manhattan
@@ -161,22 +157,23 @@ modify the input to the sail game
 			git checkout main
 		fi
 		for module in "${MODULES[@]}"; do
-			printf -v src '../manifests/modules/%s/manifests' "${module}"
+			printf -v src '%s/manifests/modules/%s/manifests' "${THIS_DIR}" "${module}"
 			printf -v dst 'modules/%s/manifests' "${module}"
 			pushd "${src}"
 			pps=(*"${commit}".pp)
 			popd
 			for pp in "${pps[@]}"; do
 				base_file=${pp%%"${commit}"'.pp'}
+        mkdir -p "${dst}"
 				cp "${src}"/"${pp}" "${dst}"/"${base_file}".pp
-				git add "${dst}"/"${base_file}".pp
+				git add -f "${dst}"/"${base_file}".pp
 			done
 		done
 		for node in "${NODES[@]}"; do
-			printf -v src '../manifests/nodes/%s%d.pp' "${node}" "${commit}"
+			printf -v src '%s/manifests/nodes/%s%d.pp' "${THIS_DIR}" "${node}" "${commit}"
 			printf -v dst 'nodes/%s.pp' "${node}"
 			cp "${src}" "${dst}"
-			git add "${dst}"
+			git add -f "${dst}"
 		done
 		msg="${MSGS[commit]}"
 		if [[ -v "CO_AUTHORS[${commit}]" ]]; then
@@ -199,7 +196,6 @@ modify the input to the sail game
 		fi
 	done
 
-	git remote add origin "${REPO_URL}"
 	git push -fu origin main
 	git push -f --tags
 
