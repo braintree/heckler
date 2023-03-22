@@ -133,8 +133,9 @@ const (
 	shutdownTimeout = time.Second * 5
 	// HACK: Bind to ipv4
 	// TODO: move to HecklerdConf
-	defaultAddr = "0.0.0.0:8080"
-	port        = ":50052"
+	defaultAddr       = "0.0.0.0:8080"
+	port              = ":50052"
+	defaultConfigPath = "/etc/hecklerd/hecklerd_conf.yaml"
 )
 
 var Debug = false
@@ -5094,6 +5095,7 @@ func main() {
 	var printVersion bool
 	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
 	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
+	var configfile = flag.String("configfile", "", fmt.Sprintf("read config from `file` instead of %s or the current working directory", defaultConfigPath))
 
 	templates := parseTemplates()
 	logger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
@@ -5121,12 +5123,20 @@ func main() {
 		os.Exit(0)
 	}
 
-	if _, err := os.Stat("/etc/hecklerd/hecklerd_conf.yaml"); err == nil {
-		hecklerdConfPath = "/etc/hecklerd/hecklerd_conf.yaml"
-	} else if _, err := os.Stat("hecklerd_conf.yaml"); err == nil {
-		hecklerdConfPath = "hecklerd_conf.yaml"
+	if *configfile != "" {
+		if _, err := os.Stat(*configfile); err == nil {
+			hecklerdConfPath = *configfile
+		} else {
+			logger.Fatalf("Unable to load -configfile: %s", *configfile)
+		}
 	} else {
-		logger.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
+		if _, err := os.Stat(defaultConfigPath); err == nil {
+			hecklerdConfPath = defaultConfigPath
+		} else if _, err := os.Stat("hecklerd_conf.yaml"); err == nil {
+			hecklerdConfPath = "hecklerd_conf.yaml"
+		} else {
+			logger.Fatalf("Unable to load hecklerd_conf.yaml from %s or the current working directory", defaultConfigPath)
+		}
 	}
 	file, err = os.Open(hecklerdConfPath)
 	if err != nil {

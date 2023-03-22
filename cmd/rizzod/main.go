@@ -35,8 +35,9 @@ import (
 var Version string
 
 const (
-	port     = ":50051"
-	lockPath = "/var/tmp/puppet.lock"
+	port              = ":50051"
+	lockPath          = "/var/tmp/puppet.lock"
+	defaultConfigPath = "/etc/rizzod/rizzod_conf.yaml"
 )
 
 // server is used to implement rizzo.RizzoServer.
@@ -408,6 +409,7 @@ func main() {
 	var printVersion bool
 	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
 	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
+	var configfile = flag.String("configfile", "", fmt.Sprintf("read config from `file` instead of %s or the current working directory", defaultConfigPath))
 
 	logger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
 
@@ -432,12 +434,20 @@ func main() {
 		os.Exit(0)
 	}
 
-	if _, err := os.Stat("/etc/rizzod/rizzod_conf.yaml"); err == nil {
-		rizzoConfPath = "/etc/rizzod/rizzod_conf.yaml"
-	} else if _, err := os.Stat("rizzod_conf.yaml"); err == nil {
-		rizzoConfPath = "rizzod_conf.yaml"
+	if *configfile != "" {
+		if _, err := os.Stat(*configfile); err == nil {
+			rizzoConfPath = *configfile
+		} else {
+			logger.Fatalf("Unable to load -configfile: %s", *configfile)
+		}
 	} else {
-		logger.Fatal("Unable to load rizzod_conf.yaml from /etc/rizzo or .")
+		if _, err := os.Stat(defaultConfigPath); err == nil {
+			rizzoConfPath = defaultConfigPath
+		} else if _, err := os.Stat("rizzod_conf.yaml"); err == nil {
+			rizzoConfPath = "rizzod_conf.yaml"
+		} else {
+			logger.Fatalf("Unable to load rizzod_conf.yaml from %s or the current working directory", defaultConfigPath)
+		}
 	}
 	file, err = os.Open(rizzoConfPath)
 	if err != nil {
