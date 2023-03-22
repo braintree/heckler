@@ -1,5 +1,6 @@
 ARG DEBIAN_CODENAME=bullseye
 FROM debian:${DEBIAN_CODENAME}
+ARG DEBIAN_CODENAME=bullseye
 
 RUN apt-get update -q && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -33,5 +34,6 @@ COPY heckler.sh /etc/profile.d/
 RUN chmod 755 /setup_ssh_exec_systemd
 ADD ssh_configs /ssh_configs
 COPY sshd_config /ssh_configs/
+RUN sed -i '6i### Inserted by Dockerfile ###\n[ -z "$PS1" ] && export PATH="$PATH:/heckler:/opt/puppetlabs/bin"\n' /etc/bash.bashrc
 
 CMD [ "/setup_ssh_exec_systemd" ]
