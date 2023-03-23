@@ -86,13 +86,14 @@ processes in our shell.
         make ssh-config
         ```
 
-4.  Start the `hecklerd` and `rizzod` processes in the containers:
+4.  Tail the log output of the `hecklerd` and `rizzod` systemd services in
+    the containers:
 
     ```sh
-    ssh heckler 'hecklerd -configfile=/heckler/docs/sample-config/hecklerd_conf.yaml'
-    ssh statler 'rizzod -configfile=/heckler/docs/sample-config/rizzod_conf.yaml'
-    ssh waldorf 'rizzod -configfile=/heckler/docs/sample-config/rizzod_conf.yaml'
-    ssh fozzie 'rizzod -configfile=/heckler/docs/sample-config/rizzod_conf.yaml'
+    ssh heckler 'journalctl -f -u hecklerd.service'
+    ssh statler 'journalctl -f -u rizzod.service'
+    ssh waldorf 'journalctl -f -u rizzod.service'
+    ssh fozzie 'journalctl -f -u rizzod.service'
     ```
 
 5.  Force a puppet apply of the state from tag `v1` from your test repo:
@@ -101,7 +102,14 @@ processes in our shell.
     ssh heckler 'heckler -rev v1 -force'
     ```
 
-6.  Watch heckler noop & apply the remaining commits.
+    This should eventually output a success message along the lines of:
+
+    ```
+    Applied nodes: (3); Error nodes: (0)
+    ```
+
+6.  Watch heckler noop & apply the remaining commits. When you are satisfied,
+    you can interrupt the `make run` from step 3 to shut everything down.
 
 
 [`hecklerd_conf.yaml`]: /docs/sample-configs/hecklerd_conf.yaml

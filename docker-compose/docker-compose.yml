@@ -1,8 +1,9 @@
-version: '3.7'
+version: '3.8'
 services:
   fozzie.example.com:
     build:
       context: ./node
+    command: rizzod
     image: heckler-node:latest
     hostname: fozzie
     domainname: example.com
@@ -27,6 +28,7 @@ services:
   statler.example.com:
     build:
       context: ./node
+    command: rizzod
     image: heckler-node:latest
     hostname: statler
     domainname: example.com
@@ -51,6 +53,7 @@ services:
   waldorf.example.com:
     build:
       context: ./node
+    command: rizzod
     image: heckler-node:latest
     hostname: waldorf
     domainname: example.com
@@ -75,6 +78,7 @@ services:
   heckler.example.com:
     build:
       context: ./node
+    command: hecklerd
     image: heckler-node:latest
     hostname: heckler
     domainname: example.com

@@ -1,0 +1,12 @@
+[Unit]
+Description=Run hecklerd pointing at sample config
+After=network-online.target
+
+[Service]
+WorkingDirectory=/heckler
+ExecStart=/bin/bash -c 'PATH=$PATH:/heckler:/opt/puppetlabs/bin /heckler/hecklerd -configfile=/heckler/doc/sample-configs/hecklerd_conf.yaml'
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

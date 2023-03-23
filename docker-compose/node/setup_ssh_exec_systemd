@@ -4,6 +4,11 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+if [[ $# == 0 ]] ; then
+  echo "Usage: $0 DAEMON_TO_RUN" >&2
+  exit 1
+fi
+
 pushd /ssh_configs >/dev/null
 cp sshd_config ssh_known_hosts /etc/ssh/
 cp "${HOSTNAME}"/host/* /etc/ssh/
@@ -16,4 +21,5 @@ popd >/dev/null
 
 # Avoids breakage when security releases update pkg revs
 apt-get update --allow-releaseinfo-change -q
+systemctl enable "${1}.service"
 exec /lib/systemd/systemd
