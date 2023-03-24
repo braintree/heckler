@@ -6,13 +6,16 @@ Second, an integration test with a sample repo.
 
 ## Go Tests
 
-    $ make docker-test
+```sh
+make docker-vet
+make docker-test
+```
 
 ## Integration Test
 
-docker-compose is a prerequisite for running these tests, and we also highly
-recommend using tmux as well, since we will be running lots of foreground
-processes in our shell.
+`docker-compose` and `tmux` are prerequisites for running these tests. We
+use Debian Linux for our development environments, so if you use something
+different, YMMV.
 
 1.  [Create a GitHub app for testing
     heckler](https://docs.github.com/en/apps/creating-github-apps/creating-github-apps/creating-a-github-app).
@@ -62,14 +65,31 @@ processes in our shell.
           - "@your_collaborators_username"
         ```
 
-    5.  Use the [`make_repo`][] script to init your test repo and create some
-        commits and release tags.
+    5.  Use the [`make_repo`](/make-repo) script to init your test repo and
+        create some commits and release tags.
 
         ```sh
         ./make-repo -u <existing sample github url>
         ```
 
-3.  Start the docker containers:
+3.  Build the binaries:
+
+    ```sh
+    make docker-build
+    ```
+
+4.  Run the integration tests!
+
+    1.  Open a new, fresh tmux window
+    2.  Run the `integration-test` make target.
+
+        ```sh
+        cd docker-compose
+        make integration-test
+        ```
+
+If you want to know manually start the docker containers for that these tests
+use:
 
     1.  Start our docker-compose setup, which creates a container that
         represents the management host (it'll run `hecklerd`), plus three
@@ -80,36 +100,29 @@ processes in our shell.
         make run
         ```
 
-    2.  Set up your `ssh_config` to make the rest of this process easier.
+    2.  Set up your `ssh_config` to make accessing the hosts easier.
 
         ```sh
         make ssh-config
         ```
 
-4.  Tail the log output of the `hecklerd` and `rizzod` systemd services in
-    the containers:
+        You can ssh to them based on the names in the
+        [`docker-compose.yml`](docker-compose/docker-compose.yml) config. The
+        `heckler` container runs `hecklerd` while the rest run `rizzod`, all
+        in systemd units. This means you can get daemon logs from the journal:
 
-    ```sh
-    ssh heckler 'journalctl -f -u hecklerd.service'
-    ssh statler 'journalctl -f -u rizzod.service'
-    ssh waldorf 'journalctl -f -u rizzod.service'
-    ssh fozzie 'journalctl -f -u rizzod.service'
-    ```
+        ```sh
+        ssh heckler -- journalctl -f -u hecklerd.service
+        ssh statler -- journalctl -f -u rizzod.service
+        ```
 
-5.  Force a puppet apply of the state from tag `v1` from your test repo:
+    3.  Invoke `heckler` or `rizzo` commands by sshing into the containers
+        and running the commands there. For example, you can force hecklerd to
+        start applying from the `v1` tag (like the integration tests do) by
+        running:
 
-    ```sh
-    ssh heckler 'heckler -rev v1 -force'
-    ```
-
-    This should eventually output a success message along the lines of:
-
-    ```
-    Applied nodes: (3); Error nodes: (0)
-    ```
-
-6.  Watch heckler noop & apply the remaining commits. When you are satisfied,
-    you can interrupt the `make run` from step 3 to shut everything down.
-
+        ```sh
+        ssh heckler -- heckler -rev v1 -force
+        ```
 
 [`hecklerd_conf.yaml`]: /docs/sample-configs/hecklerd_conf.yaml

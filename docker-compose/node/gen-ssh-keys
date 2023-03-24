@@ -70,6 +70,7 @@ function main() {
 			exit 1
 		fi
 	done
+  # TODO maybe let's just say "run make ssh-config"
 	printf '\nAdd the following to your ~/.ssh/config:\n\n'
 	printf 'Match all\n'
 	printf 'Include %s\n\n' "$(readlink -f ssh_config)"
