@@ -30,7 +30,7 @@ build-node-image: $(SSH_KEYS) ## Build the node image
 .PHONY: ssh-config
 ssh-config:	## Set up your ssh_config to "just work" with the containers
 	@if ! grep -q '$(SSH_CONFIG_MANAGED_HEADER)' ~/.ssh/config ; then \
-		echo -e '\n### BEGIN $(SSH_CONFIG_MANAGED_HEADER) ###\nMatch all\nInclude $(THIS_DIR)/node/ssh_configs\n### END $(SSH_CONFIG_MANAGED_HEADER) ###' >> ~/.ssh/config ; \
+		echo -e '\n### BEGIN $(SSH_CONFIG_MANAGED_HEADER) ###\nMatch all\nInclude $(THIS_DIR)/node/ssh_configs/ssh_config\n### END $(SSH_CONFIG_MANAGED_HEADER) ###' >> ~/.ssh/config ; \
 		echo Updated ~/.ssh/config to be able to ssh to the test containers. ; \
 	else \
 		echo ~/.ssh/config is already set up. Remove the section starting with '### BEGIN $(SSH_CONFIG_MANAGED_HEADER) ###' if you want to reset it. ; \
