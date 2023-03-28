@@ -33,7 +33,7 @@ ssh-config:	## Set up your ssh_config to "just work" with the containers
 		echo -e '\n### BEGIN $(SSH_CONFIG_MANAGED_HEADER) ###\nMatch all\nInclude $(THIS_DIR)/node/ssh_configs/ssh_config\n### END $(SSH_CONFIG_MANAGED_HEADER) ###' >> ~/.ssh/config ; \
 		echo Updated ~/.ssh/config to be able to ssh to the test containers. ; \
 	else \
-		echo ~/.ssh/config is already set up. Remove the section starting with '### BEGIN $(SSH_CONFIG_MANAGED_HEADER) ###' if you want to reset it. ; \
+		echo ~/.ssh/config is already set up. It can be reverted by running make clean. ; \
 	fi
 
 .PHONY: ssh-keys
@@ -45,6 +45,7 @@ $(SSH_KEYS):
 .PHONY: clean
 clean: ## Delete generated ssh keys
 	rm -fr node/ssh_configs
+	sed -i -e :a -e '/### BEGIN $(SSH_CONFIG_MANAGED_HEADER) ###/,/### END $(SSH_CONFIG_MANAGED_HEADER) ###/d' -e '/^\n*$$/{$$d;N;ba' -e '}' ~/.ssh/config
 
 .PHONY: integration-test
 integration-test: 	# Run the integration tests from TESTING.md as hands-off as possible
