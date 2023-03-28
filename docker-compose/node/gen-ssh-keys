@@ -5,6 +5,11 @@
 set -o errexit
 set -o nounset
 
+THIS_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+KNOWN_HOSTS=ssh_known_hosts
+AUTHORIZED_KEYS=authorized_keys
+SSH_CONFIG=ssh_config
+
 function node-ip() {
 	local node="${1}"
 	local config="${2}"
@@ -30,26 +35,29 @@ function gen-node-keys() {
 	pushd "${node}" >/dev/null
 	if ! [[ -f 'host/ssh_host_ecdsa_key' ]]; then
 		if ! ssh-keygen -q -t ecdsa -N '' -f host/ssh_host_ecdsa_key -C "${node}" </dev/null; then
+			echo "Could not generate host key for ${node}">&2
 			return 1
 		fi
 	fi
-	cat host/ssh_host_ecdsa_key.pub >>../ssh_known_hosts
+	if ! node_ip=$(node-ip "${node}" ../../../docker-compose.yml); then
+		echo "Could not determine IP address for ${node}">&2
+		return 1
+	fi
+	printf '%s %s\n' "${node_ip}" "$(cat host/ssh_host_ecdsa_key.pub)" >>../"${KNOWN_HOSTS}"
 	if ! [[ -f 'root/id_ecdsa' ]]; then
 		if ! ssh-keygen -q -t ecdsa -N '' -f root/id_ecdsa -C 'root@'"${node}" </dev/null; then
+			echo "Could not generate root user key for ${node}">&2
 			return 1
 		fi
 	fi
 	cat root/id_ecdsa.pub >>../authorized_keys
-	root_key="$(readlink -f root/id_ecdsa)"
-	if ! node_ip=$(node-ip "${node}" ../../../docker-compose.yml); then
-		return 1
-	fi
-	cat <<-EOF >>../ssh_config
+	cat <<-EOF >>../${SSH_CONFIG}
 		Host ${node}
 		  User root
 		  Hostname ${node_ip}
 		  IdentitiesOnly true
-		  IdentityFile ${root_key}
+		  IdentityFile $(readlink -f root/id_ecdsa)
+		  UserKnownHostsFile $(readlink -f ../"${KNOWN_HOSTS}")
 	EOF
 	popd >/dev/null
 }
@@ -57,23 +65,21 @@ function gen-node-keys() {
 function main() {
 	local -a nodes=("${@}")
 	local base_dir
-	base_dir="$(dirname "${0}")"'/ssh_configs'
+	base_dir="${THIS_DIR}/ssh_configs"
 
 	mkdir -p "${base_dir}"
 	pushd "${base_dir}" >/dev/null
-	rm -f ssh_known_hosts
-	rm -f authorized_keys
-	rm -f ssh_config
+	rm -f "${KNOWN_HOSTS}"
+	rm -f "${AUTHORIZED_KEYS}"
+	rm -f "${SSH_CONFIG}"
 	for node in "${nodes[@]}"; do
 		if ! gen-node-keys "${node}"; then
 			printf 'Error generating keys for %s\n' "${node}"
 			exit 1
 		fi
 	done
-  # TODO maybe let's just say "run make ssh-config"
-	printf '\nAdd the following to your ~/.ssh/config:\n\n'
-	printf 'Match all\n'
-	printf 'Include %s\n\n' "$(readlink -f ssh_config)"
+	ssh-keygen -Hf "${KNOWN_HOSTS}"
+	printf '\nDone. You may run make ssh-config to manually include the generated Host entries to your ssh config..\n'
 	popd >/dev/null
 }
 

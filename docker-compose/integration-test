@@ -1,0 +1,121 @@
+#!/bin/bash
+# This script exercises heckler against a "real" GitHub repo. See TESTING.md
+# for more details. Unfortunately, some manual pre-prep and post-run cleanup
+# are required.
+# We highly recommend running this from the Makefile since other make targets
+# are used to reduce code reuse.
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+THIS_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+
+
+# TODO make a non-tmux version of this once we get the ability to do other things like delete issues
+if [[ -z "$TMUX" ]] ; then
+  echo These integration tests require you to be in a tmux session >&2
+  exit 1
+fi
+
+CONTAINERS=(heckler statler waldorf fozzie)
+
+is_sshable() {
+  ssh -o ConnectTimeout=1 -o ConnectionAttempts=1 -o ServerAliveInterval=2 "$1" -- true >/dev/null 2>&1
+}
+
+cleanup() {
+  rc="$?"
+  if [[ -n "${TESTS_FAILED:-}" ]] ; then
+    echo 'The tests failed! We will leave the docker containers and tmux panes open so you can debug.' >&2
+    if [[ "$rc" == 0 ]] ; then
+      ((rc=1))
+    fi
+    return "$rc"
+  fi
+
+  if [[ "$rc" != 0 ]] ; then
+    echo 'This script encountered an error, but the tests did not explicitly fail.' >&2
+    return "$rc"
+  fi
+  echo 'The tests passed! We will clean up the leftovers.'
+
+  echo 'Cleaning up docker containers...'
+  tmux send-keys -t 1 C-c
+
+  printf 'Waiting for containers to shut down...'
+  for container in "${CONTAINERS[@]}" ; do
+    while is_sshable "$container"; do
+      printf .
+      sleep 5
+    done
+  done
+  printf '\nCleaning up tmux panes...\n'
+  tmux kill-pane -a -t 0
+  return "$rc"
+}
+trap cleanup EXIT
+
+# TODO check up front to make sure the repo is initialized as done by make-repo script
+# TODO check up front to make sure commit authors are repo collaborators (also stop using fake authors)
+# TODO use graphql API to delete any existing issues
+
+
+echo "These integration tests will open and close a bunch of tmux panes. don't go anywhere while this is running."
+# set up the tmux panes
+tmux split-window -h -c "${THIS_DIR}"
+tmux split-window -v -p 80 -c "${THIS_DIR}"
+tmux split-window -v -p 75 -c "${THIS_DIR}"
+tmux split-window -v -p 66 -c "${THIS_DIR}"
+tmux split-window -v -c "${THIS_DIR}"
+tmux select-pane -t 0
+
+# start the docker containers
+tmux send-keys -t 1 'make run' Enter
+printf 'Waiting for containers to be sshable...'
+for container in "${CONTAINERS[@]}" ; do \
+  while ! is_sshable "$container"; do \
+    printf . ; \
+    sleep 5 ; \
+  done ; \
+done
+printf '\n'
+
+# tail the logs (so you can debug easier if something goes wrong)
+tmux send-keys -t 2 'ssh heckler -- journalctl -f -u hecklerd.service' Enter
+tmux send-keys -t 3 'ssh statler -- journalctl -f -u rizzod.service' Enter
+tmux send-keys -t 4 'ssh waldorf -- journalctl -f -u rizzod.service' Enter
+tmux send-keys -t 5 'ssh fozzie -- journalctl -f -u rizzod.service' Enter
+echo 'Making sure everything is initialized before making heckler start applying...'
+sleep 10
+
+echo 'Making heckler start applying changes...'
+REV=v1
+HECKLER_RESULTS="$(ssh heckler -- heckler -rev "$REV" -force)"
+echo "${HECKLER_RESULTS}"
+if [[ "${HECKLER_RESULTS}" == 'Applied nodes: (3); Error nodes: (0)' ]] ; then
+  echo "Successfully applied ${REV}! Heckler will now start applying more changes and creating GitHub issues for them."
+else
+  echo "Failed to apply ${REV}! Heckler cannot proceed from here."
+  TESTS_FAILED=true
+fi
+
+printf 'Waiting for heckler to complete creating GitHub issues for all commits...'
+SLEEP_TOTAL=0
+SLEEP_INTERVAL=5
+TIMEOUT=600
+while ! (ssh heckler -- journalctl -u hecklerd.service | grep -q 'No new commits, sleeping') ; do
+  if [[ ${SLEEP_TOTAL} -ge ${TIMEOUT} ]] ; then
+    printf '\nFailure! Did not see heckler say it had no new commits to process after %s seconds.' "$TIMEOUT"
+    TESTS_FAILED=true
+    break
+  fi
+  sleep ${SLEEP_INTERVAL}
+  ((SLEEP_TOTAL+=SLEEP_INTERVAL))
+  printf '.'
+done
+printf '\n'
+
+# TODO run serverspecs here
+
+# TODO check github to see if issues were created and auto-closed as expected
