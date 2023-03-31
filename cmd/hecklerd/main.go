@@ -133,8 +133,9 @@ const (
 	shutdownTimeout = time.Second * 5
 	// HACK: Bind to ipv4
 	// TODO: move to HecklerdConf
-	defaultAddr = "0.0.0.0:8080"
-	port        = ":50052"
+	defaultAddr       = "0.0.0.0:8080"
+	port              = ":50052"
+	defaultConfigPath = "/etc/hecklerd/hecklerd_conf.yaml"
 )
 
 var Debug = false
@@ -728,7 +729,7 @@ func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir st
 
 func groupReportNodeSet(ns *NodeSet, commit *git.Commit, deltaNoop bool, repo *git.Repository, conf *HecklerdConf, logger *log.Logger) (groupedReport, error) {
 	var err error
-	for host, _ := range ns.nodes.active {
+	for host := range ns.nodes.active {
 		os.Mkdir(conf.NoopDir+"/"+host, 0755)
 	}
 
@@ -992,7 +993,7 @@ func compressHosts(hosts []string) string {
 func compressHostsMap(hostsMap map[string]bool) string {
 	hosts := make([]string, len(hostsMap))
 	i := 0
-	for k, _ := range hostsMap {
+	for k := range hostsMap {
 		hosts[i] = k
 		i++
 	}
@@ -1002,7 +1003,7 @@ func compressHostsMap(hostsMap map[string]bool) string {
 func compressNodesMap(nodesMap map[string]*Node) string {
 	hosts := make([]string, len(nodesMap))
 	i := 0
-	for k, _ := range nodesMap {
+	for k := range nodesMap {
 		hosts[i] = k
 		i++
 	}
@@ -2812,12 +2813,13 @@ func greatestTagApproved(nextTags []string, priorTag string, conf *HecklerdConf,
 
 // Are there newer release tags than our common lastApply tag across "all"
 // nodes?
-//   If yes
-//     Do we have a greatest tag that is approved?
-//       If no, do nothing
-//       If yes
-//         Apply new tag across all nodes
-//   If no, do nothing
+//
+//	If yes
+//	  Do we have a greatest tag that is approved?
+//	    If no, do nothing
+//	    If yes
+//	      Apply new tag across all nodes
+//	If no, do nothing
 func apply(noopLock *sync.Mutex, applySem chan int, conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	var err error
 	var ns *NodeSet
@@ -2933,13 +2935,14 @@ func noopRequiresApproval(gr groupedReport) bool {
 	return len(gr.Resources) > 0 || hasEvalErrors(gr.Errors)
 }
 
-//  Are there newer commits than our common last applied tag across "all"
-//  nodes?
-//    If No, do nothing
-//    If Yes, check each commit issue for approval
-//      Is the issue approved?
-//        If No, do nothing
-//        If Yes, note approval and close the issue
+// Are there newer commits than our common last applied tag across "all"
+// nodes?
+//
+//	If No, do nothing
+//	If Yes, check each commit issue for approval
+//	  Is the issue approved?
+//	    If No, do nothing
+//	    If Yes, note approval and close the issue
 func approvalLoop(conf *HecklerdConf, repo *git.Repository, templates *template.Template) {
 	var err error
 	var ns *NodeSet
@@ -3664,7 +3667,7 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 	ns.nodes.locked = copyNodeMap(ns.nodes.dialed)
 	unlockNodeSet("root", false, ns, logger)
 	unlockedHosts := make([]string, 0)
-	for host, _ := range ns.nodes.active {
+	for host := range ns.nodes.active {
 		unlockedHosts = append(unlockedHosts, host)
 	}
 	if len(unlockedHosts) > 0 {
@@ -3677,12 +3680,13 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 }
 
 // Does our common tag across "all" nodes equal our latest tag?
-//   If no
-//     Do nothing, the latest tag has not been applied, yet
-//   If yes
-//     Are there new commits beyond are common tag?
-//       If no, do nothing
-//       If yes, create a new tag
+//
+//	If no
+//	  Do nothing, the latest tag has not been applied, yet
+//	If yes
+//	  Are there new commits beyond are common tag?
+//	    If no, do nothing
+//	    If yes, create a new tag
 func autoTag(conf *HecklerdConf, repo *git.Repository) {
 	logger := log.New(os.Stdout, "[autoTag] ", log.Lshortfile)
 	var err error
@@ -4004,15 +4008,16 @@ func eligibleNodeSet(user string, ns *NodeSet) {
 
 // Is there a newer release tag than our common lastApply tag across "all"
 // nodes?
-//   If yes
-//     Is there a milestone created for that version?
-//       If no, create the milestone
-//       If yes, do nothing
-//     Get a list of all commits between tags
-//     Does a github issue exist for each issue?
-//       If yes, associate issue with milestone
-//       If no, do nothing
-//   If no, do nothing
+//
+//	If yes
+//	  Is there a milestone created for that version?
+//	    If no, create the milestone
+//	    If yes, do nothing
+//	  Get a list of all commits between tags
+//	  Does a github issue exist for each issue?
+//	    If yes, associate issue with milestone
+//	    If no, do nothing
+//	If no, do nothing
 func milestoneLoop(conf *HecklerdConf, repo *git.Repository) {
 	var err error
 	var ns *NodeSet
@@ -4160,15 +4165,15 @@ func commonTagNodeSet(conf *HecklerdConf, ns *NodeSet, repo *git.Repository, log
 // as well as children of their dirty commit which hopefully will include the
 // applied changes.
 //
-//  Are there any nodes dirty?
-//    If No, do nothing
-//    If Yes,
-//      For each dirty node:
-//        - Grab threshold commits after dirty commit
-//        - Noop each un-nooped commit, from earliest to latest
-//          Does the commit noop clean?
-//            If No, mark failure
-//            If Yes, apply commit and stop nooping node
+//	Are there any nodes dirty?
+//	  If No, do nothing
+//	  If Yes,
+//	    For each dirty node:
+//	      - Grab threshold commits after dirty commit
+//	      - Noop each un-nooped commit, from earliest to latest
+//	        Does the commit noop clean?
+//	          If No, mark failure
+//	          If Yes, apply commit and stop nooping node
 func clean(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, nodeDirtyNoops map[string]dirtyNoops, templates *template.Template, logger *log.Logger) {
 	cleanChan := make(chan cleanNodeResult)
 	var err error
@@ -4647,15 +4652,16 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 	return
 }
 
-//  Are there newer commits than our common last applied tag across the "all"
-//  node set?
-//    If No, do nothing
-//    If Yes,
-//      - Check if we have serialized copy of the grouped report
-//        If Yes, do nothing
-//        If No,
-//          - Noop commit to create grouped report
-//          - Create a Github issue, if it does not exist
+// Are there newer commits than our common last applied tag across the "all"
+// node set?
+//
+//	If No, do nothing
+//	If Yes,
+//	  - Check if we have serialized copy of the grouped report
+//	    If Yes, do nothing
+//	    If No,
+//	      - Noop commit to create grouped report
+//	      - Create a Github issue, if it does not exist
 func noop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templates *template.Template, logger *log.Logger) {
 	var err error
 	var ns *NodeSet
@@ -4777,7 +4783,7 @@ func deleteDupIssues(conf *HecklerdConf, repo *git.Repository, logger *log.Logge
 		logger.Printf("Error: unable to connect to GitHub, sleeping: %v", err)
 		return
 	}
-	for gi, _ := range commits {
+	for gi := range commits {
 		logger.Printf("Searching for dups of commit: %s", gi.String())
 		githubIssueDeleteDups(ghclient, gi, conf)
 		if err != nil {
@@ -5089,6 +5095,7 @@ func main() {
 	var printVersion bool
 	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
 	var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
+	var configfile = flag.String("configfile", "", fmt.Sprintf("read config from `file` instead of %s or the current working directory", defaultConfigPath))
 
 	templates := parseTemplates()
 	logger := log.New(os.Stdout, "[Main] ", log.Lshortfile)
@@ -5116,12 +5123,20 @@ func main() {
 		os.Exit(0)
 	}
 
-	if _, err := os.Stat("/etc/hecklerd/hecklerd_conf.yaml"); err == nil {
-		hecklerdConfPath = "/etc/hecklerd/hecklerd_conf.yaml"
-	} else if _, err := os.Stat("hecklerd_conf.yaml"); err == nil {
-		hecklerdConfPath = "hecklerd_conf.yaml"
+	if *configfile != "" {
+		if _, err := os.Stat(*configfile); err == nil {
+			hecklerdConfPath = *configfile
+		} else {
+			logger.Fatalf("Unable to load -configfile: %s", *configfile)
+		}
 	} else {
-		logger.Fatal("Unable to load hecklerd_conf.yaml from /etc/hecklerd or .")
+		if _, err := os.Stat(defaultConfigPath); err == nil {
+			hecklerdConfPath = defaultConfigPath
+		} else if _, err := os.Stat("hecklerd_conf.yaml"); err == nil {
+			hecklerdConfPath = "hecklerd_conf.yaml"
+		} else {
+			logger.Fatalf("Unable to load hecklerd_conf.yaml from %s or the current working directory", defaultConfigPath)
+		}
 	}
 	file, err = os.Open(hecklerdConfPath)
 	if err != nil {

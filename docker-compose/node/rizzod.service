@@ -1,0 +1,12 @@
+[Unit]
+Description=Run rizzod pointing at sample config
+After=network-online.target
+
+[Service]
+WorkingDirectory=/heckler
+ExecStart=/bin/bash -c 'PATH=$PATH:/heckler:/opt/puppetlabs/bin /heckler/rizzod -configfile=/heckler/doc/sample-configs/rizzod_conf.yaml'
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

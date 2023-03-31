@@ -1,4 +1,6 @@
-FROM debian:buster
+ARG DEBIAN_CODENAME=bullseye
+FROM debian:${DEBIAN_CODENAME}
+ARG DEBIAN_CODENAME
 
 RUN apt-get update -q && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -17,8 +19,8 @@ RUN apt-get update -q && \
       less \
       vim-tiny \
       2>&1
-RUN curl -sO https://apt.puppet.com/puppet6-release-buster.deb
-RUN dpkg -i puppet6-release-buster.deb
+RUN curl -sO https://apt.puppet.com/puppet6-release-${DEBIAN_CODENAME}.deb
+RUN dpkg -i puppet6-release-${DEBIAN_CODENAME}.deb
 RUN ln -s /dev/null /etc/systemd/system/pxp-agent.service
 RUN ln -s /dev/null /etc/systemd/system/puppet.service
 RUN apt-get update -q && \
@@ -32,5 +34,7 @@ COPY heckler.sh /etc/profile.d/
 RUN chmod 755 /setup_ssh_exec_systemd
 ADD ssh_configs /ssh_configs
 COPY sshd_config /ssh_configs/
+RUN sed -i '6i### Inserted by Dockerfile ###\n[ -z "$PS1" ] && export PATH="$PATH:/heckler:/opt/puppetlabs/bin"\n' /etc/bash.bashrc
+COPY *.service /etc/systemd/system/
 
-CMD [ "/setup_ssh_exec_systemd" ]
+ENTRYPOINT [ "/setup_ssh_exec_systemd" ]
