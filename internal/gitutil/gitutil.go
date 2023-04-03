@@ -239,12 +239,12 @@ func Checkout(rev string, repo *git.Repository) (string, error) {
 
 	commit, err := RevparseToCommit(rev, repo)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	tree, err := repo.LookupTree(commit.TreeId())
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	checkoutOpts := git.CheckoutOpts{

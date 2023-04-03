@@ -2728,7 +2728,8 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 			UpdateFetchhead: true,
 			DownloadTags:    git.DownloadTagsAll,
 		},
-		Bare: true,
+		Bare:           true,
+		CheckoutBranch: conf.RepoBranch,
 	}
 	if conf.GitHubHttpProxy != "" {
 		cloneOptions.ProxyOptions = git.ProxyOptions{

@@ -498,6 +498,7 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Error: unable to pull repo, exiting: %v", err)
 	}
+	log.Println("PullBranch Complete")
 
 	grpcServer := grpc.NewServer()
 	rizzoServer := new(rizzoServer)
