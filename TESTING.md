@@ -13,9 +13,9 @@ make docker-test
 
 ## Integration Test
 
-`docker-compose` and `tmux` are prerequisites for running these tests. We
-use Debian Linux for our development environments, so if you use something
-different, YMMV.
+`docker-compose`, `tmux`, `curl`, `jq`, and `yq`  are prerequisites for
+running these tests. We use Debian Linux for our development environments, so
+if you use something different, YMMV.
 
 1.  [Create a GitHub app for testing
     heckler](https://docs.github.com/en/apps/creating-github-apps/creating-github-apps/creating-a-github-app).

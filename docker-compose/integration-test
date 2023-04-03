@@ -58,8 +58,103 @@ trap cleanup EXIT
 
 # TODO check up front to make sure the repo is initialized as done by make-repo script
 # TODO check up front to make sure commit authors are repo collaborators (also stop using fake authors)
-# TODO use graphql API to delete any existing issues
 
+# credit to https://gist.github.com/carestad/bed9cb8140d28fe05e67e15f667d98ad
+# TODO make path to config be configurable via docker run args, i.e., template the .service file
+HECKLERD_CONF="$(readlink -f "${THIS_DIR}"/../doc/sample-configs/hecklerd_conf.yaml)"
+GH_DOMAIN="$(yq -r '.github_domain' "${HECKLERD_CONF}")"
+GH_APP_ID="$(yq -r '.github_app_id' "${HECKLERD_CONF}")"
+GH_INSTALL_ID="$(yq -r '.github_app_install_id' "${HECKLERD_CONF}")"
+GH_APP_SLUG="$(yq -r '.github_app_slug' "${HECKLERD_CONF}")"
+GH_REPO="$(yq -r '.repo' "${HECKLERD_CONF}")"
+GH_REPO_OWNER="$(yq -r '.repo_owner' "${HECKLERD_CONF}")"
+GH_REPO_BRANCH="$(yq -r '.repo_branch' "${HECKLERD_CONF}")"
+# TODO make this configurable too
+GH_APP_PK="$(< "${THIS_DIR}"/../github-private-key.pem)"
+
+# Shared content to use as template
+header='{
+  "alg": "RS256",
+  "typ": "JWT"
+}'
+payload_template='{}'
+
+build_payload() {
+  jq -c \
+    --arg current_time "$(date +%s)" \
+    --arg app_id "${GH_APP_ID}" \
+  '
+  ($current_time | tonumber) as $iat
+  | .iat = $iat
+  | .exp = ($iat + 300)
+  | .iss = ($app_id | tonumber)
+  | .alg = "RS256"
+  ' <<< "${payload_template}" | tr -d '\n'
+}
+
+b64enc() {
+  base64 -w 0 | tr -d '='
+}
+compact_json() {
+  jq -c . | LC_CTYPE=C tr -d '\n'
+}
+rs256_sign() {
+  openssl dgst -binary -sha256 -sign <(printf '%s\n' "$1")
+}
+
+signed_jwt() {
+  local payload sig
+  payload="$(build_payload)" || return
+  signed_content="$(compact_json <<<"${header}" | b64enc).$(compact_json <<<"${payload}" | b64enc)"
+  sig="$(printf '%s' "${signed_content}" | rs256_sign "${GH_APP_PK}" | b64enc)"
+  printf '%s.%s\n' "${signed_content}" "${sig}"
+}
+
+app_token() {
+  curl -LsS -X POST \
+    -H 'Accept: application/vnd.github+json' \
+    -H "Authorization: Bearer $(signed_jwt)"\
+    -H 'X-GitHub-Api-Version: 2022-11-28' \
+    -d '{"repository":"'"${GH_APP_SLUG}"'"}' \
+    "https://api.${GH_DOMAIN}/app/installations/${GH_INSTALL_ID}/access_tokens" \
+    | jq -r '.token'
+}
+
+gql_query_body="
+  query {
+    repository(
+      owner: \\\"${GH_REPO_OWNER}\\\",
+      name: \\\"${GH_REPO}\\\"
+    ) {
+      issues(last: 100) {
+        edges {
+          node {
+            id
+          }
+        }
+      }
+    }
+  }"
+APP_TOKEN="$(app_token)"
+mapfile -t issueIds < <(curl -LsS -X POST \
+  -H "Authorization: Bearer ${APP_TOKEN}" \
+  -d '{"query": "'"${gql_query_body//$'\n'/}"'"}' \
+  "https://${GH_DOMAIN}/api/graphql" \
+  | jq -r '.data.repository.issues.edges[].node.id' \
+)
+
+for issueId in "${issueIds[@]}"; do
+  gql_mutation_body="
+    mutation {
+      deleteIssue(input: {issueId: \\\"${issueId}\\\"}) {
+        clientMutationId
+      }
+    }"
+  curl -LsS -X POST \
+    -H "Authorization: Bearer ${APP_TOKEN}" \
+    -d '{"query": "'"${gql_mutation_body//$'\n'/}"'"}' \
+    "https://${GH_DOMAIN}/api/graphql"
+done
 
 echo "These integration tests will open and close a bunch of tmux panes. don't go anywhere while this is running."
 # set up the tmux panes
