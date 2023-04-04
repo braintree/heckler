@@ -298,4 +298,33 @@ printf '\n'
 
 # TODO run serverspecs here
 
-# TODO check github to see if issues were created and auto-closed as expected
+# refresh token since they only last 10 minutes
+APP_TOKEN="$(app_token)"
+# TODO this code should be made more generic, asserting things like whether
+# issues are assigned to milestones that are not after tags that already
+# occurred in their tree, what the contents of each issue's summary message are,
+# is there an issue for every commit that caused a diff, are the issues assigned
+# to the right people, etc. for now, these few simple assertions seem good
+# to catch any egregious errors in heckler's logic.
+# separate API lookups will be necessary to inspect comment contents
+validate_issues_jq_program='
+  def error_preamble: "#" + (.number | tostring) + ": \"" + .title + "\" " ;
+  def is_closed: .state == "closed" // ((. | error_preamble) + "is not closed but should be") ;
+  def has_milestone: has("milestone") // ((. | error_preamble) + "is not part of a milestone") ;
+  def has_assignees: has("assignees") // ((. | error_preamble) + "has no assignees") ;
+  def created_by_heckler: (.user.login == $app_user + "[bot]") // ((. | error_preamble) + "was not created by the heckler test app (" + $app_user + ")") ;
+  # TODO this is not a good approximation; separate API lookup for issue and its comment contents would be necessary
+  def closed_by_heckler: .comments == 1 // ((. | error_preamble) + "was not closed by heckler") ;
+  .items[] | [is_closed, has_milestone, has_assignees, created_by_heckler, closed_by_heckler] | map(select(. != true)) | .[]
+'
+# issues are returned in reverse chronological creation order from this
+# creation order does not seem to correlate to commit order, though. it's jumbled
+issue_problems="$(gh_curl -LsS --get \
+  -H "Authorization: Bearer ${APP_TOKEN}" \
+  --data-urlencode "q=is:issue repo:${GH_REPO_OWNER}/${GH_REPO}" \
+  "https://api.${GH_DOMAIN}/search/issues" \
+  | jq -r --arg app_user "${GH_APP_SLUG}" "${validate_issues_jq_program}" | tee >(cat 1>&2))"
+if [[ -n "${issue_problems}" ]] ; then
+  echo 'The above issues have unexpected state!' >&2
+  TESTS_FAILED=true
+fi
