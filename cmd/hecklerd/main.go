@@ -1601,6 +1601,7 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 	}
 
 	var privateKeyPath string
+	// TODO: make the default be part of the conf definition
 	if conf.GitHubPrivateKeyPath != "" {
 		privateKeyPath = conf.GitHubPrivateKeyPath
 	} else {

@@ -58,7 +58,6 @@ trap cleanup EXIT
 
 # TODO check up front to make sure the repo is initialized as done by make-repo script
 
-# credit to https://gist.github.com/carestad/bed9cb8140d28fe05e67e15f667d98ad
 # TODO make path to config be configurable via docker run args, i.e., template the .service file
 HECKLERD_CONF="$(readlink -f "${THIS_DIR}"/../doc/sample-configs/hecklerd_conf.yaml)"
 GH_DOMAIN="$(yq -r '.github_domain' "${HECKLERD_CONF}")"
@@ -68,9 +67,11 @@ GH_APP_SLUG="$(yq -r '.github_app_slug' "${HECKLERD_CONF}")"
 GH_REPO="$(yq -r '.repo' "${HECKLERD_CONF}")"
 GH_REPO_OWNER="$(yq -r '.repo_owner' "${HECKLERD_CONF}")"
 GH_REPO_BRANCH="$(yq -r '.repo_branch' "${HECKLERD_CONF}")"
-# TODO make this configurable too
-GH_APP_PK="$(< "${THIS_DIR}"/../github-private-key.pem)"
+GH_APP_PK_PATH="$(yq -r --arg default_path "$(readlink -f "${THIS_DIR}"/../github-private-key.pem)" \
+  '.github_private_key_path // $default_path' "${HECKLERD_CONF}")"
+GH_APP_PK="$(< "${GH_APP_PK_PATH}")"
 
+# credit to https://gist.github.com/carestad/bed9cb8140d28fe05e67e15f667d98ad
 # Shared content to use as template
 header='{
   "alg": "RS256",
@@ -119,7 +120,7 @@ gh_curl() {
 app_token() {
   gh_curl -LsS -X POST \
     -H "Authorization: Bearer $(signed_jwt)"\
-    -d '{"repository":"'"${GH_APP_SLUG}"'"}' \
+    -d '{"repository":"'"${GH_REPO}"'"}' \
     "https://api.${GH_DOMAIN}/app/installations/${GH_INSTALL_ID}/access_tokens" \
     | jq -r '.token'
 }
@@ -160,7 +161,7 @@ clean_up_previous_issues() {
     gh_curl -LsS -X POST \
       -H "Authorization: Bearer ${APP_TOKEN}" \
       -d '{"query": "'"${gql_mutation_body//$'\n'/}"'"}' \
-      "https://${GH_DOMAIN}/api/graphql"
+      "https://${GH_DOMAIN}/api/graphql" >/dev/null
   done
 }
 
@@ -225,7 +226,7 @@ ensure_collaborators() {
       -H "Authorization: Bearer ${APP_TOKEN}" \
       "https://api.${GH_DOMAIN}/repos/${GH_REPO_OWNER}/${GH_REPO}/collaborators/${author}" \
     ) ; then
-      echo "${author} (from ${GH_REPO_BRANCH} commit history) is not a collaborator on this repo, please add them before this test can work" >&2
+      echo "${author} (from ${GH_REPO_BRANCH} commit history) is not a collaborator on this repo; please add them before this test can work." >&2
       TESTS_FAILED=true
     fi
   done
@@ -235,10 +236,12 @@ ensure_collaborators() {
 }
 
 # preflight checks/prep
+echo 'Deleting existing issues because we need a clean slate for these tests...'
 clean_up_previous_issues
+echo 'Ensuring that all commit authors are repo collaborators (to prevent 422 errors)...'
 ensure_collaborators
 
-echo "These integration tests will open and close a bunch of tmux panes. don't go anywhere while this is running."
+echo "These integration tests will open and close a bunch of tmux panes. Don't go anywhere while this is running."
 # set up the tmux panes
 tmux split-window -h -c "${THIS_DIR}"
 tmux split-window -v -p 80 -c "${THIS_DIR}"
