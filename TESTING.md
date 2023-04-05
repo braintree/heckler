@@ -95,8 +95,7 @@ if you use something different, YMMV.
         make integration-test
         ```
 
-If you want to know manually start the docker containers for that these tests
-use:
+If you want to manually start the docker containers that these tests use:
 
 1.  Start our docker-compose setup, which creates a container that
     represents the management host (it'll run `hecklerd`), plus three
