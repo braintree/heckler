@@ -315,7 +315,7 @@ validate_issues_jq_program='
   def created_by_heckler: (.user.login == $app_user + "[bot]") // ((. | error_preamble) + "was not created by the heckler test app (" + $app_user + ")") ;
   # TODO this is not a good approximation; separate API lookup for issue and its comment contents would be necessary
   def closed_by_heckler: .comments == 1 // ((. | error_preamble) + "was not closed by heckler") ;
-  .items[] | [is_closed, has_milestone, has_assignees, created_by_heckler, closed_by_heckler] | map(select(. != true)) | .[]
+  if .total_count > 0 then .items[] | [is_closed, has_milestone, has_assignees, created_by_heckler, closed_by_heckler] | map(select(. != true)) | .[] else "There are no GitHub Issues, but there should have been some." end
 '
 # issues are returned in reverse chronological creation order from this
 # creation order does not seem to correlate to commit order, though. it's jumbled
@@ -323,8 +323,10 @@ issue_problems="$(gh_curl -LsS --get \
   -H "Authorization: Bearer ${APP_TOKEN}" \
   --data-urlencode "q=is:issue repo:${GH_REPO_OWNER}/${GH_REPO}" \
   "https://api.${GH_DOMAIN}/search/issues" \
-  | jq -r --arg app_user "${GH_APP_SLUG}" "${validate_issues_jq_program}" | tee >(cat 1>&2))"
+  | jq -r --arg app_user "${GH_APP_SLUG}" "${validate_issues_jq_program}" \
+  | sed 's/^/  * /')"
 if [[ -n "${issue_problems}" ]] ; then
-  echo 'The above issues have unexpected state!' >&2
+  echo 'Unexpected state in GitHub Issues after running tests:' >&2
+  echo "${issue_problems}" >&2
   TESTS_FAILED=true
 fi
