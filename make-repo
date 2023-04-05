@@ -5,13 +5,14 @@ This program produces a sample puppet repo used for testing
 EOF
 )
 
-THIS_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
-
 set -o errexit
 set -o pipefail
 set -o nounset
 
 shopt -s lastpipe
+
+THIS_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+HECKLERD_CONF="${THIS_DIR}/doc/sample-configs/hecklerd_conf.yaml"
 
 usage() {
   cat <<EOF
@@ -91,6 +92,14 @@ modify the input to the sail game
     [10]='add gonzo user'
   )
 
+  # commit number -> tag to give it
+  TAGS=(
+    [1]='v1'
+    [7]='v2'
+    [9]='v3'
+    [10]='v4'
+  )
+
   while getopts ":hu:" opt; do
     case "${opt}" in
     h)
@@ -119,21 +128,16 @@ modify the input to the sail game
     return 1
   fi
 
-  ## Delete remote tags
+  ## Initialize the repo, ensuring your integration test branch and the remote
+  ## tags are all clear. We assume that your default branch might be different
+  ## from the one in the hecklerd config and take care not to touch other
+  ## branches, since you may have protections on them, even at an
+  ## organizational level (like we do.)
   tmp_repo=$(mktemp -d)
-  git clone "${REPO_URL}" "${tmp_repo}"
   pushd "${tmp_repo}"
-  # # Delete all local tags and get the list of remote tags:
-  # git tag -l | xargs git tag -d
-  # git fetch
-  # Remove all remote tags
-  git tag -l | mapfile -t remote_tags
-  for tag in "${remote_tags[@]}"; do
-    git push --delete origin "${tag}"
-  done
-
   git init
-  git checkout -B main
+  HECKLER_BRANCH="$(yq -r '.repo_branch' "${HECKLERD_CONF}")"
+  git checkout -b "${HECKLER_BRANCH}"
   git config advice.detachedHead false
 
   mkdir -p nodes
@@ -158,7 +162,7 @@ modify the input to the sail game
       git checkout -b manhattan
     fi
     if ((commit == 6)); then
-      git checkout main
+      git checkout "${HECKLER_BRANCH}"
     fi
     for module in "${MODULES[@]}"; do
       printf -v src '%s/manifests/modules/%s/manifests' "${THIS_DIR}" "${module}"
@@ -185,22 +189,23 @@ modify the input to the sail game
       msg+="${co_author}"
     fi
     git commit --author "${AUTHORS[$commit]}" -F - <<<"${msg}"
-    if ((commit == 1)); then
-      git tag v1 -m 'Release v1'
-    fi
     if ((commit == 7)); then
       git merge -m 'Take Manhattan' manhattan
-      git tag v2 -m 'Release v2'
     fi
-    if ((commit == 9)); then
-      git tag v3 -m 'Release v3'
-    fi
-    if ((commit == 10)); then
-      git tag v4 -m 'Release v4'
+    if [[ -v "TAGS[${commit}]" ]]; then
+      git tag "${TAGS[${commit}]}" -m "Release ${TAGS[${commit}]}"
     fi
   done
 
-  git push -fu origin main
+  git remote add origin "${REPO_URL}"
+  git push -fu origin "${HECKLER_BRANCH}"
+
+  ## Clear out all remote tags so only the ones we just made will remain
+  git ls-remote --tags origin | sed -E 's/(^.*refs\/tags\/)([^\^]+)(\^\{\})?/\2/' \
+    | sort | uniq | mapfile -t remote_tags
+  for tag in "${remote_tags[@]}"; do
+    git push --delete origin "${tag}"
+  done
   git push -f --tags
 
   popd
