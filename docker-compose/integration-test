@@ -330,3 +330,6 @@ if [[ -n "${issue_problems}" ]] ; then
   echo "${issue_problems}" >&2
   TESTS_FAILED=true
 fi
+
+# TODO have make-repo create one more tag on top of the v4 commit, and test
+# the autoTag behavior (i.e., see that a v5 tag and milestone get created)

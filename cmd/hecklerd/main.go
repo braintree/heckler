@@ -3686,7 +3686,7 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 //	If no
 //	  Do nothing, the latest tag has not been applied, yet
 //	If yes
-//	  Are there new commits beyond are common tag?
+//	  Are there new commits beyond our common tag?
 //	    If no, do nothing
 //	    If yes, create a new tag
 func autoTag(conf *HecklerdConf, repo *git.Repository) {
