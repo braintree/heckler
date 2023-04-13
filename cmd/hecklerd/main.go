@@ -1601,6 +1601,7 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 	}
 
 	var privateKeyPath string
+	// TODO: make the default be part of the conf definition
 	if conf.GitHubPrivateKeyPath != "" {
 		privateKeyPath = conf.GitHubPrivateKeyPath
 	} else {
@@ -2728,7 +2729,8 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 			UpdateFetchhead: true,
 			DownloadTags:    git.DownloadTagsAll,
 		},
-		Bare: true,
+		Bare:           true,
+		CheckoutBranch: conf.RepoBranch,
 	}
 	if conf.GitHubHttpProxy != "" {
 		cloneOptions.ProxyOptions = git.ProxyOptions{
@@ -3684,7 +3686,7 @@ func unlockAll(conf *HecklerdConf, logger *log.Logger) error {
 //	If no
 //	  Do nothing, the latest tag has not been applied, yet
 //	If yes
-//	  Are there new commits beyond are common tag?
+//	  Are there new commits beyond our common tag?
 //	    If no, do nothing
 //	    If yes, create a new tag
 func autoTag(conf *HecklerdConf, repo *git.Repository) {

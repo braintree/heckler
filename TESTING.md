@@ -6,29 +6,39 @@ Second, an integration test with a sample repo.
 
 ## Go Tests
 
-    $ make docker-test
+```sh
+make docker-vet
+make docker-test
+```
 
 ## Integration Test
 
-docker-compose is a prerequisite for running these tests, and we also highly
-recommend using tmux as well, since we will be running lots of foreground
-processes in our shell.
+`docker-compose`, `tmux`, `curl`, `jq`, and `yq`  are prerequisites for
+running these tests. We use Debian Linux for our development environments, so
+if you use something different, YMMV.
 
 1.  [Create a GitHub app for testing
     heckler](https://docs.github.com/en/apps/creating-github-apps/creating-github-apps/creating-a-github-app).
 
+    1.  Give it the following permissions (under the repository section):
+
+        * **Administration**: Write (this is not normally needed by heckler,
+        but is needed by the tests.)
+        * **Issues**: Write
+        * **Metadata**: Read
+        * **Commit statuses**: Write
     1.  After the app is created, open its configuration and generate a private
         key in `Private keys` section.
-    2.  Copy the private RSA key to `github-private-key.pem` in the root folder
+    1.  Copy the private RSA key to `github-private-key.pem` in the root folder
         of this repo.
-    3.  Update [`hecklerd_conf.yaml`][] with the following values, now that you
+    1.  Update [`hecklerd_conf.yaml`][] with the following values, now that you
         have them:
 
             * `github_app_slug`
             * `github_app_email`
             * `github_app_id`
 
-2.  [Create the test GitHub
+1.  [Create the test GitHub
     repo](https://docs.github.com/en/get-started/quickstart/create-a-repo),
     probably under your personal org, but that is up to you. (Do _not_,
     however, initialize it with a first commit!)
@@ -38,7 +48,7 @@ processes in our shell.
         (If you created your repo in an org you are not an admin of, you will
         need to contact your admin to get the installation approved.)
 
-    2.  Update [`hecklerd_conf.yaml`][] with the following values, now that you
+    1.  Update [`hecklerd_conf.yaml`][] with the following values, now that you
         have them:
 
             * `github_app_install_id`
@@ -49,11 +59,11 @@ processes in our shell.
             * `github_domain` (if doing this on your company's GitHub
                 Enterprise installation instead of public GitHub)
 
-    3.  (If using a personal repo and working with others) [Add any teammates
+    1.  (If using a personal repo and working with others) [Add any teammates
         you want to test with as repo
         collaborators.](https://docs.github.com/en/account-and-profile/setting-up-and-managing-your-personal-account-on-github/managing-access-to-your-personal-repositories/inviting-collaborators-to-a-personal-repository)
 
-    4.  Add your GitHub username (plus any collaborators) as admins in
+    1.  Add your GitHub username (plus any collaborators) as admins in
         [`hecklerd_conf.yaml`][]:
 
         ```yaml
@@ -62,54 +72,63 @@ processes in our shell.
           - "@your_collaborators_username"
         ```
 
-    5.  Use the [`make_repo`][] script to init your test repo and create some
-        commits and release tags.
+    1.  Use the [`make_repo`](/make-repo) script to init your test repo and
+        create some commits and release tags.
 
         ```sh
         ./make-repo -u <existing sample github url>
         ```
 
-3.  Start the docker containers:
+1.  Build the binaries:
 
-    1.  Start our docker-compose setup, which creates a container that
-        represents the management host (it'll run `hecklerd`), plus three
-        containers that represent members of your server fleet.
+    ```sh
+    make docker-build
+    ```
+
+1.  Run the integration tests!
+
+    1.  Open a new, fresh tmux window
+    1.  Run the `integration-test` make target.
 
         ```sh
         cd docker-compose
-        make run
+        make integration-test
         ```
 
-    2.  Set up your `ssh_config` to make the rest of this process easier.
+If you want to manually start the docker containers that these tests use:
 
-        ```sh
-        make ssh-config
-        ```
-
-4.  Tail the log output of the `hecklerd` and `rizzod` systemd services in
-    the containers:
+1.  Start our docker-compose setup, which creates a container that
+    represents the management host (it'll run `hecklerd`), plus three
+    containers that represent members of your server fleet.
 
     ```sh
-    ssh heckler 'journalctl -f -u hecklerd.service'
-    ssh statler 'journalctl -f -u rizzod.service'
-    ssh waldorf 'journalctl -f -u rizzod.service'
-    ssh fozzie 'journalctl -f -u rizzod.service'
+    cd docker-compose
+    make run
     ```
 
-5.  Force a puppet apply of the state from tag `v1` from your test repo:
+1.  Set up your `ssh_config` to make accessing the hosts easier.
 
     ```sh
-    ssh heckler 'heckler -rev v1 -force'
+    make ssh-config
     ```
 
-    This should eventually output a success message along the lines of:
+    You can ssh to them based on the names in the
+    [`docker-compose.yml`](docker-compose/docker-compose.yml) config. The
+    `heckler` container runs `hecklerd` while the rest run `rizzod`, all
+    in systemd units. This means you can get daemon logs from the journal:
 
+    ```sh
+    ssh heckler -- journalctl -f -u hecklerd.service
+    ssh statler -- journalctl -f -u rizzod.service
     ```
-    Applied nodes: (3); Error nodes: (0)
+
+1.  Invoke `heckler` or `rizzo` commands by sshing into the containers
+    and running the commands there. For example, you can force hecklerd to
+    start applying from the `v1` tag (like the integration tests do) by
+    running:
+
+    ```sh
+    ssh heckler -- heckler -rev v1 -force
     ```
-
-6.  Watch heckler noop & apply the remaining commits. When you are satisfied,
-    you can interrupt the `make run` from step 3 to shut everything down.
-
 
 [`hecklerd_conf.yaml`]: /docs/sample-configs/hecklerd_conf.yaml

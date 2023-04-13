@@ -1,0 +1,335 @@
+#!/bin/bash
+# This script exercises heckler against a "real" GitHub repo. See TESTING.md
+# for more details. Unfortunately, some manual pre-prep and post-run cleanup
+# are required.
+# We highly recommend running this from the Makefile since other make targets
+# are used to reduce code reuse.
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+THIS_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+
+
+# TODO make a non-tmux version of this once we get the ability to do other things like delete issues
+if [[ -z "$TMUX" ]] ; then
+  echo These integration tests require you to be in a tmux session >&2
+  exit 1
+fi
+
+CONTAINERS=(heckler statler waldorf fozzie)
+
+is_sshable() {
+  ssh -o ConnectTimeout=1 -o ConnectionAttempts=1 -o ServerAliveInterval=2 "$1" -- true >/dev/null 2>&1
+}
+
+cleanup() {
+  rc="$?"
+  if [[ -n "${TESTS_FAILED:-}" ]] ; then
+    echo 'The tests failed! We will leave the docker containers and tmux panes open so you can debug.' >&2
+    if [[ "$rc" == 0 ]] ; then
+      ((rc=1))
+    fi
+    return "$rc"
+  fi
+
+  if [[ "$rc" != 0 ]] ; then
+    echo 'This script encountered an error, but the tests did not explicitly fail.' >&2
+    return "$rc"
+  fi
+  echo 'The tests passed! We will clean up the leftovers.'
+
+  echo 'Cleaning up docker containers...'
+  tmux send-keys -t 1 C-c
+
+  printf 'Waiting for containers to shut down...'
+  for container in "${CONTAINERS[@]}" ; do
+    while is_sshable "$container"; do
+      printf .
+      sleep 5
+    done
+  done
+  printf '\nCleaning up tmux panes...\n'
+  tmux kill-pane -a -t 0
+  return "$rc"
+}
+trap cleanup EXIT
+
+# TODO check up front to make sure the repo is initialized as done by make-repo script
+
+# TODO make path to config be configurable via docker run args, i.e., template the .service file
+HECKLERD_CONF="$(readlink -f "${THIS_DIR}"/../doc/sample-configs/hecklerd_conf.yaml)"
+GH_DOMAIN="$(yq -r '.github_domain' "${HECKLERD_CONF}")"
+GH_APP_ID="$(yq -r '.github_app_id' "${HECKLERD_CONF}")"
+GH_INSTALL_ID="$(yq -r '.github_app_install_id' "${HECKLERD_CONF}")"
+GH_APP_SLUG="$(yq -r '.github_app_slug' "${HECKLERD_CONF}")"
+GH_REPO="$(yq -r '.repo' "${HECKLERD_CONF}")"
+GH_REPO_OWNER="$(yq -r '.repo_owner' "${HECKLERD_CONF}")"
+GH_REPO_BRANCH="$(yq -r '.repo_branch' "${HECKLERD_CONF}")"
+GH_APP_PK_PATH="$(yq -r --arg default_path "$(readlink -f "${THIS_DIR}"/../github-private-key.pem)" \
+  '.github_private_key_path // $default_path' "${HECKLERD_CONF}")"
+GH_APP_PK="$(< "${GH_APP_PK_PATH}")"
+
+# credit to https://gist.github.com/carestad/bed9cb8140d28fe05e67e15f667d98ad
+# Shared content to use as template
+header='{
+  "alg": "RS256",
+  "typ": "JWT"
+}'
+payload_template='{}'
+
+build_payload() {
+  jq -c \
+    --arg current_time "$(date +%s)" \
+    --arg app_id "${GH_APP_ID}" \
+  '
+  ($current_time | tonumber) as $iat
+  | .iat = $iat
+  | .exp = ($iat + 300)
+  | .iss = ($app_id | tonumber)
+  | .alg = "RS256"
+  ' <<< "${payload_template}" | tr -d '\n'
+}
+
+b64enc() {
+  base64 -w 0 | tr -d '='
+}
+compact_json() {
+  jq -c . | LC_CTYPE=C tr -d '\n'
+}
+rs256_sign() {
+  openssl dgst -binary -sha256 -sign <(printf '%s\n' "$1")
+}
+
+signed_jwt() {
+  local payload sig
+  payload="$(build_payload)" || return
+  signed_content="$(compact_json <<<"${header}" | b64enc).$(compact_json <<<"${payload}" | b64enc)"
+  sig="$(printf '%s' "${signed_content}" | rs256_sign "${GH_APP_PK}" | b64enc)"
+  printf '%s.%s\n' "${signed_content}" "${sig}"
+}
+
+gh_curl() {
+  curl \
+    -H 'Accept: application/vnd.github+json' \
+    -H 'X-GitHub-Api-Version: 2022-11-28' \
+    "${@}"
+}
+
+app_token() {
+  gh_curl -LsS -X POST \
+    -H "Authorization: Bearer $(signed_jwt)"\
+    -d '{"repository":"'"${GH_REPO}"'"}' \
+    "https://api.${GH_DOMAIN}/app/installations/${GH_INSTALL_ID}/access_tokens" \
+    | jq -r '.token'
+}
+
+APP_TOKEN="$(app_token)"
+
+clean_up_previous_issues() {
+  local gql_query_body gql_mutation_body
+  gql_query_body="
+    query {
+      repository(
+        owner: \\\"${GH_REPO_OWNER}\\\",
+        name: \\\"${GH_REPO}\\\"
+      ) {
+        issues(last: 100) {
+          edges {
+            node {
+              id
+            }
+          }
+        }
+      }
+    }"
+  mapfile -t issueIds < <(gh_curl -LsS -X POST \
+    -H "Authorization: Bearer ${APP_TOKEN}" \
+    -d '{"query": "'"${gql_query_body//$'\n'/}"'"}' \
+    "https://${GH_DOMAIN}/api/graphql" \
+    | jq -r '.data.repository.issues.edges[].node.id' \
+  )
+
+  for issueId in "${issueIds[@]}"; do
+    gql_mutation_body="
+      mutation {
+        deleteIssue(input: {issueId: \\\"${issueId}\\\"}) {
+          clientMutationId
+        }
+      }"
+    gh_curl -LsS -X POST \
+      -H "Authorization: Bearer ${APP_TOKEN}" \
+      -d '{"query": "'"${gql_mutation_body//$'\n'/}"'"}' \
+      "https://${GH_DOMAIN}/api/graphql" >/dev/null
+  done
+}
+
+# used for functions below
+declare -A email_to_username
+
+lookup_gh_username_from_email() {
+  # this will return the username if the user exists, an empty string if they
+  # don't, and an error if multiple people pop up
+  local email="$1"
+  if ! [[ "${email}" =~ @ ]] ; then
+    # just echo back things that aren't emails
+    echo "${email}"
+    return
+  fi
+  if [[ -v "email_to_username[${email}]" ]] ; then
+    echo "${email_to_username[${email}]}"
+    return
+  fi
+  if [[ "${email#*@}" =~ users.noreply.github.com ]] ; then
+    email_to_username["${email}"]="$(echo "$email" | grep -Po '(\d+\-)??([^@]+)' | cut -d'-' -f2-)"
+  else
+    local curl_res
+    # prevent error from getting set in array
+    curl_res="$(gh_curl -LsS --get \
+      -H "Authorization: Bearer ${APP_TOKEN}" \
+      --data-urlencode "q=${email} in:email" \
+      "https://api.${GH_DOMAIN}/search/users" \
+      | jq -r --arg email "${email}" \
+        'if .total_count > 1 then error("More than one user result for " + $email) else .items[].login end')"
+    email_to_username["${email}"]="${curl_res}"
+  fi
+  echo "${email_to_username[${email}]}"
+}
+
+ensure_collaborators() {
+  declare -A authors
+  local gh_username
+  # get login (username) of author and committer if possible, fall back to email
+  # also parse all emails out of co-authored-bys
+  local jq_program='
+    def login_or_email(f): (f | .login) // (.commit | f | .email);
+    map([login_or_email(.author), login_or_email(.committer), (.commit.message | match("Co-authored-by: [^<]*<([^>]+)>", "g") | .captures[].string)]) | flatten | unique | join("\t")
+  '
+  # turn any emails into usernames, if they can be found
+  for username_or_email in $(gh_curl -LsS \
+    -H "Authorization: Bearer ${APP_TOKEN}" \
+    "https://api.${GH_DOMAIN}/repos/${GH_REPO_OWNER}/${GH_REPO}/commits?sha=${GH_REPO_BRANCH}" \
+    | jq -r "${jq_program}") ; do
+    gh_username="$(lookup_gh_username_from_email "${username_or_email}")"
+    if [[ -z "${gh_username}" ]] ; then
+      # empty value means our search returned no results; they're not a github user probably
+      continue
+    fi
+    # value doesn't really matter, we are just using associative array to avoid having to do `uniq` later
+    authors["${gh_username}"]=""
+  done
+  # ensure all authors are collaborators, otherwise heckler may run into 422
+  # errors when trying to assign them to issues
+  for author in "${!authors[@]}" ; do
+    if ! (gh_curl -Lsf \
+      -H "Authorization: Bearer ${APP_TOKEN}" \
+      "https://api.${GH_DOMAIN}/repos/${GH_REPO_OWNER}/${GH_REPO}/collaborators/${author}" \
+    ) ; then
+      echo "${author} (from ${GH_REPO_BRANCH} commit history) is not a collaborator on this repo; please add them before this test can work." >&2
+      TESTS_FAILED=true
+    fi
+  done
+  if [[ "${TESTS_FAILED:-}" == "true" ]] ; then
+    return 1
+  fi
+}
+
+# preflight checks/prep
+echo 'Deleting existing issues because we need a clean slate for these tests...'
+clean_up_previous_issues
+echo 'Ensuring that all commit authors are repo collaborators (to prevent 422 errors)...'
+ensure_collaborators
+
+echo "These integration tests will open and close a bunch of tmux panes. Don't go anywhere while this is running."
+# set up the tmux panes
+tmux split-window -h -c "${THIS_DIR}"
+tmux split-window -v -p 80 -c "${THIS_DIR}"
+tmux split-window -v -p 75 -c "${THIS_DIR}"
+tmux split-window -v -p 66 -c "${THIS_DIR}"
+tmux split-window -v -c "${THIS_DIR}"
+tmux select-pane -t 0
+
+# start the docker containers
+tmux send-keys -t 1 'make run' Enter
+printf 'Waiting for containers to be sshable...'
+for container in "${CONTAINERS[@]}" ; do \
+  while ! is_sshable "$container"; do \
+    printf . ; \
+    sleep 5 ; \
+  done ; \
+done
+printf '\n'
+
+# tail the logs (so you can debug easier if something goes wrong)
+tmux send-keys -t 2 'ssh heckler -- journalctl -f -u hecklerd.service' Enter
+tmux send-keys -t 3 'ssh statler -- journalctl -f -u rizzod.service' Enter
+tmux send-keys -t 4 'ssh waldorf -- journalctl -f -u rizzod.service' Enter
+tmux send-keys -t 5 'ssh fozzie -- journalctl -f -u rizzod.service' Enter
+echo 'Making sure everything is initialized before making heckler start applying...'
+sleep 10
+
+echo 'Making heckler start applying changes...'
+REV=v1
+HECKLER_RESULTS="$(ssh heckler -- heckler -rev "$REV" -force)"
+echo "${HECKLER_RESULTS}"
+if [[ "${HECKLER_RESULTS}" == 'Applied nodes: (3); Error nodes: (0)' ]] ; then
+  echo "Successfully applied ${REV}! Heckler will now start applying more changes and creating GitHub issues for them."
+else
+  echo "Failed to apply ${REV}! Heckler cannot proceed from here."
+  TESTS_FAILED=true
+fi
+
+printf 'Waiting for heckler to complete creating GitHub issues for all commits...'
+SLEEP_TOTAL=0
+SLEEP_INTERVAL=5
+TIMEOUT=600
+while ! (ssh heckler -- journalctl -u hecklerd.service | grep -q 'No new commits, sleeping') ; do
+  if [[ ${SLEEP_TOTAL} -ge ${TIMEOUT} ]] ; then
+    printf '\nFailure! Did not see heckler say it had no new commits to process after %s seconds.' "$TIMEOUT"
+    TESTS_FAILED=true
+    break
+  fi
+  sleep ${SLEEP_INTERVAL}
+  ((SLEEP_TOTAL+=SLEEP_INTERVAL))
+  printf '.'
+done
+printf '\n'
+
+# TODO run serverspecs here
+
+# refresh token since they only last 10 minutes
+APP_TOKEN="$(app_token)"
+# TODO this code should be made more generic, asserting things like whether
+# issues are assigned to milestones that are not after tags that already
+# occurred in their tree, what the contents of each issue's summary message are,
+# is there an issue for every commit that caused a diff, are the issues assigned
+# to the right people, etc. for now, these few simple assertions seem good
+# to catch any egregious errors in heckler's logic.
+# separate API lookups will be necessary to inspect comment contents
+validate_issues_jq_program='
+  def error_preamble: "#" + (.number | tostring) + ": \"" + .title + "\" " ;
+  def is_closed: .state == "closed" // ((. | error_preamble) + "is not closed but should be") ;
+  def has_milestone: has("milestone") // ((. | error_preamble) + "is not part of a milestone") ;
+  def has_assignees: has("assignees") // ((. | error_preamble) + "has no assignees") ;
+  def created_by_heckler: (.user.login == $app_user + "[bot]") // ((. | error_preamble) + "was not created by the heckler test app (" + $app_user + ")") ;
+  # TODO this is not a good approximation; separate API lookup for issue and its comment contents would be necessary
+  def closed_by_heckler: .comments == 1 // ((. | error_preamble) + "was not closed by heckler") ;
+  if .total_count > 0 then .items[] | [is_closed, has_milestone, has_assignees, created_by_heckler, closed_by_heckler] | map(select(. != true)) | .[] else "There are no GitHub Issues, but there should have been some." end
+'
+# issues are returned in reverse chronological creation order from this
+# creation order does not seem to correlate to commit order, though. it's jumbled
+issue_problems="$(gh_curl -LsS --get \
+  -H "Authorization: Bearer ${APP_TOKEN}" \
+  --data-urlencode "q=is:issue repo:${GH_REPO_OWNER}/${GH_REPO}" \
+  "https://api.${GH_DOMAIN}/search/issues" \
+  | jq -r --arg app_user "${GH_APP_SLUG}" "${validate_issues_jq_program}" \
+  | sed 's/^/  * /')"
+if [[ -n "${issue_problems}" ]] ; then
+  echo 'Unexpected state in GitHub Issues after running tests:' >&2
+  echo "${issue_problems}" >&2
+  TESTS_FAILED=true
+fi
+
+# TODO have make-repo create one more tag on top of the v4 commit, and test
+# the autoTag behavior (i.e., see that a v5 tag and milestone get created)
