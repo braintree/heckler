@@ -35,8 +35,8 @@ import (
 	"github.com/braintree/heckler/internal/hecklerpb"
 	"github.com/braintree/heckler/internal/puppetutil"
 	"github.com/braintree/heckler/internal/rizzopb"
+	"github.com/braintree/heckler/internal/util"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/go-github/v29/github"
 	"github.com/hmarr/codeowners"
 	git "github.com/libgit2/git2go/v31"
@@ -56,7 +56,7 @@ var ErrThresholdExceeded = errors.New("Threshold for err nodes or lock nodes exc
 
 type applyError struct {
 	Host   string
-	Report rizzopb.PuppetReport
+	Report *rizzopb.PuppetReport
 }
 
 func (e *applyError) Error() string {
@@ -66,7 +66,7 @@ func (e *applyError) Error() string {
 type cleanError struct {
 	Host      string
 	LastApply git.Oid
-	Report    rizzopb.PuppetReport
+	Report    *rizzopb.PuppetReport
 }
 
 func (e *cleanError) Error() string {
@@ -294,13 +294,13 @@ type Node struct {
 
 type applyResult struct {
 	host   string
-	report rizzopb.PuppetReport
+	report *rizzopb.PuppetReport
 	err    error
 }
 
 type dirtyNoops struct {
 	rev       git.Oid
-	dirtyNoop rizzopb.PuppetReport
+	dirtyNoop *rizzopb.PuppetReport
 	commitIds map[git.Oid]bool
 }
 
@@ -584,7 +584,7 @@ func loadNoop(commit git.Oid, node *Node, noopDir string, repo *git.Repository, 
 	}
 }
 
-func normalizeReport(rprt rizzopb.PuppetReport, logger *log.Logger) rizzopb.PuppetReport {
+func normalizeReport(rprt *rizzopb.PuppetReport, logger *log.Logger) *rizzopb.PuppetReport {
 	for _, resourceStatus := range rprt.ResourceStatuses {
 		// Strip off the puppet confdir prefix, so we are left with the relative
 		// path of the source file in the code repo
@@ -596,7 +596,7 @@ func normalizeReport(rprt rizzopb.PuppetReport, logger *log.Logger) rizzopb.Pupp
 	return rprt
 }
 
-func marshalReport(rprt rizzopb.PuppetReport, noopDir string, commit git.Oid) error {
+func marshalReport(rprt *rizzopb.PuppetReport, noopDir string, commit git.Oid) error {
 	reportPath := noopDir + "/" + rprt.Host + "/" + commit.String() + ".json"
 	data, err := json.Marshal(rprt)
 	if err != nil {
@@ -608,6 +608,7 @@ func marshalReport(rprt rizzopb.PuppetReport, noopDir string, commit git.Oid) er
 	}
 	return nil
 }
+
 func marshalGroupedReport(oid *git.Oid, gr groupedReport, groupedNoopDir string) error {
 	groupedReportPath := groupedNoopDir + "/" + oid.String() + ".json"
 	data, err := json.Marshal(gr)
@@ -651,7 +652,7 @@ func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir st
 			ns.nodes.active[node.host].commitReports[commitId] = rprt
 		} else if _, ok := err.(*noopInvalidError); ok || os.IsNotExist(err) {
 			rizzoLockNode(
-				rizzopb.PuppetLockRequest{
+				&rizzopb.PuppetLockRequest{
 					Type:    rizzopb.LockReqType_lock,
 					User:    "root",
 					Comment: conf.LockMessage,
@@ -669,7 +670,7 @@ func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir st
 				logger.Println(errNoopNodes[host].err)
 				continue
 			case heckler.LockedByUser:
-				par := rizzopb.PuppetApplyRequest{Rev: commitId.String(), Noop: true}
+				par := &rizzopb.PuppetApplyRequest{Rev: commitId.String(), Noop: true}
 				go hecklerApply(node, puppetReportChan, par)
 				noopHosts[node.host] = true
 			}
@@ -685,7 +686,7 @@ func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir st
 		logger.Printf("Waiting for (%d) outstanding noop requests: %s", noopRequests-j, compressHostsMap(noopHosts))
 		r := <-puppetReportChan
 		rizzoLockNode(
-			rizzopb.PuppetLockRequest{
+			&rizzopb.PuppetLockRequest{
 				Type:  rizzopb.LockReqType_unlock,
 				User:  "root",
 				Force: false,
@@ -713,7 +714,7 @@ func noopNodeSet(ns *NodeSet, commitId git.Oid, repo *git.Repository, noopDir st
 		if err != nil {
 			logger.Fatalf("Unable to convert ConfigurationVersion to a git oid: %v", err)
 		}
-		ns.nodes.active[newRprt.Host].commitReports[*commitId] = &newRprt
+		ns.nodes.active[newRprt.Host].commitReports[*commitId] = newRprt
 		err = marshalReport(newRprt, noopDir, *commitId)
 		if err != nil {
 			logger.Fatalf("Unable to marshal report: %v", err)
@@ -848,7 +849,11 @@ func priorEvent(event *rizzopb.Event, resourceTitleStr string, priorCommitNoops 
 		}
 		if priorResourceStatuses, ok := priorCommitNoop.ResourceStatuses[resourceTitleStr]; ok {
 			for _, priorEvent := range priorResourceStatuses.Events {
-				if *event == *priorEvent {
+				equal, err := util.ShallowEqual(event, priorEvent)
+				if err != nil {
+					log.Println(fmt.Errorf("Error comparing events: %w", err))
+				}
+				if equal {
 					return true
 				}
 			}
@@ -866,7 +871,11 @@ func priorLog(curLog *rizzopb.Log, priorCommitNoops []*rizzopb.PuppetReport) boo
 			continue
 		}
 		for _, priorLog := range priorCommitNoop.Logs {
-			if *curLog == *priorLog {
+			equal, err := util.ShallowEqual(curLog, priorLog)
+			if err != nil {
+				log.Println(fmt.Errorf("Error comparing logs: %w", err))
+			}
+			if equal {
 				return true
 			}
 		}
@@ -1117,12 +1126,21 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 
 	for nodeName, node := range nodes {
 		if nodeDeltaResource, ok := node.commitDeltaResources[commitLogId][targetDeltaResource.Title]; ok {
-			// TODO: cmp is not recommended to be used in production, because it
-			// panics on any errors. It would probably be better to write a custom
-			// compare function which can account for skipping fields which are not
-			// relavant to the desired measure of equality, e.g. source file line
-			// number
-			if cmp.Equal(targetDeltaResource, nodeDeltaResource, cmpopts.IgnoreFields(deltaResource{}, "Line")) {
+			// We want to compare everything except the Line field. We can take
+			// advantage of Golang being a language written by deranged madmen by
+			// abusing its copy-by-value nature and then setting the copies' Line
+			// fields to the same value, thereby losing no information in the
+			// original structs. The alternative would be writing a custom copy or
+			// comparison routine just for this type.
+			targetDeltaResourceCopy := targetDeltaResource
+			nodeDeltaResourceCopy := nodeDeltaResource
+			targetDeltaResourceCopy.Line = 0
+			nodeDeltaResourceCopy.Line = 0
+			equal, err := util.ShallowEqual(targetDeltaResourceCopy, nodeDeltaResourceCopy)
+			if err != nil {
+				log.Println(fmt.Errorf("Error trying to compare delta resources: %w", err))
+			}
+			if equal {
 				nodeList = append(nodeList, nodeName)
 				delete(node.commitDeltaResources[commitLogId], targetDeltaResource.Title)
 			}
@@ -1279,14 +1297,14 @@ func normalizeLogs(puppetLogs []*rizzopb.Log, logger *log.Logger) []*rizzopb.Log
 	return newPuppetLogs
 }
 
-func hecklerApply(node *Node, c chan<- applyResult, par rizzopb.PuppetApplyRequest) {
+func hecklerApply(node *Node, c chan<- applyResult, par *rizzopb.PuppetApplyRequest) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*10)
 	defer cancel()
-	r, err := node.rizzoClient.PuppetApply(ctx, &par)
+	r, err := node.rizzoClient.PuppetApply(ctx, par)
 	if err != nil {
 		c <- applyResult{
 			host:   node.host,
-			report: rizzopb.PuppetReport{},
+			report: &rizzopb.PuppetReport{},
 			err:    fmt.Errorf("hecklerApply error from %s, returning any empty report: %w", node.host, err),
 		}
 		return
@@ -1294,14 +1312,14 @@ func hecklerApply(node *Node, c chan<- applyResult, par rizzopb.PuppetApplyReque
 	if ctx.Err() != nil {
 		c <- applyResult{
 			host:   node.host,
-			report: rizzopb.PuppetReport{},
+			report: &rizzopb.PuppetReport{},
 			err:    fmt.Errorf("hecklerApply context error from %s, returning any empty report: %w", node.host, ctx.Err()),
 		}
 		return
 	}
 	c <- applyResult{
 		host:   node.host,
-		report: *r,
+		report: r,
 		err:    nil,
 	}
 	return
@@ -1509,7 +1527,7 @@ func applyNodeSet(ns *NodeSet, forceApply bool, noop bool, rev string, repo *git
 		closeNodeSet(ns, logger)
 		return nil, nil, err
 	}
-	par := rizzopb.PuppetApplyRequest{Rev: rev, Noop: noop}
+	par := &rizzopb.PuppetApplyRequest{Rev: rev, Noop: noop}
 	puppetReportChan := make(chan applyResult)
 	for _, node := range ns.nodes.active {
 		go hecklerApply(node, puppetReportChan, par)
@@ -2447,7 +2465,7 @@ func (hs *hecklerServer) HecklerLock(ctx context.Context, req *hecklerpb.Heckler
 }
 
 func lockNodeSet(user string, comment string, force bool, ns *NodeSet, logger *log.Logger) error {
-	lockReq := rizzopb.PuppetLockRequest{
+	lockReq := &rizzopb.PuppetLockRequest{
 		Type:    rizzopb.LockReqType_lock,
 		User:    user,
 		Comment: comment,
@@ -2466,7 +2484,7 @@ func lockNodeSet(user string, comment string, force bool, ns *NodeSet, logger *l
 }
 
 func unlockNodeSet(user string, force bool, ns *NodeSet, logger *log.Logger) {
-	lockReq := rizzopb.PuppetLockRequest{
+	lockReq := &rizzopb.PuppetLockRequest{
 		Type:  rizzopb.LockReqType_unlock,
 		User:  user,
 		Force: force,
@@ -2490,7 +2508,7 @@ func unlockNodeSet(user string, force bool, ns *NodeSet, logger *log.Logger) {
 }
 
 func nodesLockState(user string, nodes map[string]*Node) (map[string]*Node, map[string]*Node, map[string]*Node, map[string]*Node) {
-	lockReq := rizzopb.PuppetLockRequest{
+	lockReq := &rizzopb.PuppetLockRequest{
 		Type: rizzopb.LockReqType_state,
 		User: user,
 	}
@@ -2498,8 +2516,8 @@ func nodesLockState(user string, nodes map[string]*Node) (map[string]*Node, map[
 	return lockedNodes, unlockedNodes, lockedByAnotherNodes, errLockNodes
 }
 
-func rizzoLockNodes(req rizzopb.PuppetLockRequest, nodes map[string]*Node) (map[string]*Node, map[string]*Node, map[string]*Node, map[string]*Node) {
-	reportChan := make(chan rizzopb.PuppetLockReport)
+func rizzoLockNodes(req *rizzopb.PuppetLockRequest, nodes map[string]*Node) (map[string]*Node, map[string]*Node, map[string]*Node, map[string]*Node) {
+	reportChan := make(chan *rizzopb.PuppetLockReport)
 	for _, node := range nodes {
 		go rizzoLock(node.host, node.rizzoClient, req, reportChan)
 	}
@@ -2531,8 +2549,8 @@ func rizzoLockNodes(req rizzopb.PuppetLockRequest, nodes map[string]*Node) (map[
 	return lockedNodes, unlockedNodes, lockedByAnotherNodes, errNodes
 }
 
-func rizzoLockNode(req rizzopb.PuppetLockRequest, node *Node) {
-	reportChan := make(chan rizzopb.PuppetLockReport)
+func rizzoLockNode(req *rizzopb.PuppetLockRequest, node *Node) {
+	reportChan := make(chan *rizzopb.PuppetLockReport)
 	go rizzoLock(node.host, node.rizzoClient, req, reportChan)
 	r := <-reportChan
 	node.lockState = heckler.LockReportToLockState(r)
@@ -2541,12 +2559,12 @@ func rizzoLockNode(req rizzopb.PuppetLockRequest, node *Node) {
 	}
 }
 
-func rizzoLock(host string, rc rizzopb.RizzoClient, req rizzopb.PuppetLockRequest, c chan<- rizzopb.PuppetLockReport) {
+func rizzoLock(host string, rc rizzopb.RizzoClient, req *rizzopb.PuppetLockRequest, c chan<- *rizzopb.PuppetLockReport) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	res, err := rc.PuppetLock(ctx, &req)
+	res, err := rc.PuppetLock(ctx, req)
 	if err != nil {
-		c <- rizzopb.PuppetLockReport{
+		c <- &rizzopb.PuppetLockReport{
 			Host:       host,
 			LockStatus: rizzopb.LockStatus_lock_unknown,
 			Error:      err.Error(),
@@ -2554,7 +2572,7 @@ func rizzoLock(host string, rc rizzopb.RizzoClient, req rizzopb.PuppetLockReques
 		return
 	}
 	res.Host = host
-	c <- *res
+	c <- res
 	return
 }
 
@@ -2566,14 +2584,14 @@ func hecklerLastApply(node *Node, c chan<- applyResult, logger *log.Logger) {
 	if err != nil {
 		c <- applyResult{
 			host:   node.host,
-			report: rizzopb.PuppetReport{},
+			report: &rizzopb.PuppetReport{},
 			err:    fmt.Errorf("Rizzo lastApply error from %s, returning any empty report: %w", node.host, err),
 		}
 		return
 	}
 	c <- applyResult{
 		host:   node.host,
-		report: *r,
+		report: r,
 		err:    nil,
 	}
 	return
@@ -4365,7 +4383,7 @@ func applyFailuresToMarkdown(nodeErrors []error, nodeFile string, prefix string,
 
 	data := struct {
 		CompressedHosts string
-		Report          rizzopb.PuppetReport
+		Report          *rizzopb.PuppetReport
 	}{
 		compressedHosts,
 		nodeErrors[0].(*applyError).Report,
@@ -4395,7 +4413,7 @@ func cleanFailuresToMarkdown(nodeErrors []error, nodeFile string, prefix string,
 	data := struct {
 		CompressedHosts string
 		DirtyLastApply  string
-		Report          rizzopb.PuppetReport
+		Report          *rizzopb.PuppetReport
 	}{
 		compressedHosts,
 		nodeErrors[0].(*cleanError).LastApply.String(),
@@ -4583,7 +4601,7 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 		return
 	}
 	rizzoLockNode(
-		rizzopb.PuppetLockRequest{
+		&rizzopb.PuppetLockRequest{
 			Type:    rizzopb.LockReqType_lock,
 			User:    "root",
 			Comment: conf.LockMessage,
@@ -4601,7 +4619,7 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 	clean := false
 	for i, id := range commitsToNoop {
 		logger.Printf("Nooping commit: %s@%s", node.host, id.String())
-		par := rizzopb.PuppetApplyRequest{Rev: id.String(), Noop: true}
+		par := &rizzopb.PuppetApplyRequest{Rev: id.String(), Noop: true}
 		go hecklerApply(node, applyResults, par)
 		r := <-applyResults
 		if r.err != nil {
@@ -4623,7 +4641,7 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 		// changes were needed, i.e. the node is clean
 		if len(newRprt.ResourceStatuses) == 0 {
 			logger.Printf("Noop was clean, applying %s@%s", node.host, id.String())
-			par := rizzopb.PuppetApplyRequest{Rev: id.String(), Noop: false}
+			par := &rizzopb.PuppetApplyRequest{Rev: id.String(), Noop: false}
 			go hecklerApply(node, applyResults, par)
 			r := <-applyResults
 			if r.err != nil {
@@ -4638,7 +4656,7 @@ func cleanNode(node *Node, dn dirtyNoops, c chan<- cleanNodeResult, repo *git.Re
 		}
 	}
 	rizzoLockNode(
-		rizzopb.PuppetLockRequest{
+		&rizzopb.PuppetLockRequest{
 			Type:  rizzopb.LockReqType_unlock,
 			User:  "root",
 			Force: false,
