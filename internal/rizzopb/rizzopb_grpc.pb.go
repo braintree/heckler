@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.3.0
 // - protoc             v3.15.8
-// source: rizzopb.proto
+// source: internal/rizzopb/rizzopb.proto
 
 package rizzopb
 
@@ -181,5 +181,5 @@ var Rizzo_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rizzopb.proto",
+	Metadata: "internal/rizzopb/rizzopb.proto",
 }

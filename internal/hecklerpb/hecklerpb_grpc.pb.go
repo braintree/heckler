@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.3.0
 // - protoc             v3.15.8
-// source: hecklerpb.proto
+// source: internal/hecklerpb/hecklerpb.proto
 
 package hecklerpb
 
@@ -253,5 +253,5 @@ var Heckler_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "hecklerpb.proto",
+	Metadata: "internal/hecklerpb/hecklerpb.proto",
 }
