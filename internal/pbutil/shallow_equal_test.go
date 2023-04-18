@@ -1,4 +1,4 @@
-package util
+package pbutil
 
 import "testing"
 

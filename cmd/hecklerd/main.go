@@ -33,9 +33,9 @@ import (
 	"github.com/braintree/heckler/internal/gitutil"
 	"github.com/braintree/heckler/internal/heckler"
 	"github.com/braintree/heckler/internal/hecklerpb"
+	"github.com/braintree/heckler/internal/pbutil"
 	"github.com/braintree/heckler/internal/puppetutil"
 	"github.com/braintree/heckler/internal/rizzopb"
-	"github.com/braintree/heckler/internal/util"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-github/v29/github"
 	"github.com/hmarr/codeowners"
@@ -849,7 +849,7 @@ func priorEvent(event *rizzopb.Event, resourceTitleStr string, priorCommitNoops 
 		}
 		if priorResourceStatuses, ok := priorCommitNoop.ResourceStatuses[resourceTitleStr]; ok {
 			for _, priorEvent := range priorResourceStatuses.Events {
-				equal, err := util.ShallowEqual(event, priorEvent)
+				equal, err := pbutil.ShallowEqual(event, priorEvent)
 				if err != nil {
 					log.Println(fmt.Errorf("Error comparing events: %w", err))
 				}
@@ -871,7 +871,7 @@ func priorLog(curLog *rizzopb.Log, priorCommitNoops []*rizzopb.PuppetReport) boo
 			continue
 		}
 		for _, priorLog := range priorCommitNoop.Logs {
-			equal, err := util.ShallowEqual(curLog, priorLog)
+			equal, err := pbutil.ShallowEqual(curLog, priorLog)
 			if err != nil {
 				log.Println(fmt.Errorf("Error comparing logs: %w", err))
 			}
@@ -1136,7 +1136,7 @@ func groupResources(commitLogId git.Oid, targetDeltaResource *deltaResource, nod
 			nodeDeltaResourceCopy := nodeDeltaResource
 			targetDeltaResourceCopy.Line = 0
 			nodeDeltaResourceCopy.Line = 0
-			equal, err := util.ShallowEqual(targetDeltaResourceCopy, nodeDeltaResourceCopy)
+			equal, err := pbutil.ShallowEqual(targetDeltaResourceCopy, nodeDeltaResourceCopy)
 			if err != nil {
 				log.Println(fmt.Errorf("Error trying to compare delta resources: %w", err))
 			}
