@@ -68,6 +68,209 @@ func TestShallowEqualSimpleStructs(t *testing.T) {
 	testCore(t, tests)
 }
 
+type namedSimpleStruct struct {
+	MyInt    int32
+	MyFloat  float32
+	MyString string
+}
+
+func TestShallowEqualNamedStructs(t *testing.T) {
+	t.Parallel()
+	tests := []*testStruct{
+		{
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			true,
+		},
+		{
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			namedSimpleStruct{MyInt: 1, MyFloat: 0.0, MyString: "hello"},
+			false,
+		},
+		{
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			namedSimpleStruct{MyInt: 0, MyFloat: 1.0, MyString: "hello"},
+			false,
+		},
+		{
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "world"},
+			false,
+		},
+	}
+	testCore(t, tests)
+}
+
+func TestShallowEqualCanCompareSameTypeMembersWithMissingNamesInOneStruct(t *testing.T) {
+	t.Parallel()
+	tests := []*testStruct{
+		{
+			simpleStruct{0, 0.0, "hello"},
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			true,
+		},
+		{
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			simpleStruct{0, 0.0, "hello"},
+			true,
+		},
+		{
+			simpleStruct{0, 0.0, "hello"},
+			namedSimpleStruct{MyInt: 1, MyFloat: 0.0, MyString: "hello"},
+			false,
+		},
+		{
+			simpleStruct{0, 0.0, "hello"},
+			namedSimpleStruct{MyInt: 0, MyFloat: 1.0, MyString: "hello"},
+			false,
+		},
+		{
+			simpleStruct{0, 0.0, "hello"},
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "world"},
+			false,
+		},
+	}
+	testCore(t, tests)
+}
+
+type simplerStruct struct {
+	int32
+}
+
+type namedSimplerStruct struct {
+	MyInt int32
+}
+
+func TestShallowEqualNeverTrueForUnequalMemberCounts(t *testing.T) {
+	t.Parallel()
+	tests := []*testStruct{
+		{
+			simpleStruct{0, 0.0, "hello"},
+			simplerStruct{0},
+			false,
+		},
+		{
+			simplerStruct{0},
+			simpleStruct{0, 0.0, "hello"},
+			false,
+		},
+		{
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			namedSimplerStruct{MyInt: 0},
+			false,
+		},
+		{
+			namedSimplerStruct{MyInt: 0},
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			false,
+		},
+		{
+			simpleStruct{0, 0.0, "hello"},
+			namedSimplerStruct{MyInt: 0},
+			false,
+		},
+		{
+			simplerStruct{0},
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			false,
+		},
+	}
+	testCore(t, tests)
+}
+
+type rearrangedSimpleStruct struct {
+	string
+	float32
+	int32
+}
+
+type rearrangedNamedSimpleStruct struct {
+	MyString string
+	MyFloat  float32
+	MyInt    int32
+}
+
+func TestShallowEqualNeverTrueForRearrangedUnnamedMembers(t *testing.T) {
+	t.Parallel()
+	tests := []*testStruct{
+		{
+			simpleStruct{0, 0.0, "hello"},
+			rearrangedSimpleStruct{"hello", 0.0, 0},
+			false,
+		},
+		{
+			simpleStruct{0, 0.0, "hello"},
+			rearrangedSimpleStruct{"hello", 0.0, 1},
+			false,
+		},
+		{
+			rearrangedSimpleStruct{"hello", 0.0, 0},
+			simpleStruct{0, 0.0, "hello"},
+			false,
+		},
+		{
+			rearrangedSimpleStruct{"world", 0.0, 0},
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			false,
+		},
+		{
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			rearrangedSimpleStruct{"world", 0.0, 0},
+			false,
+		},
+		{
+			simpleStruct{0, 0.0, "world"},
+			rearrangedNamedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			false,
+		},
+		{
+			rearrangedNamedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			simpleStruct{0, 0.0, "world"},
+			false,
+		},
+	}
+	testCore(t, tests)
+}
+
+type renamedSimpleStruct struct {
+	SomeInt    int32
+	SomeFloat  float32
+	SomeString string
+}
+
+type rearrangedRenamedSimpleStruct struct {
+	SomeString string
+	SomeFloat  float32
+	SomeInt    int32
+}
+
+func TestShallowEqualTrueForRenamedMembersOnlyIfOrderMatches(t *testing.T) {
+	t.Parallel()
+	tests := []*testStruct{
+		{
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			renamedSimpleStruct{SomeInt: 0, SomeFloat: 0.0, SomeString: "hello"},
+			true,
+		},
+		{
+			renamedSimpleStruct{SomeInt: 0, SomeFloat: 0.0, SomeString: "hello"},
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			true,
+		},
+		{
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			rearrangedRenamedSimpleStruct{SomeInt: 0, SomeFloat: 0.0, SomeString: "hello"},
+			false,
+		},
+		{
+			rearrangedRenamedSimpleStruct{SomeInt: 0, SomeFloat: 0.0, SomeString: "hello"},
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			false,
+		},
+	}
+	testCore(t, tests)
+}
+
 type nestedStruct struct {
 	innerStruct simpleStruct
 	extraValue  uint32
