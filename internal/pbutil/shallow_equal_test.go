@@ -9,15 +9,17 @@ type testStruct struct {
 }
 
 func testCore(t *testing.T, tests []*testStruct) {
-	for _, test := range tests {
-		t.Logf("Testing %+v", test)
+	t.Helper()
+	for i, test := range tests {
 		result, err := ShallowEqual(test.inputA, test.inputB)
 		if err != nil {
-			t.Errorf("Unexpected error comparing %v and %v: %s", test.inputA, test.inputB, err)
+			t.Errorf("[Case %d ERROR] Unexpected error comparing %+v and %+v: %s", i, test.inputA, test.inputB, err)
 			continue
 		}
-		if result != test.expected {
-			t.Errorf("Comparing %v and %v produced %t, but should have been %t", test.inputA, test.inputB, result, test.expected)
+		if result == test.expected {
+			t.Logf("[Case %d SUCCESS] Comparing %+v and %+v produced the expected result, %t", i, test.inputA, test.inputB, result)
+		} else {
+			t.Errorf("[Case %d FAIL] Comparing %+v and %+v produced %t, but should have been %t", i, test.inputA, test.inputB, result, test.expected)
 		}
 	}
 }
@@ -178,6 +180,7 @@ func TestShallowEqualNeverTrueForUnequalMemberCounts(t *testing.T) {
 	testCore(t, tests)
 }
 
+// remember: unname struct fields get called according to their type
 type rearrangedSimpleStruct struct {
 	string
 	float32
@@ -190,13 +193,18 @@ type rearrangedNamedSimpleStruct struct {
 	MyInt    int32
 }
 
-func TestShallowEqualNeverTrueForRearrangedUnnamedMembers(t *testing.T) {
+func TestShallowEqualRearrangedUnnamedMembers(t *testing.T) {
 	t.Parallel()
 	tests := []*testStruct{
 		{
 			simpleStruct{0, 0.0, "hello"},
 			rearrangedSimpleStruct{"hello", 0.0, 0},
-			false,
+			true,
+		},
+		{
+			rearrangedSimpleStruct{"hello", 0.0, 0},
+			simpleStruct{0, 0.0, "hello"},
+			true,
 		},
 		{
 			simpleStruct{0, 0.0, "hello"},
@@ -204,11 +212,6 @@ func TestShallowEqualNeverTrueForRearrangedUnnamedMembers(t *testing.T) {
 			false,
 		},
 		{
-			rearrangedSimpleStruct{"hello", 0.0, 0},
-			simpleStruct{0, 0.0, "hello"},
-			false,
-		},
-		{
 			rearrangedSimpleStruct{"world", 0.0, 0},
 			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
 			false,
@@ -226,6 +229,38 @@ func TestShallowEqualNeverTrueForRearrangedUnnamedMembers(t *testing.T) {
 		{
 			rearrangedNamedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
 			simpleStruct{0, 0.0, "world"},
+			false,
+		},
+	}
+	testCore(t, tests)
+}
+
+func TestShallowEqualForRearrangedMembersWhenNamesStillMatch(t *testing.T) {
+	t.Parallel()
+	tests := []*testStruct{
+		{
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			rearrangedNamedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			true,
+		},
+		{
+			rearrangedNamedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			true,
+		},
+		{
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			rearrangedNamedSimpleStruct{MyInt: 1, MyFloat: 0.0, MyString: "hello"},
+			false,
+		},
+		{
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			rearrangedNamedSimpleStruct{MyInt: 0, MyFloat: 1.0, MyString: "hello"},
+			false,
+		},
+		{
+			namedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "hello"},
+			rearrangedNamedSimpleStruct{MyInt: 0, MyFloat: 0.0, MyString: "world"},
 			false,
 		},
 	}
@@ -375,7 +410,6 @@ func TestShallowEqualWorksWithDifferentTypesThatHaveTheSameShape(t *testing.T) {
 			SimpleInterfaceImplB{1},
 			false,
 		},
-		// TBH the follow two test cases are how I designed this function, but might be bad ideas
 		{
 			SimpleInterfaceImplA{0},
 			struct {
@@ -398,7 +432,8 @@ func TestShallowEqualReturnsFalseForDivergingTypes(t *testing.T) {
 	t.Parallel()
 	tests := []*testStruct{
 		// TBH I'm not sure if we should actually return false for equal values but divergent types,
-		// but for heckler's internal purposes, that doesn't matter, so...
+		// but it's all the fault of reflect.Equal.
+		// For heckler's internal purposes, that doesn't matter, so...
 		{0, 0.0, false},
 		{
 			struct {
@@ -425,6 +460,15 @@ func TestShallowEqualReturnsFalseForDivergingTypes(t *testing.T) {
 			struct {
 				string
 			}{""},
+			false,
+		},
+		{
+			struct {
+				MyInt int32
+			}{0},
+			struct {
+				MyInt float32 // prove that field names don't matter if types diverge
+			}{0},
 			false,
 		},
 	}
