@@ -36,7 +36,7 @@ import (
 //   - Instances of A can be equal with instances of C because the names that
 //     the fields get implicitly are the same between A and C, even if the
 //     delcaration order is different.
-//   - Instancces of B cannot be equal with instances of C because both the
+//   - Instances of B cannot be equal with instances of C because both the
 //     names and the declaration order are different.
 //   - Instances of A cannot be equal with instances of D for the same reason
 //     that instances of B cannot be equal with instances of C.
