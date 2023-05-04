@@ -7,7 +7,7 @@ import (
 	"reflect"
 )
 
-// ShallowEqual uses reflection to compares two things in a shallow
+// ShallowEqual uses reflection to compare two things in a shallow
 // (not deep like `reflect.DeepEqual`) way.
 //
 // If they're pointers, they're dereferenced first before proceeding to
@@ -18,7 +18,7 @@ import (
 // fields, there must be the same number of visible comparable fields, and
 // they must all be equal to each other. This function allows for comparing
 // by field declaration order or by field name; it doesn't care if one struct
-// has unnamed fields and the other has named ones if they fields are equal
+// has unnamed fields and the other has named ones if their fields are equal
 // to each other in the order they're declared, and it doesn't care if both
 // structs use different names for the same types of their fields if those
 // types happen to be in the same order. Since unnamed fields actually get
@@ -132,8 +132,10 @@ func ShallowEqual(a, b any) (equal bool, err error) {
 		aFieldsMap := fieldNameToFieldValueMap(aVal, &aComparableFields)
 		bFieldsMap := fieldNameToFieldValueMap(bVal, &bComparableFields)
 		for aFieldName, aFieldVal := range aFieldsMap {
-			bFieldVal, ok := bFieldsMap[aFieldName]
-			equal = ok && equal && aFieldVal.Equal(bFieldVal)
+			bFieldVal, bAlsoHasField := bFieldsMap[aFieldName]
+			if equal = bAlsoHasField && aFieldVal.Equal(bFieldVal); !equal {
+				break
+			}
 		}
 	} else if aVal.Comparable() && bVal.Comparable() {
 		equal = aVal.Equal(bVal)
