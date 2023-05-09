@@ -46,6 +46,20 @@ docker-build-deb: docker-build-image ## Build the deb in a local docker containe
 docker-bash: docker-build-image ## Exec bash in a local docker container
 	docker run --rm -it -v $(PWD):/home/builder/$(NAME) $(IMAGE) bash
 
+#	Before running this, you must install `protoc` from source or binary
+#	distribution for your platform, as well as the go/grpc plugins.
+#	The last used version of these is automatically placed in the headers of the
+#	generated files (look for `*.pb.go` files.)
+#	See the following links for more info (keeping in mind version differences):
+#		* https://grpc.io/docs/protoc-installation
+#		* https://grpc.io/docs/languages/go/quickstart
+.PHONY: protoc
+protoc:	## Regenerate gRPC code (hecklerpb etc. packages) from .proto files
+	protoc --proto_path=. \
+		--go_out=. --go_opt=paths=source_relative \
+		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
+		$$(find . -name '*.proto' -type f)
+
 .PHONY: publish
 publish: ## Upload the deb to package cloud (normally called by Jenkins)
 	package_cloud push "braintree/dev-tools/debian/buster" *_$(DEB_VERSION)_*.deb
@@ -81,4 +95,3 @@ deb: ## Build the deb, usually called inside the container
 	dch --create --distribution stable --package $(NAME) -v $(DEB_VERSION) "new version"
 	dpkg-buildpackage -us -uc -b
 	cp ../*.deb ./
-

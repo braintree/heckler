@@ -26,7 +26,7 @@ func (ls LockState) String() string {
 	return fmt.Sprintf("LockState, User: '%s' Comment: '%s'", ls.User, ls.Comment)
 }
 
-func LockReportToLockState(lr rizzopb.PuppetLockReport) LockState {
+func LockReportToLockState(lr *rizzopb.PuppetLockReport) LockState {
 	var ls LockState
 	switch lr.LockStatus {
 	case rizzopb.LockStatus_lock_unknown:

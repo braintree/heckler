@@ -35,29 +35,71 @@ rizzod to initiate the noops and applies.
 
 ## Development
 
-Development is primarily driven through the `Makefile`, simply run
-`make` to see the available targets after cloning the repo. All
-dependencies are vendored, except the CGO dependencies because that is
-not possible with Go's built-in tooling.
+Development is primarily driven through the `Makefile`; simply run
+`make` to see the available targets after cloning the repo.
 
-Compilation is done in a docker container to ease dependency management,
-run `make docker-build` to kick off the build.
+### Dependencies
+
+All go mod dependencies are vendored, except the CGO dependencies because
+that is not possible with Go's built-in tooling.
+
+As for development dependencies, you just need docker, plus `protoc` and
+its Golang and gRPC plugins if you are going to regenerate the `.pb.go`
+files. More info about that is in the Makefile.
+
+### Building
+
+Compilation is done in a docker container to ease dependency management;
+simply run `make docker-build` to kick off the build. You can poke around
+the builder container by running `make docker-bash`.
+
+### Testing
+
+Unit tests are simple:
+
+```sh
+make docker-test
+```
+
+Integration tests require some setup; see [TESTING.md](TESTING.md).
+
+### Deploying
+
+If you use a Debian-based Linux distro, you can use `make docker-build-deb`
+and install the resulting packages for each [component](#components) (or
+upload them to an apt repostiory you maintain, provided that you follow the
+terms of the [license](#license).) The build files are in the
+[`debian`](/debian) folder. Where in your fleet to install each package is
+documented in our [deployment](#deployment) section.
+
+Of course, if you don't use a Debian-based Linux distro, you can just build
+the binaries with `make docker-build` and package them however you like.
 
 ## License
 
 Heckler is available as open source under the terms of the [MIT
-License](http://opensource.org/licenses/MIT).
+License](http://opensource.org/licenses/MIT). See [LICENSE](LICENSE) for
+the full text.
 
 ## Process
+
+This section describes the procedure that heckler follows as it detects code
+changes, creates Github issues, and applies approved changes.
 
 ### Overview
 
 1.  Runs a puppet apply with the `--noop` option on every host for every
     new commit in a git repository.
-2.  Correlates a commit with a noop change by creating a delta noop
-3.  Aggregates noops changes which are identical
-4.  Seeks review and approval of the noop change
-5.  Applies approved commits
+2.  Correlates a commit with a noop change by creating a delta noop and
+    creating a GitHub Issue for that noop. Identical noops are aggregated.
+3.  Groups all Issues for commits since the last clean apply until the next
+    git tag under a GitHub Milestone. Tags can be created manually or on an
+    automatic schedule (using cron syntax.)
+4.  Awaits CODEOWNERS of resources and/or nodes that had changes to approve
+    these Issues via commenting "approved"; once a code owner for each aspect
+    of the noop has approved, it closes the Issue.
+5.  Applies the git tag associated with the Milestone once all Issues in it
+    are approved, then closes the Milestone.
 
 ### Flow Diagram
 
