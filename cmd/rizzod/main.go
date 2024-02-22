@@ -293,7 +293,7 @@ func lockComment() (string, error) {
 }
 
 func parseStderr(oid string, stderr string) (*rizzopb.PuppetReport, error) {
-	var regexEvalErr = regexp.MustCompile(`^Error: (?:Evaluation E|Syntax e)rror`)
+	var regexEvalErr = regexp.MustCompile(`^Error: (?:Evaluation|Syntax) [Ee]rror`)
 	scanner := bufio.NewScanner(strings.NewReader(stderr))
 	for scanner.Scan() {
 		if regexEvalErr.MatchString(scanner.Text()) {
