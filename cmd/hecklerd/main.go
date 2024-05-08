@@ -1650,7 +1650,7 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 	}
 
 	var client *github.Client
-	if conf.GitHubDomain != "" {
+	if conf.GitHubDomain != "github.com" {
 		githubUrl := "https://" + conf.GitHubDomain + "/api/v3"
 		itr.BaseURL = githubUrl
 
@@ -2768,14 +2768,7 @@ func fetchRepo(conf *HecklerdConf) (*git.Repository, error) {
 			Url:  conf.GitHubHttpProxy,
 		}
 	}
-	var githubdomain string
-	if conf.GitHubDomain != "" {
-		githubdomain = conf.GitHubDomain
-	} else {
-		githubdomain = "github.com"
-	}
-
-	remoteUrl := fmt.Sprintf("https://x-access-token:%s@%s/%s/%s", tok, githubdomain, conf.RepoOwner, conf.Repo)
+	remoteUrl := fmt.Sprintf("https://x-access-token:%s@%s/%s/%s", tok, conf.GitHubDomain, conf.RepoOwner, conf.Repo)
 	bareRepo, err := gitutil.CloneOrOpen(remoteUrl, conf.ServedRepo, cloneOptions)
 	if err != nil {
 		return nil, err
@@ -5203,6 +5196,7 @@ func main() {
 	conf.ApplyCronSchedule = "* 9-15 * * mon-fri"
 	conf.ApplySetOrder = []string{"all"}
 	conf.ModulesPaths = []string{"modules", "vendor/modules"}
+	conf.GitHubDomain = "github.com"
 	err = yaml.Unmarshal([]byte(data), conf)
 	if err != nil {
 		logger.Fatalf("Cannot unmarshal config: %v", err)
