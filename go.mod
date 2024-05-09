@@ -5,6 +5,7 @@ go 1.20
 require (
 	github.com/Masterminds/semver/v3 v3.0.3
 	github.com/Masterminds/sprig v2.22.0+incompatible
+	github.com/beatlabs/github-auth v0.0.0-20240501114458-da9c117c6e09
 	github.com/bradleyfalzon/ghinstallation v1.1.1
 	github.com/google/go-cmp v0.5.9
 	github.com/google/go-github/v29 v29.0.3
@@ -15,6 +16,7 @@ require (
 	github.com/lyraproj/puppet-parser v0.0.0-20190606112603-21687f912799
 	github.com/rickar/cal/v2 v2.0.0
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/shurcooL/githubv4 v0.0.0-20240429030203-be2daab69064
 	github.com/slack-go/slack v0.8.0
 	github.com/square/grange v0.0.0-20200108221412-2a4cb7b5b334
 	google.golang.org/grpc v1.54.0
@@ -39,8 +41,10 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.1 // indirect
 	github.com/orcaman/concurrent-map v0.0.0-20160823150647-8bf1e9bacbf6 // indirect
 	github.com/pkg/errors v0.8.0 // indirect
+	github.com/shurcooL/graphql v0.0.0-20230722043721-ed46e5a46466 // indirect
 	golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de // indirect
 	golang.org/x/net v0.9.0 // indirect
+	golang.org/x/oauth2 v0.19.0 // indirect
 	golang.org/x/sys v0.7.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
