@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -29,6 +30,8 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Masterminds/sprig"
+	"github.com/beatlabs/github-auth/app/inst"
+	"github.com/beatlabs/github-auth/key"
 	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/braintree/heckler/internal/gitutil"
 	"github.com/braintree/heckler/internal/heckler"
@@ -44,6 +47,7 @@ import (
 	"github.com/rickar/cal/v2"
 	"github.com/rickar/cal/v2/us"
 	"github.com/robfig/cron/v3"
+	"github.com/shurcooL/githubv4"
 	"github.com/slack-go/slack"
 	"github.com/square/grange"
 	"google.golang.org/grpc"
@@ -1656,6 +1660,23 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 		client = github.NewClient(&http.Client{Transport: itr})
 	}
 	return client, itr, nil
+}
+
+func githubGqlConn(conf *HecklerdConf) (*githubv4.Client, error) {
+	privKey, err := key.FromFile(conf.GitHubPrivateKeyPath)
+	if err != nil {
+		return nil, err
+	}
+	install, err := inst.NewConfig(strconv.FormatInt(conf.GitHubAppId, 10), strconv.FormatInt(conf.GitHubAppInstallId, 10), privKey)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	client := githubv4.NewClient(install.Client(ctx))
+	return client, nil
 }
 
 func slackClient(conf *HecklerdConf) (*slack.Client, error) {
