@@ -1624,15 +1624,8 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 		tr.(*http.Transport).Proxy = http.ProxyURL(proxyUrl)
 	}
 
-	var privateKeyPath string
-	// TODO: make the default be part of the conf definition
-	if conf.GitHubPrivateKeyPath != "" {
-		privateKeyPath = conf.GitHubPrivateKeyPath
-	} else {
-		privateKeyPath = "./github-private-key.pem"
-	}
-	if _, err := os.Stat(privateKeyPath); err == nil {
-		file, err = os.Open(privateKeyPath)
+	if _, err := os.Stat(conf.GitHubPrivateKeyPath); err == nil {
+		file, err = os.Open(conf.GitHubPrivateKeyPath)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1642,7 +1635,7 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 			return nil, nil, err
 		}
 	} else {
-		return nil, nil, fmt.Errorf("Unable to load GitHub private key from '%s'", privateKeyPath)
+		return nil, nil, fmt.Errorf("Unable to load GitHub private key from '%s'", conf.GitHubPrivateKeyPath)
 	}
 	itr, err := ghinstallation.New(tr, conf.GitHubAppId, conf.GitHubAppInstallId, privateKey)
 	if err != nil {
@@ -5197,6 +5190,7 @@ func main() {
 	conf.ApplySetOrder = []string{"all"}
 	conf.ModulesPaths = []string{"modules", "vendor/modules"}
 	conf.GitHubDomain = "github.com"
+	conf.GitHubPrivateKeyPath = "./github-private-key.pem"
 	err = yaml.Unmarshal([]byte(data), conf)
 	if err != nil {
 		logger.Fatalf("Cannot unmarshal config: %v", err)
