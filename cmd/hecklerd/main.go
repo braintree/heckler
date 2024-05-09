@@ -1899,25 +1899,6 @@ func githubOpenIssues(ghclient *github.Client, conf *HecklerdConf, searchTerm st
 	return searchResults.Issues, nil
 }
 
-// Given an email address, return the github user associated with the provided
-// email address
-func githubUserFromEmail(ghclient *github.Client, email string) (*github.User, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-	query := fmt.Sprintf("%s in:email", email)
-	searchResults, _, err := ghclient.Search.Users(ctx, query, nil)
-	if err != nil {
-		return nil, err
-	}
-	if searchResults.GetTotal() == 0 {
-		return nil, nil
-	} else if searchResults.GetTotal() == 1 {
-		return &searchResults.Users[0], nil
-	} else {
-		return nil, errors.New("More than one users exists for a single email address")
-	}
-}
-
 func clearMilestones(ghclient *github.Client, conf *HecklerdConf) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*100)
 	defer cancel()
@@ -2110,7 +2091,7 @@ func githubCreateCommitIssue(ghclient *github.Client, conf *HecklerdConf, commit
 	var err error
 	var authors []string
 	if noopRequiresApproval(gr) {
-		authors, err = commitAuthorsLogins(ghclient, commit)
+		authors, err = commitAuthorsLogins(conf, commit)
 		if err != nil {
 			return nil, err
 		}
@@ -2174,38 +2155,46 @@ func githubCreateIssue(ghclient *github.Client, conf *HecklerdConf, title, body 
 // Given a git commit return a slice of GitHub logins associated with the
 // commit author as well as any co-authors found in the commit message
 // trailers.
-func commitAuthorsLogins(ghclient *github.Client, commit *git.Commit) ([]string, error) {
-	githubUser, err := githubUserFromEmail(ghclient, commit.Author().Email)
+func commitAuthorsLogins(conf *HecklerdConf, commit *git.Commit) ([]string, error) {
+	type author struct {
+		User struct {
+			Login string
+		}
+	}
+
+	var query struct {
+		Repository struct {
+			Object struct {
+				Commit struct {
+					Authors struct {
+						Nodes []author
+					} `graphql:"authors(first: 100)"`
+				} `graphql:"... on Commit"`
+			} `graphql:"object(oid: $sha)"`
+		} `graphql:"repository(owner: \"paypal-braintree\", name: \"infrastructure\")"`
+	}
+
+	variables := map[string]interface{}{
+		"sha": githubv4.GitObjectID(commit.Id().String()),
+	}
+
+	client, err := githubGqlConn(conf)
 	if err != nil {
-		return []string{}, err
+		return nil, err
 	}
-	authors := make([]string, 0)
-	if githubUser != nil {
-		authors = append(authors, "@"+githubUser.GetLogin())
-	}
-	trailers, err := git.MessageTrailers(commit.Message())
+
+	err = client.Query(context.Background(), &query, variables)
 	if err != nil {
-		return []string{}, err
+		return nil, err
 	}
-	regexCoAuthor := regexp.MustCompile(`^[Cc]o-authored-by$`)
-	regexEmailCapture := regexp.MustCompile(`<([^>]*)>`)
-	for _, trailer := range trailers {
-		if !regexCoAuthor.MatchString(trailer.Key) {
-			continue
+	// fmt.Println("Desc:", query.Repository.Object.Commit.Authors.Nodes)
+	var authors []string
+	for _, a := range query.Repository.Object.Commit.Authors.Nodes {
+		if a.User.Login != "" {
+			authors = append(authors, "@"+a.User.Login)
 		}
-		email := regexEmailCapture.FindStringSubmatch(trailer.Value)
-		if len(email) < 2 || email[1] == "" {
-			continue
-		}
-		githubUser, err := githubUserFromEmail(ghclient, email[1])
-		if err != nil {
-			return []string{}, err
-		}
-		if githubUser != nil {
-			authors = append(authors, "@"+githubUser.GetLogin())
-		}
-		// TODO: handle nil case?
 	}
+
 	return authors, nil
 }
 
@@ -3128,7 +3117,7 @@ func noopApproved(ghclient *github.Client, conf *HecklerdConf, groupedResources 
 	if err != nil {
 		return ns, err
 	}
-	ns.authors, err = commitAuthorsLogins(ghclient, commit)
+	ns.authors, err = commitAuthorsLogins(conf, commit)
 	if err != nil {
 		return ns, err
 	}
