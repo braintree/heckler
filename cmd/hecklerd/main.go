@@ -2095,7 +2095,7 @@ func githubCreateCommitIssue(ghclient *github.Client, conf *HecklerdConf, commit
 		if err != nil {
 			return nil, err
 		}
-		authors, err = filterSuspendedUsers(ghclient, authors)
+		authors, err = filterSuspendedUsers(ghclient, conf, authors)
 		if err != nil {
 			return nil, err
 		}
@@ -2103,7 +2103,7 @@ func githubCreateCommitIssue(ghclient *github.Client, conf *HecklerdConf, commit
 		// admins as a fallback
 		if len(authors) == 0 {
 			authors = append(authors, conf.AdminOwners...)
-			authors, err = filterSuspendedUsers(ghclient, authors)
+			authors, err = filterSuspendedUsers(ghclient, conf, authors)
 			if err != nil {
 				return nil, err
 			}
@@ -3545,7 +3545,7 @@ func githubGroupMembersUsernames(ghclient *github.Client, group string) ([]strin
 
 // Given a slice of usernames remove any usernames for which the GitHub user is
 // suspended
-func filterSuspendedUsers(ghclient *github.Client, usernames []string) ([]string, error) {
+func filterSuspendedUsers(ghclient *github.Client, conf *HecklerdConf, usernames []string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	var activeUsernames []string
@@ -3557,6 +3557,18 @@ func filterSuspendedUsers(ghclient *github.Client, usernames []string) ([]string
 		if (!user.GetSuspendedAt().Equal(github.Timestamp{})) && user.GetSuspendedAt().Before(time.Now()) {
 			// User is suspended skip
 			continue
+		}
+		_, _, err = ghclient.Organizations.Get(ctx, conf.RepoOwner)
+		if err == nil {
+			orgMembership, _, err := ghclient.Organizations.GetOrgMembership(ctx, strings.TrimPrefix(username, "@"), conf.RepoOwner)
+			if err != nil {
+				// This likely indicates user is not a member of the org
+				continue
+			}
+			if orgMembership.Role != nil && *orgMembership.Role == "suspended" {
+				// User can also be suspended at the org level apparently
+				continue
+			}
 		}
 		activeUsernames = append(activeUsernames, username)
 	}
@@ -4470,7 +4482,7 @@ func nodeOwners(ghclient *github.Client, nodeFile string, conf *HecklerdConf) ([
 	if err != nil {
 		return nil, err
 	}
-	usernames, err = filterSuspendedUsers(ghclient, usernames)
+	usernames, err = filterSuspendedUsers(ghclient, conf, usernames)
 	if err != nil {
 		return nil, err
 	}
@@ -4478,7 +4490,7 @@ func nodeOwners(ghclient *github.Client, nodeFile string, conf *HecklerdConf) ([
 	// as a fallback
 	if len(usernames) == 0 {
 		usernames = append(usernames, conf.AdminOwners...)
-		usernames, err = filterSuspendedUsers(ghclient, usernames)
+		usernames, err = filterSuspendedUsers(ghclient, conf, usernames)
 		if err != nil {
 			return nil, err
 		}
