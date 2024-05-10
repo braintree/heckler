@@ -4506,7 +4506,7 @@ func githubIssueForApplyFailure(ghclient *github.Client, nodeFile string, conf *
 	if prefix != "" {
 		query += fmt.Sprintf(" %sin:title", issuePrefix(prefix))
 	}
-	query += fmt.Sprintf(" %sin:title", "PuppetApplyFailed")
+	query += fmt.Sprintf(" %s in:title", "PuppetApplyFailed")
 	query += " state:open"
 	query += fmt.Sprintf(" author:app/%s", conf.GitHubAppSlug)
 	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
@@ -4545,7 +4545,7 @@ func githubIssueForCleanFailure(ghclient *github.Client, nodeFile string, conf *
 	if prefix != "" {
 		query += fmt.Sprintf(" %sin:title", issuePrefix(prefix))
 	}
-	query += fmt.Sprintf(" %sin:title", "PuppetCleanFailed")
+	query += fmt.Sprintf(" %s in:title", "PuppetCleanFailed")
 	query += " state:open"
 	query += fmt.Sprintf(" author:app/%s", conf.GitHubAppSlug)
 	searchResults, _, err := ghclient.Search.Issues(ctx, query, nil)
