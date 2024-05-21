@@ -30,6 +30,7 @@ require (
 	github.com/abbot/go-http-auth v0.4.0 // indirect
 	github.com/deckarep/golang-set v0.0.0-20170202203032-fc8930a5e645 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
+	github.com/gofri/go-github-ratelimit v1.1.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect

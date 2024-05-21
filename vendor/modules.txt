@@ -29,6 +29,9 @@ github.com/deckarep/golang-set
 # github.com/dgrijalva/jwt-go v3.2.0+incompatible
 ## explicit
 github.com/dgrijalva/jwt-go
+# github.com/gofri/go-github-ratelimit v1.1.0
+## explicit; go 1.19
+github.com/gofri/go-github-ratelimit/github_ratelimit
 # github.com/golang/protobuf v1.5.3
 ## explicit; go 1.9
 github.com/golang/protobuf/jsonpb

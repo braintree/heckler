@@ -39,6 +39,7 @@ import (
 	"github.com/braintree/heckler/internal/pbutil"
 	"github.com/braintree/heckler/internal/puppetutil"
 	"github.com/braintree/heckler/internal/rizzopb"
+	"github.com/gofri/go-github-ratelimit/github_ratelimit"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-github/v29/github"
 	"github.com/hmarr/codeowners"
@@ -1641,6 +1642,7 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 	} else {
 		return nil, nil, fmt.Errorf("Unable to load GitHub private key from '%s'", conf.GitHubPrivateKeyPath)
 	}
+
 	itr, err := ghinstallation.New(tr, conf.GitHubAppId, conf.GitHubAppInstallId, privateKey)
 	if err != nil {
 		return nil, nil, err
@@ -1657,7 +1659,12 @@ func githubConn(conf *HecklerdConf) (*github.Client, *ghinstallation.Transport, 
 			return nil, nil, err
 		}
 	} else {
-		client = github.NewClient(&http.Client{Transport: itr})
+		rateLimiter, err := github_ratelimit.NewRateLimitWaiterClient(itr)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		client = github.NewClient(rateLimiter)
 	}
 	return client, itr, nil
 }
