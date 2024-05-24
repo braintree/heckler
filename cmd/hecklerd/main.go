@@ -216,6 +216,7 @@ type HecklerdConf struct {
 	GitServerMaxClients        int                   `yaml:"git_server_max_clients"`
 	GroupedNoopDir             string                `yaml:"grouped_noop_dir"`
 	IgnoredResources           []IgnoredResources    `yaml:"ignored_resources"`
+	IssueCacheDir              string                `yaml:"issue_cache_dir"`
 	LockMessage                string                `yaml:"lock_message"`
 	LoopApprovalSleepSeconds   int                   `yaml:"loop_approval_sleep_seconds"`
 	LoopCleanSleepSeconds      int                   `yaml:"loop_clean_sleep_seconds"`
@@ -423,6 +424,10 @@ type groupLog struct {
 }
 
 type ResourceTitle string
+
+type cachedIssue struct {
+	GitHubIssueId int
+}
 
 func commitParentReports(commit git.Commit, lastApply git.Oid, commitReports map[git.Oid]*rizzopb.PuppetReport, host string, repo *git.Repository, logger *log.Logger) (bool, []*rizzopb.PuppetReport) {
 	var parentReport *rizzopb.PuppetReport
@@ -1808,11 +1813,63 @@ func milestoneFromTag(milestone string, ghclient *github.Client, conf *HecklerdC
 	return nil, nil
 }
 
+func cacheCommitIssueNumber(issueNumber int, issueDir string, oid git.Oid) error {
+	cachePath := issueDir + "/" + oid.String() + ".json"
+	issue := cachedIssue{GitHubIssueId: issueNumber}
+	data, err := json.Marshal(issue)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(cachePath, data, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func readCachedCommitIssueNumber(oid git.Oid, issueDir string) (int, error) {
+	cachePath := issueDir + "/" + oid.String() + ".json"
+	file, err := os.Open(cachePath)
+	if os.IsNotExist(err) {
+		return -1, nil
+	}
+	if err != nil {
+		return -1, err
+	}
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		return -1, err
+	}
+	var issue cachedIssue
+	err = json.Unmarshal([]byte(data), &issue)
+	if err != nil {
+		return -1, err
+	}
+	return issue.GitHubIssueId, nil
+}
+
 // Given a git oid this function returns the associated github issue, if it
 // exists
 func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, conf *HecklerdConf) (*github.Issue, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
+
+	logger := log.New(os.Stdout, "[issueCache] ", log.Lshortfile)
+
+	// Check if the issue number is cached, and if so get and return it
+	issueNumber, err := readCachedCommitIssueNumber(oid, conf.IssueCacheDir)
+	if err != nil {
+		return nil, err
+	}
+	if issueNumber > 0 {
+		issue, _, err := ghclient.Issues.Get(ctx, conf.RepoOwner, conf.Repo, issueNumber)
+		if err != nil {
+			return nil, err
+		}
+		return issue, err
+	}
+
+	// If not, search for the issue then cache it
 	prefix := conf.EnvPrefix
 	query := fmt.Sprintf("%s in:title", oid.String())
 	if prefix != "" {
@@ -1829,6 +1886,11 @@ func githubIssueFromCommit(ghclient *github.Client, oid git.Oid, conf *HecklerdC
 	if searchResults.GetTotal() == 0 {
 		return nil, nil
 	} else if searchResults.GetTotal() == 1 {
+		issueNumber = *(searchResults.Issues[0].Number)
+		err = cacheCommitIssueNumber(issueNumber, conf.IssueCacheDir, oid)
+		if err != nil {
+			logger.Printf("Unable to cache issue %d for %s, continuing anyway", issueNumber, oid.String())
+		}
 		return &searchResults.Issues[0], nil
 	} else {
 		return nil, errors.New("More than one issue exists for a single commit")
@@ -4792,6 +4854,11 @@ func noop(noopLock *sync.Mutex, conf *HecklerdConf, repo *git.Repository, templa
 			logger.Printf("Error: unable to create github issue: %v", err)
 			continue
 		}
+		err = cacheCommitIssueNumber(*(issue.Number), conf.IssueCacheDir, *(commit.Id()))
+		if err != nil {
+			logger.Printf("Unable to cache issue %d for %s, continuing anyway", *(issue.Number), commit.Id().String())
+		}
+
 		logger.Printf("Successfully created new issue: '%v'", issue.GetTitle())
 		gr.GithubIssueId = issue.GetID()
 		err = marshalGroupedReport(commit.Id(), gr, conf.GroupedNoopDir)
@@ -5206,6 +5273,7 @@ func main() {
 	conf.StateDir = "/var/lib/hecklerd"
 	conf.WorkRepo = conf.StateDir + "/work_repo/puppetcode"
 	conf.ServedRepo = conf.StateDir + "/served_repo/puppetcode"
+	conf.IssueCacheDir = conf.StateDir + "/issues"
 	conf.NoopDir = conf.StateDir + "/noops"
 	conf.GroupedNoopDir = conf.NoopDir + "/grouped"
 	conf.LoopNoopSleepSeconds = 10
@@ -5273,6 +5341,7 @@ func main() {
 	}
 
 	logger.Printf("hecklerd: v%s\n", Version)
+	os.MkdirAll(conf.IssueCacheDir, 0755)
 	os.MkdirAll(conf.NoopDir, 0755)
 	os.MkdirAll(conf.GroupedNoopDir, 0755)
 	repo, err := fetchRepo(conf)
