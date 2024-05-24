@@ -52,6 +52,7 @@ import (
 	"github.com/slack-go/slack"
 	"github.com/square/grange"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1102,7 +1103,7 @@ func groupEvalErrors(gi git.Oid, targetPuppetLog *rizzopb.Log, nodes map[string]
 	for nodeName, node := range nodes {
 		unmatched := make([]*rizzopb.Log, 0)
 		for _, puppetLog := range node.commitReports[gi].Logs {
-			if cmp.Equal(targetPuppetLog, puppetLog) {
+			if cmp.Equal(targetPuppetLog, puppetLog, cmp.Comparer(proto.Equal)) {
 				nodeList = append(nodeList, nodeName)
 			} else {
 				unmatched = append(unmatched, puppetLog)
