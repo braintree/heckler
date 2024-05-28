@@ -4,7 +4,7 @@ IMAGE = dockerhub.com/heckler/$(NAME)
 IMAGE_TAGGED = $(IMAGE):$(BUILD_GIT_SHA)
 DEBIAN_RELEASE := $(shell . /etc/os-release && echo "$${VERSION_ID}")
 HECKLER_VERSION := $(shell git describe --abbrev=0 | sed 's/^v//')
-BT_VERSION := 2
+BT_VERSION := 1
 DEB_VERSION := $(HECKLER_VERSION)-$(BT_VERSION)~bt$(DEBIAN_RELEASE)
 export CC := /usr/local/musl/bin/musl-gcc 
 GO_LDFLAGS := -X main.Version=$(HECKLER_VERSION) -extldflags=-static -linkmode=external
