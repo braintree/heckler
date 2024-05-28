@@ -55,3 +55,5 @@ RUN adduser --disabled-password --gecos "docker build user" $USER \
 
 WORKDIR /home/$USER/heckler
 USER $USER
+
+RUN git config --global --add safe.directory /home/builder/heckler
