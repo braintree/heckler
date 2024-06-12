@@ -1,0 +1,5 @@
+nodes/fozzie.pp @braintree/muppets
+nodes/statler.pp @braintree/muppets
+nodes/waldorf.pp @braintree/muppets
+/modules/muppetshow @kermit
+/modules/muppetshow/manifests @misspiggy
